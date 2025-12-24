@@ -27,4 +27,4 @@
   with_kill_abort
   with_kill_inherit
   )
- (libraries tempo.runtime))
+ (libraries tempo))

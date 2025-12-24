@@ -1,8 +1,7 @@
 # Tempo
+Tempo is a lightweight synchronous runtime that traces its lineage to Esterel, Boussinot’s FairThreads, and the more recent ReactiveML. All three are grounded in the idea that deterministic concurrency can be made tractable by discretizing time into logical instants, during which all components react to the signals emitted in that instant.
 
-Tempo is a lightweight synchronous runtime that draws a direct lineage from Esterel, Boussinot’s FairThreads and the more recent ReactiveML. All three share the intuition that deterministic concurrency can be made tractable by slicing time into logical instants where every component reacts to the signals emitted during that instant. 
-
-In Esterel, absence is decided immediately, which posed challenges once processes could appear and disappear dynamically. FairThreads answered this by delaying the observation of absence until the end of the instant, preserving determinism in a dynamic setting. ReactiveML transported these ideas into OCaml, keeping Boussinot’s delayed absence semantics while offering higher-order signals and a functional syntax.
+In Esterel, the absence of a signal is decided immediately, which enforces a static scheduling discipline and consequently rules out many forms of dynamic behavior. FairThreads addressed this limitation by postponing the observation of absence until the end of the instant, thereby enabling more flexible execution patterns. ReactiveML carried these ideas into OCaml, retaining Boussinot’s delayed-absence semantics while enriching the model with higher-order programming constructs.
 
 Tempo keeps that “reaction delayed to absence” principle while leveraging OCaml 5 effects to experiment with modern implementations.
 
@@ -13,78 +12,32 @@ Tempo keeps that “reaction delayed to absence” principle while leveraging OC
 
 ## Instants and execution model
 
-A Tempo program is a collection of reactive components scheduled over successive logical instants. During each instant, every task:
+A Tempo program executes over a sequence of logical instants. It supports synchronous parallel composition of behaviors that communicate through valued signals. At each instant, a signal is either present or absent. A signal is present if and only if a value is provided by the environment or emitted by the program during that instant.
 
-1. observes the presence of signals emitted so far,
-2. performs computations (including new `emit` calls),
-3. yields control via primitives such as `pause`, `await`, or `when_`.
+The absence of a signal can be observed only once the instant has completed. Observers may then react in the following instant. This delayed observation of absence is the key mechanism that preserves determinism.
 
-Only when the instant completes does the runtime confirm the *absence* of each signal and re-queue tasks that were waiting on it. This delayed reaction to absence is what preserves determinism even when tasks are created dynamically.
+Tempo supports guarded execution and weak preemption, allowing behaviors to be conditionally activated and preempted without violating the synchronous execution model.
 
 ## Fundamental primitives
 
-Tempo manipulates *signals* that carry values during an instant. Two kinds of signals are supported:
+Tempo manipulates signals that carry values during a logical instant. Two kinds of signals are supported:
 
-- Event signals, (created with `new_signal ()`) accept at most one emission per instant. They work with both `await` and `await_immediate`.
-- Aggregate signals, (created via `new_signal_agg ~initial ~combine`) can accumulate multiple emissions within a single instant by folding successive values with the provided `combine` function. They are consumed with `await` and deliver the aggregated value at the start of the next instant.
+- Event signals, created with `new_signal ()`, accept at most one emission per instant.
+- Aggregate signals, created with `new_signal_agg ~initial ~combine`, may accumulate multiple emissions within a single instant by folding successive values using the provided combine function.
 
-Once a signal is created, four primitives form the basis of every reactive process:
+Reactive programs are built from seven primitive operations:
 
-- `emit signal value` marks a signal as present for the current instant and delivers `value`. All tasks waiting on the signal resume either immediately or at the next instant depending on how they were suspended.
-- `await signal` yields the current task until `signal` becomes present. The continuation always resumes at the beginning of the next instant with the value carried by the signal.
-- `await_immediate signal` is similar to `await` but, if the signal is already present, the continuation resumes within the same instant. `await_immediate` is restricted to event signals (at most one emission per instant) to preserve determinism.
-- `pause ()` suspends the current task and schedules it for the next instant.
+- `emit signal value` marks signal as present in the current instant and delivers value. All tasks waiting on the signal are resumed, either immediately or at the next instant, depending on how they were suspended.
+- `await signal` suspends the current task until signal becomes present. The continuation always resumes at the beginning of the next instant, receiving the value carried by the signal.
+- `await_immediate` signal behaves like await, except that if the signal is already present, the continuation resumes within the same instant. To preserve determinism, await_immediate is restricted to event signals, which allow at most one emission per instant.
+- `pause ()` suspends the current task and schedules it for execution in the next instant.
+- `parallel [p1; …; pn]` executes all programs in the list concurrently within the same instant.
+- `when_ guard body` executes body only if guard is present in the current instant. Otherwise, the task is blocked and automatically resumes when the guard becomes present.
+- `watch signal body` executes body until signal is emitted. Such an emission causes body to be terminated at the end of the current instant, implementing weak preemption.
 
-Reactive components can be composed sequentially or in parallel using `parallel : (unit -> unit) list -> unit`, which runs every component from the list.
+## Warning 
 
-
-```ocaml
-open Tempo
-
-let counter s () =
-  let rec loop n =
-    emit s n; pause (); loop (n + 1)
-  in loop 0
-
-let observer s () =
-  let instant_value = await_immediate s in
-  Format.printf "same instant: %d@." instant_value
-
-let scenario () =
-  let signal = new_signal () in
-    parallel [counter signal; observer signal]
-
-let () = execute scenario
-```
-
-`counter` emits an increasing integer every instant, while `observer` uses
-`await_immediate s` to react within the same instant.
-
-## Guards and preemption
-
-- `when_ guard body` evaluates `body` only when `guard` is present in the current instant. Otherwise the task is blocked and resumes automatically when the guard becomes present.
-- `watch signal body` executes `body` until `signal` is emitted. The emission terminates `body` at the end of the instant (weak preemption).
-
-```ocaml
-let guarded_action guard () =
-  when_ guard (fun () ->
-      Format.printf "[when_] instant %d: guard present@." 0)
-
-let timed_watch trigger () =
-  watch trigger (fun () ->
-      Format.printf "[watch] start@.";
-      pause ();
-      Format.printf "[watch] still running@.")
-
-let guard_and_watch guard trigger () =
-  watch trigger (fun () ->
-      when_ guard (fun () ->
-          Format.printf "[combo] guard present while watch active@."))
-```
-
-In the first example, `guarded_action` only prints when the guard signal is present. `timed_watch` terminates its body as soon as `trigger` fires. The last snippet combines both: `when_` restricts the body while `watch` ensures the entire block stops one instant after `trigger` is emitted.
-
-Tempo also exposes a low-level module (`Tempo.Low_level`) for advanced use cases, providing direct access to kills, manual fork/join, and guard management. Prefer the high-level primitives unless you need to implement custom control structures.
+Tempo also exposes a low-level module, Tempo.Low_level, intended for advanced use cases. This module provides direct access to primitive operations such as task termination (kill), explicit fork/join, and manual guard management. Unless you are implementing custom control structures, the high-level primitives should be preferred.
 
 ## Installation & usage
 
@@ -95,17 +48,25 @@ Build the library:
 ```sh
 dune build
 ```
-
-Run an example:
-
-```sh
-dune exec examples/basic/emit_once_await_one.exe
-```
-
 Execute the test suite:
 
 ```sh
-dune runtest tests/ok
+dune test
+```
+Run an example:
+
+```sh
+dune exec tests/ok/emit_once_await_one.exe -- --log-level info
+```
+Passing --log-level enables logging of logical instants, making it possible to trace the progression of instants during execution.
+
+Generate the documentation 
+
+```sh 
+dune ocaml doc
 ```
 
-To use Tempo in your own project, add `tempo.runtime` to your dune file and `open Tempo`. 
+To use Tempo in your own project, add `tempo` to your dune file and `open Tempo` to your source file. 
+
+## Examples 
+
