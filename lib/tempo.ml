@@ -55,17 +55,31 @@ type thread_state =
 (* Scheduler state                                                            *)
 (* -------------------------------------------------------------------------- *)
 
-type scheduler_state =
-  { current               : task Queue.t
-  ; mutable next_instant  : task list
-  ; mutable blocked       : task list 
-  ; mutable signals       : any_signal list
-  ; mutable sig_counter   : int
-  ; mutable task_counter  : int
-  ; mutable thread_counter : int
-  ; mutable step_counter  : int
+(* structure for debug purpose *)
+
+type debug_info =
+  { mutable sig_counter     : int
+  ; mutable task_counter    : int
+  ; mutable step_counter    : int
   ; mutable instant_counter : int
-  ; threads               : (thread, thread_state) Hashtbl.t
+  }
+
+ (* structure represents the scheduler’s state 
+  - current : task scheduled for the ongoing instant
+  - next_instant : tasks scheduled to start in the next instant
+  - blocked : tasks blocked on guards
+  - signals : registry of all signals
+  - thread_counter : allocator for thread id
+  - threads : per-thread state
+ *) 
+type scheduler_state =
+  { current                : task Queue.t
+  ; mutable next_instant   : task list
+  ; mutable blocked        : task list 
+  ; mutable signals        : any_signal list
+  ; mutable thread_counter : int
+  ; threads                : (thread, thread_state) Hashtbl.t
+  ; debug                  : debug_info
   }
 
 let current_task_id_ref : int option ref = ref None
@@ -77,10 +91,8 @@ let with_task_context (t : task) (f : unit -> 'a) =
   current_task_id_ref := Some t.t_id;
   Fun.protect ~finally:(fun () -> current_task_id_ref := previous) f
 
-let signal_id (s : _ signal_core) = s.s_id
-
 let log_ctx st =
-  Tempo_log.context ~instant:st.instant_counter ~step:st.step_counter
+  Tempo_log.context ~instant:st.debug.instant_counter ~step:st.debug.step_counter
 
 let kills_alive kills = List.for_all (fun k -> !(k.alive)) kills
 
@@ -196,8 +208,8 @@ let missing_guards : any_signal list -> any_signal list =
 (* Create a new task. *)
 let mk_task : scheduler_state -> thread -> any_signal list -> kill list -> (unit -> unit)-> task =
   fun st thread guards kills run ->
-    let t_id = st.task_counter in 
-    st.task_counter <- st.task_counter + 1;
+    let t_id = st.debug.task_counter in 
+    st.debug.task_counter <- st.debug.task_counter + 1;
     register_task st thread;
     { t_id; thread; guards; kills; run; queued = false; blocked = false }
 
@@ -247,7 +259,7 @@ let wake_guard_waiters :
       let ws = s.guard_waiters in
       s.guard_waiters <- [];
       if Tempo_log.trace_guards && ws <> [] then
-        Tempo_log.log_guard ~signal:(signal_id s) (log_ctx st)
+        Tempo_log.log_guard ~signal:s.s_id (log_ctx st)
           "signal %d waking %d guard waiters" s.s_id (List.length ws);
       List.iter
         (fun t ->
@@ -259,8 +271,8 @@ let wake_guard_waiters :
 (* -------------------------------------------------------------------------- *)
 
 let create_event_signal st =
-  let id = st.sig_counter in
-  st.sig_counter <- id + 1;
+  let id = st.debug.sig_counter in
+  st.debug.sig_counter <- id + 1;
   let s =
     { s_id = id
     ; present = false
@@ -271,18 +283,18 @@ let create_event_signal st =
     }
   in
   register_signal st s;
-  Tempo_log.log ~signal:(signal_id s) (log_ctx st) "signals"
+  Tempo_log.log ~signal:s.s_id (log_ctx st) "signals"
     "created IO signal %d" s.s_id;
   s
 
 let emit_event_from_host :
     type a. scheduler_state -> (a, a, event) signal_core -> a -> unit =
  fun st s value ->
-  Tempo_log.log ~signal:(signal_id s) (log_ctx st) "signals" "io emit signal";
+  Tempo_log.log ~signal:s.s_id (log_ctx st) "signals" "io emit signal";
   if s.present then invalid_arg "Emit : multiple emission";
   s.present <- true;
   s.value <- Some value;
-  Tempo_log.log ~signal:(signal_id s) (log_ctx st) "tasks.await"
+  Tempo_log.log ~signal:s.s_id (log_ctx st) "tasks.await"
     "resuming %d queued continuations" (List.length s.awaiters);
   let resumes = s.awaiters in
   s.awaiters <- [];
@@ -296,8 +308,8 @@ let handle_task : scheduler_state -> task -> unit =
      match t.run () with 
         | () -> ()
         | effect (New_signal (_)), k -> 
-            let id = st.sig_counter in 
-              st.sig_counter <- id + 1;
+            let id = st.debug.sig_counter in 
+              st.debug.sig_counter <- id + 1;
               let s = 
                 { s_id = id;
                   present = false; value = None;
@@ -305,11 +317,11 @@ let handle_task : scheduler_state -> task -> unit =
                   kind = Event_signal }
               in 
                 register_signal st s;
-                Tempo_log.log ~signal:(signal_id s) (log_ctx st) "signals" "created new signal %a" (Tempo_log.pp_signal ~brief:false) s;
+                Tempo_log.log ~signal:s.s_id (log_ctx st) "signals" "created new signal %a" (Tempo_log.pp_signal ~brief:false) s;
                 enqueue_now st (mk_task st t.thread t.guards t.kills (fun () -> continue k s))
         | effect (New_signal_agg (initial, combine)), k ->
-            let id = st.sig_counter in
-            st.sig_counter <- id + 1;
+            let id = st.debug.sig_counter in
+            st.debug.sig_counter <- id + 1;
             let s =
               { s_id = id
               ; present = false
@@ -320,17 +332,17 @@ let handle_task : scheduler_state -> task -> unit =
               }
             in
             register_signal st s;
-            Tempo_log.log ~signal:(signal_id s) (log_ctx st) "signals"
+            Tempo_log.log ~signal:s.s_id (log_ctx st) "signals"
               "created new aggregate signal %a" (Tempo_log.pp_signal ~brief:false) s;
             enqueue_now st (mk_task st t.thread t.guards t.kills (fun () -> continue k s))
         | effect (Emit (s, v)), k  ->
-            Tempo_log.log ~signal:(signal_id s) (log_ctx st) "signals" "emit signal";
+            Tempo_log.log ~signal:s.s_id (log_ctx st) "signals" "emit signal";
             begin match s.kind with
             | Event_signal ->
                 if s.present then invalid_arg "Emit : multiple emission";
                 s.present <- true;
                 s.value <- Some v;
-                Tempo_log.log ~signal:(signal_id s) (log_ctx st) "tasks.await"
+                Tempo_log.log ~signal:s.s_id (log_ctx st) "tasks.await"
                   "resuming %d queued continuations" (List.length s.awaiters);
                 let resumes = s.awaiters in
                 s.awaiters <- [];
@@ -343,7 +355,7 @@ let handle_task : scheduler_state -> task -> unit =
                 in
                 s.present <- true;
                 s.value <- Some acc;
-                Tempo_log.log ~signal:(signal_id s) (log_ctx st) "signals"
+                Tempo_log.log ~signal:s.s_id (log_ctx st) "signals"
                   "aggregate updated, %d awaiters pending until instant end" (List.length s.awaiters)
             end;
             Tempo_log.log (log_ctx st) "signals" "state: %a" (Tempo_log.pp_any_signal_list ~brief:true) st.signals;
@@ -353,20 +365,20 @@ let handle_task : scheduler_state -> task -> unit =
         | effect (Await s), k ->
             let enqueue_resume v =
               let t' = mk_task st t.thread t.guards t.kills (fun () -> continue k v) in
-              Tempo_log.log ~task:t'.t_id ~signal:(signal_id s) (log_ctx st) "tasks.await"
+              Tempo_log.log ~task:t'.t_id ~signal:s.s_id (log_ctx st) "tasks.await"
                 "signal already present, resume next instant as task %d" t'.t_id;
               enqueue_next st t'
             in
             let register_waiter () =
               let resume v =
                 let t' = mk_task st t.thread t.guards t.kills (fun () -> continue k v) in
-                Tempo_log.log ~task:t'.t_id ~signal:(signal_id s) (log_ctx st) "tasks.await"
+                Tempo_log.log ~task:t'.t_id ~signal:s.s_id (log_ctx st) "tasks.await"
                   "resume task next instant (task %d)" t'.t_id;
                 enqueue_next st t'
               in
               s.awaiters <- resume :: s.awaiters
             in
-            Tempo_log.log ~task:t.t_id ~signal:(signal_id s) (log_ctx st) "tasks.await" "waiting for signal";
+            Tempo_log.log ~task:t.t_id ~signal:s.s_id (log_ctx st) "tasks.await" "waiting for signal";
             if s.present then
               match s.kind with
               | Event_signal ->
@@ -378,19 +390,19 @@ let handle_task : scheduler_state -> task -> unit =
             else
               register_waiter ()
         | effect (Await_immediate s), k ->
-            Tempo_log.log ~task:t.t_id ~signal:(signal_id s) (log_ctx st) "tasks.await_immediate" "waiting for signal";
+            Tempo_log.log ~task:t.t_id ~signal:s.s_id (log_ctx st) "tasks.await_immediate" "waiting for signal";
             if s.present then
               match s.value with
               | Some v ->
                   let t' = mk_task st t.thread t.guards t.kills (fun () -> continue k v) in
-                  Tempo_log.log ~task:t'.t_id ~signal:(signal_id s) (log_ctx st) "tasks.await_immediate"
+                  Tempo_log.log ~task:t'.t_id ~signal:s.s_id (log_ctx st) "tasks.await_immediate"
                     "signal already present, resume in current instant as task %d" t'.t_id;
                   enqueue_now st t'
               | None -> failwith "Error : present but no value"
             else
               let resume v =
                 let t = mk_task st t.thread t.guards t.kills (fun () -> continue k v) in
-                Tempo_log.log ~task:t.t_id ~signal:(signal_id s) (log_ctx st) "tasks.await_immediate"
+                Tempo_log.log ~task:t.t_id ~signal:s.s_id (log_ctx st) "tasks.await_immediate"
                   "resume task in current instant (task %d)" t.t_id;
                 enqueue_now st t
               in
@@ -413,9 +425,9 @@ let handle_task : scheduler_state -> task -> unit =
                 enqueue_now st (mk_task st t.thread t.guards t.kills (fun () -> continue k ()))
               )
             in 
-              Tempo_log.log ~task:t.t_id ~signal:(signal_id s) (log_ctx st) "tasks.guard"
+              Tempo_log.log ~task:t.t_id ~signal:s.s_id (log_ctx st) "tasks.guard"
                 "updated as task %d, now guarded by signal %d" t'.t_id s.s_id;
-              Tempo_log.log_guard ~task:t.t_id ~signal:(signal_id s) (log_ctx st)
+              Tempo_log.log_guard ~task:t.t_id ~signal:s.s_id (log_ctx st)
                 "task %d registered guard on signal %d" t'.t_id s.s_id;
               enqueue_now st t'
         | effect (With_kill (kk, body)), k ->
@@ -457,8 +469,8 @@ let rec step : scheduler_state -> unit =
   fun st ->
     let counter = Mtime_clock.counter () in
     Tempo_log.log_banner (log_ctx st) "step"
-      (Format.asprintf "Step %03d (Instant %03d)" st.step_counter st.instant_counter);
-    st.step_counter <- st.step_counter + 1;
+      (Format.asprintf "Step %03d (Instant %03d)" st.debug.step_counter st.debug.instant_counter);
+    st.debug.step_counter <- st.debug.step_counter + 1;
     if Queue.is_empty st.current then begin
       Tempo_log.log ~level:Logs.Debug (log_ctx st) "step" "queue empty, stopping current instant";
       let span = Mtime_clock.count counter in
@@ -519,9 +531,9 @@ let rec run_instant :
     (match remaining with
     | Some n when n <= 0 -> Stdlib.exit 0
     | _ -> ());
-    Tempo_log.log_info (log_ctx st) "instant" (Format.asprintf "Start Instant %d" st.instant_counter);
+    Tempo_log.log_info (log_ctx st) "instant" (Format.asprintf "Start Instant %d" st.debug.instant_counter);
     let counter = Mtime_clock.counter () in
-    (* Tempo_log.log_banner (log_ctx st) "instant" (Format.asprintf "Instant %03d START" st.instant_counter); *)
+    (* Tempo_log.log_banner (log_ctx st) "instant" (Format.asprintf "Instant %03d START" st.debug.instant_counter); *)
     st.blocked <- [];
     let l = Tempo_log.snapshot_queue st.current in
     Tempo_log.log_queue_state (log_ctx st) "queues" l st.blocked st.next_instant;
@@ -529,7 +541,7 @@ let rec run_instant :
     before_step ();
     step st;
     after_step ();
-    (* Tempo_log.log_banner (log_ctx st) "instant" (Format.asprintf "Instant %03d END" st.instant_counter); *)
+    (* Tempo_log.log_banner (log_ctx st) "instant" (Format.asprintf "Instant %03d END" st.debug.instant_counter); *)
     let span = Mtime_clock.count counter in
     Tempo_log.log ~level:Logs.Debug (log_ctx st) "instant" "duration %a" Tempo_log.pp_span span;
     Tempo_log.record_duration "instant" span;
@@ -542,8 +554,8 @@ let rec run_instant :
           enqueue_next st t
         end ) 
       st.blocked;
-      st.instant_counter <- st.instant_counter + 1;
-      st.step_counter <- 0;
+      st.debug.instant_counter <- st.debug.instant_counter + 1;
+      st.debug.step_counter <- 0;
       match st.next_instant with
         | [] ->
             Tempo_log.log ~level:Logs.Debug (log_ctx st) "tasks" "no more tasks for next instant, terminating execution" 
@@ -570,11 +582,12 @@ let execute ?instants ?(input = fun () -> None) ?(output = fun _ -> ()) initial 
         next_instant    = [];
         blocked         = [];
         signals         = [];
-        sig_counter     = 0;
-        task_counter    = 0;
         thread_counter  = 0;
-        step_counter    = 0;
-        instant_counter = 0;
+        debug           =
+          { sig_counter     = 0;
+            task_counter    = 0;
+            step_counter    = 0;
+            instant_counter = 0; };
         threads         = Hashtbl.create 16;
       } in
   Tempo_log.log_banner (log_ctx st) "run" "Runtime Start";
