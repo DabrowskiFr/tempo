@@ -1,0 +1,3 @@
+[consumer] waiting with await_immediate
+[producer] emit value
+[consumer] received 42

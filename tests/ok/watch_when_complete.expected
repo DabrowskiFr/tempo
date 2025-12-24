@@ -1,0 +1,7 @@
+[driver] emit guard to start worker
+[worker] guard satisfied, running
+[driver] emit guard again to keep worker running
+[worker] no cancel yet, continue
+[driver] emit guard one last time, no cancel
+[worker] finished without preemption
+[driver] worker finished normally

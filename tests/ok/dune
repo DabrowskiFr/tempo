@@ -1,0 +1,30 @@
+(tests
+ (names 
+  emit_agg_collect
+  emit_agg_sum
+  emit_once_await_immediate
+  emit_once_await_many
+  emit_once_await_one
+  parallel
+  pause
+  present_then_else
+  watch_complete
+  watch_killed
+  watch_nested
+  watch_when_complete
+  watch_when_killed
+  when_await_imm_next_instant
+  when_await_imm_same_instant
+  when_await_nested
+  when_await_next_instant
+  when_await_same_instant
+  when_complete
+  when_nested
+  when_next_instant
+  when_parallel
+  when_same_instant
+  when_tick_tock
+  with_kill_abort
+  with_kill_inherit
+  )
+ (libraries tempo.runtime))

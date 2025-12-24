@@ -1,0 +1,5 @@
+[consumer] waiting for payload...
+[producer] doing nothing
+[producer] doing nothing
+[producer] emit payload
+[consumer] received payload 42

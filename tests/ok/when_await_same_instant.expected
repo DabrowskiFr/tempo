@@ -1,0 +1,3 @@
+[scenario1/driver] instant 0: emit guard and payload in the same instant (fails, awaits is delayed)
+[scenario1/driver] instant 0: done
+[scenario1/consumer] instant 0: guard satisfied, awaiting payload

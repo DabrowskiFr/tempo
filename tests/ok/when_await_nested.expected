@@ -1,0 +1,9 @@
+
+>>> nested_guard_with_payload <<<
+[scenario3/driver] instant 0: emit guard only
+[scenario3/worker] instant 0: guard true, waiting for ack
+[scenario3/driver] instant 1: emit guard + ack (payload missing)
+[scenario3/worker] instant 1: ack seen in the same instant, now awaiting payload
+[scenario3/driver] instant 2: re-emit guard + ack and emit payload to unblock worker
+[scenario3/driver] instant 2: done
+[scenario3/worker] instant 2: payload delivered later (84), worker done

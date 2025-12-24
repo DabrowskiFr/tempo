@@ -1,0 +1,3 @@
+[driver] do nothing
+[driver] emit trigger
+[body] guard satisfied

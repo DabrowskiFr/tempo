@@ -1,0 +1,5 @@
+[driver] emit guard to start worker
+[worker] guard satisfied, watch started
+[driver] re-emit guard and emit cancel => watch preempts
+[worker] still running under guard
+[driver] worker aborted by watch

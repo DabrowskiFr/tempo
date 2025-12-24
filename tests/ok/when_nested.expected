@@ -1,0 +1,5 @@
+[driver] emit only a
+[driver] emit b (a from previous instant should not count)
+[driver] emit a and b together to satisfy nested guard
+[nested] both guards satisfied
+[driver] done
