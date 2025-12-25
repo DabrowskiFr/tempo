@@ -283,8 +283,6 @@ let wake_guard_waiters :
 (* Effect handler                                                             *)
 (* -------------------------------------------------------------------------- *)
 
-
-
 let emit_event_from_host :
     type a. scheduler_state -> (a, a, event) signal_core -> a -> unit =
  fun st s value ->
@@ -300,6 +298,7 @@ let emit_event_from_host :
   wake_guard_waiters st s
 
 (* Handle a task by performing its effect *)
+
 let handle_task : scheduler_state -> task -> unit = 
   fun st t ->
    let run_task () =
