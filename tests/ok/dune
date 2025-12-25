@@ -1,5 +1,7 @@
 (tests
  (names 
+  await_fixpoint
+  await_agg_same_instant
   emit_agg_collect
   emit_agg_sum
   emit_once_await_immediate
