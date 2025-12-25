@@ -4,6 +4,7 @@
   await_agg_same_instant
   emit_agg_collect
   emit_agg_sum
+  emit_event_wakes_awaiters
   emit_once_await_immediate
   emit_once_await_many
   emit_once_await_one
