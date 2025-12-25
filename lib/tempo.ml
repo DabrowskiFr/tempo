@@ -157,9 +157,11 @@ let update_signal :
   match s.kind with
     | Event_signal -> 
           if s.present then invalid_arg "Emit : multiple emission";
+          let resumes = s.awaiters in
           s.present <- true;
           s.value <- Some v;
-          s.awaiters <- []
+          s.awaiters <- [];
+          List.iter (fun resume -> resume v) resumes
     | Aggregate_signal { combine; initial } -> 
         s.present <- true;
         let acc =
@@ -390,8 +392,7 @@ let handle_task : scheduler_state -> task -> unit =
                   let t' = mk_task st t.thread t.guards t.kills (fun () -> continue k v) in
                   Tempo_log.log ~task:t'.t_id ~signal:s.s_id (log_ctx st) "tasks.await_immediate"
                     "signal already present, resume in current instant as task %d" t'.t_id;
-                  assert (kills_alive t.kills);
-                    enqueue_now st t'
+                  enqueue_now st t'
               | None -> failwith "Error : present but no value"
             else
               let resume v =
@@ -434,7 +435,6 @@ let handle_task : scheduler_state -> task -> unit =
             let continue_now () =
               kk.cleanup <- None;
               let t' = (mk_task st t.thread t.guards t.kills (fun () -> continue k ())) in
-              assert (kills_alive t'.kills);
               enqueue_now st t'
             and continue_later () =
               kk.cleanup <- None;
@@ -448,13 +448,11 @@ let handle_task : scheduler_state -> task -> unit =
               Tempo_log.log ~task:t.t_id (log_ctx st) "tasks.watched"
               "updated as task %d, now watched by signal" t.t_id;
             let t' = mk_task st t.thread t.guards (kk :: t.kills) runner in
-            assert (kills_alive t'.kills);
             enqueue_now st t'
         | effect (Join thread_id), k ->
             if thread_id = t.thread then invalid_arg "join: cannot join current thread";
             let resume () =
               let t' = (mk_task st t.thread t.guards t.kills (fun () -> continue k ())) in
-              assert (kills_alive t'.kills);
               enqueue_now st t'
             in
             add_join_waiter st thread_id resume
