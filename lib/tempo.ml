@@ -111,85 +111,6 @@ let add_join_waiter st thread waiter =
   if state.completed then waiter ()
   else state.waiters <- waiter :: state.waiters
 
-(**********************************************************)
-(* Scheduler functions                                    *)
-(**********************************************************)
-
-(* -------------------------------------------------------------------------- *)
-(* Signal registry                                                            *)
-(* -------------------------------------------------------------------------- *)
-
-(** Reset all signals for a new instant.
-    The status becomes absent and the value is undefined.
-    Awaiters are left unchanged because a process can wait 
-    for a signal for many instants Guarded awaiters are 
-    cleared *)
-
-
-let register_signal : scheduler_state -> ('emit, 'agg, 'mode) signal_core -> unit =
-  fun st s -> 
-    st.signals <- (Any s) :: st.signals
-
-let create_event_signal st =
-  let id = st.debug.sig_counter in
-  st.debug.sig_counter <- id + 1;
-  let s =
-    { s_id = id
-    ; present = false
-    ; value = None
-    ; awaiters = []
-    ; guard_waiters = []
-    ; kind = Event_signal
-    }
-  in
-  register_signal st s;
-  Tempo_log.log ~signal:s.s_id (log_ctx st) "signals"
-    "created IO signal %d" s.s_id;
-  s
-
-(* on ne reinitialise pas awaiter pour un signal aggregate,
-  la valeur ne sera connue qu'à la fin de l'instant et 
-  finalize leur transmettra la valeur *)
-
-let update_signal : 
-  type emit agg mode. (emit, agg, mode) signal_core -> emit -> unit = 
-  fun s v ->
-  match s.kind with
-    | Event_signal -> 
-          if s.present then invalid_arg "Emit : multiple emission";
-          let resumes = s.awaiters in
-          s.present <- true;
-          s.value <- Some v;
-          s.awaiters <- [];
-          List.iter (fun resume -> resume v) resumes
-    | Aggregate_signal { combine; initial } -> 
-        s.present <- true;
-        let acc =
-          match s.value with
-          | None -> combine initial v
-          | Some agg -> combine agg v
-        in s.value <- Some acc
-        
-let finalize_signals : scheduler_state -> unit =
-  fun st ->
-    List.iter
-      (fun (Any s) ->
-         (match s.kind with
-          | Aggregate_signal _ when s.present ->
-              let delivered =
-                match s.value with
-                | Some value -> value
-                | None -> failwith "aggregate signal flagged present but no value"
-              in
-              let resumes = s.awaiters in
-              s.awaiters <- [];
-              List.iter (fun resume -> resume delivered) resumes
-          | _ -> ());
-         s.present <- false;
-         s.value <- None;
-         s.guard_waiters <- [])
-      st.signals
-
 (* -------------------------------------------------------------------------- *)
 (* Guard helpers                                                              *)
 (* -------------------------------------------------------------------------- *)
@@ -211,38 +132,6 @@ let guard_ok : any_signal list -> bool =
 let missing_guards : any_signal list -> any_signal list = 
   List.filter (fun (Any s) -> not s.present)
 
-(******************************************************************)
-(* Tasks management                                               *)
-(******************************************************************)
-
-let register_task st thread =
-  let state = ensure_thread_state st thread in
-  if state.completed && state.active = 0 then state.completed <- false;
-  state.active <- state.active + 1
-
-let mk_task : scheduler_state -> thread -> any_signal list -> kill list -> (unit -> unit)-> task =
-  fun st thread guards kills run ->
-    let t_id = st.debug.task_counter in 
-    st.debug.task_counter <- st.debug.task_counter + 1;
-    register_task st thread;
-    { t_id; thread; guards; kills; run; queued = false; blocked = false }
-
-let finish_task st thread =
-  let rec resume_waiters waiters =
-    match waiters with
-    | [] -> ()
-    | f :: rest ->
-        f ();
-        resume_waiters rest
-  in
-  let state = find_thread_state st thread in
-  state.active <- state.active - 1;
-  if state.active = 0 then begin
-    state.completed <- true;
-    let waiters = List.rev state.waiters in
-    state.waiters <- [];
-    resume_waiters waiters
-  end
 
 (******************************************************************)
 (* Task scheduling                                                *)
@@ -287,10 +176,6 @@ let block_on_guards : scheduler_state -> task -> unit =
     List.iter (fun (Any s) -> s.guard_waiters <- t :: s.guard_waiters) miss
 
 
-(*****************************************************************************)
-(* Guards *)
-(*****************************************************************************)
-
 (* Given a signal s, wake up all tasks waiting on the guard s 
    if the guard is satisfied, otherwise block the task on its missing guards *)
 
@@ -301,6 +186,121 @@ let wake_guard_waiters :
         (fun t -> if guard_ok t.guards && kills_alive t.kills then enqueue_now st t) 
         s.guard_waiters;
       s. guard_waiters <- []
+
+
+(**********************************************************)
+(* Scheduler functions                                    *)
+(**********************************************************)
+
+(* -------------------------------------------------------------------------- *)
+(* Signal registry                                                            *)
+(* -------------------------------------------------------------------------- *)
+
+(** Reset all signals for a new instant.
+    The status becomes absent and the value is undefined.
+    Awaiters are left unchanged because a process can wait 
+    for a signal for many instants Guarded awaiters are 
+    cleared *)
+
+
+let register_signal : scheduler_state -> ('emit, 'agg, 'mode) signal_core -> unit =
+  fun st s -> 
+    st.signals <- (Any s) :: st.signals
+
+let create_event_signal st =
+  let id = st.debug.sig_counter in
+  st.debug.sig_counter <- id + 1;
+  let s =
+    { s_id = id
+    ; present = false
+    ; value = None
+    ; awaiters = []
+    ; guard_waiters = []
+    ; kind = Event_signal
+    }
+  in
+  register_signal st s;
+  Tempo_log.log ~signal:s.s_id (log_ctx st) "signals"
+    "created IO signal %d" s.s_id;
+  s
+
+(* on ne reinitialise pas awaiter pour un signal aggregate,
+  la valeur ne sera connue qu'à la fin de l'instant et 
+  finalize leur transmettra la valeur *)
+
+let update_signal : 
+  type emit agg mode. scheduler_state -> (emit, agg, mode) signal_core -> emit -> unit = 
+  fun st s v ->
+  begin 
+    match s.kind with
+    | Event_signal -> 
+          if s.present then invalid_arg "Emit : multiple emission";
+          let resumes = s.awaiters in
+          s.present <- true;
+          s.value <- Some v;
+          s.awaiters <- [];
+          List.iter (fun resume -> resume v) resumes
+    | Aggregate_signal { combine; initial } -> 
+        s.present <- true;
+        let acc =
+          match s.value with
+          | None -> combine initial v
+          | Some agg -> combine agg v
+        in s.value <- Some acc
+    end;
+    wake_guard_waiters st s
+let finalize_signals : scheduler_state -> unit =
+  fun st ->
+    List.iter
+      (fun (Any s) ->
+         (match s.kind with
+          | Aggregate_signal _ when s.present ->
+              let delivered =
+                match s.value with
+                | Some value -> value
+                | None -> failwith "aggregate signal flagged present but no value"
+              in
+              let resumes = s.awaiters in
+              s.awaiters <- [];
+              List.iter (fun resume -> resume delivered) resumes
+          | _ -> ());
+         s.present <- false;
+         s.value <- None;
+         s.guard_waiters <- [])
+      st.signals
+
+(******************************************************************)
+(* Tasks management                                               *)
+(******************************************************************)
+
+let register_task st thread =
+  let state = ensure_thread_state st thread in
+  if state.completed && state.active = 0 then state.completed <- false;
+  state.active <- state.active + 1
+
+let mk_task : scheduler_state -> thread -> any_signal list -> kill list -> (unit -> unit)-> task =
+  fun st thread guards kills run ->
+    let t_id = st.debug.task_counter in 
+    st.debug.task_counter <- st.debug.task_counter + 1;
+    register_task st thread;
+    { t_id; thread; guards; kills; run; queued = false; blocked = false }
+
+let finish_task st thread =
+  let rec resume_waiters waiters =
+    match waiters with
+    | [] -> ()
+    | f :: rest ->
+        f ();
+        resume_waiters rest
+  in
+  let state = find_thread_state st thread in
+  state.active <- state.active - 1;
+  if state.active = 0 then begin
+    state.completed <- true;
+    let waiters = List.rev state.waiters in
+    state.waiters <- [];
+    resume_waiters waiters
+  end
 
 (*****************************************************************************)
 (* Host input *)
@@ -368,8 +368,7 @@ let handle_task : scheduler_state -> task -> unit =
             let t' = mk_task st t.thread t.guards t.kills (fun () -> continue k s) in
               enqueue_now st t'
         | effect (Emit (s, v)), k  ->
-            update_signal s v;
-            wake_guard_waiters st s;
+            update_signal st s v;
             let t' = mk_task st t.thread t.guards t.kills (fun () -> continue k ()) in
               enqueue_now st t';
               Tempo_log.log (log_ctx st) "signals" "state: %a" (Tempo_log.pp_any_signal_list ~brief:true) st.signals    
