@@ -27,10 +27,10 @@ val enqueue_next : scheduler_state -> task -> unit
 val block_on_guards : scheduler_state -> task -> unit
 
 val spawn_now :
-  scheduler_state -> thread -> any_signal list -> kill list -> (unit -> unit) -> task
+  scheduler_state -> thread -> any_signal list -> kill list -> (unit -> unit) -> unit
 
 val spawn_next :
-  scheduler_state -> thread -> any_signal list -> kill list -> (unit -> unit) -> task
+  scheduler_state -> thread -> any_signal list -> kill list -> (unit -> unit) -> unit
 
 val wake_guard_waiters :
   scheduler_state -> ('e, 'a, 'm) signal_core -> unit
