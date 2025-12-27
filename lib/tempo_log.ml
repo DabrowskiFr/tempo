@@ -70,17 +70,34 @@ module Tempo_log = struct
     if use_color then color_of_scope scope ^ text ^ ansi_reset else text
 
   (* --- Logging front-end -------------------------------------------------- *)
-  let log ?(level = Backend_logs.Debug) ?task ?signal _ctx scope fmt =
-    Format.kasprintf
-      (fun msg ->
-        let tags =
-          Backend_logs.Tag.empty
-          |> add_opt_tag Log_tags.task_id task
-          |> add_opt_tag Log_tags.signal_id signal
+  let level_enabled level =
+    match Backend_logs.level () with
+    | Some current ->
+        let rank = function
+          | Logs.Error -> 0
+          | Logs.Warning -> 1
+          | Logs.Info -> 2
+          | Logs.Debug -> 3
+          | _ -> 4
         in
-        let colored = colorize scope (Format.asprintf "\t%s" msg) in
-        Backend_logs.msg level (fun m -> m ~tags "%s" colored))
-      fmt
+        rank current >= rank level
+    | None -> false
+
+  let log ?(level = Backend_logs.Debug) ?task ?signal _ctx scope fmt =
+    let printer =
+      if level_enabled level then
+        Format.kasprintf
+          (fun msg ->
+            let tags =
+              Backend_logs.Tag.empty
+              |> add_opt_tag Log_tags.task_id task
+              |> add_opt_tag Log_tags.signal_id signal
+            in
+            let colored = colorize scope (Format.asprintf "\t%s" msg) in
+            Backend_logs.msg level (fun m -> m ~tags "%s" colored))
+      else Format.ifprintf Format.std_formatter
+    in
+    printer fmt
 
   let log_banner ctx scope label =
     log ~level:Backend_logs.Info ctx scope "==================== %s ====================" label

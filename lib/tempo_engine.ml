@@ -41,8 +41,8 @@ let inc_spawns_now () = with_stats (fun stats -> stats.spawns_now <- stats.spawn
 let inc_spawns_next () = with_stats (fun stats -> stats.spawns_next <- stats.spawns_next + 1)
 let inc_aborted () = with_stats (fun stats -> stats.aborted <- stats.aborted + 1)
 
-let update_signal st s v = Tempo_signal.update_signal st s v
-let emit_event_from_host st s v = Tempo_signal.emit_event_from_host st s v
+(* let update_signal st s v = Tempo_signal.update_signal st s v
+let emit_event_from_host st s v = Tempo_signal.emit_event_from_host st s v *)
 
 let prune_waiting st thread =
   st.waiting <- List.filter (fun (_, target) -> target <> thread) st.waiting
@@ -50,11 +50,9 @@ let prune_waiting st thread =
 let handle_task : scheduler_state -> Tempo_log.step_stats -> task -> unit =
   fun st _stats t ->
     let ctx = log_ctx st in
-      let run_task () =
+    let run_task () =
       match t.run () with
-      | () ->
-          Tempo_log.log ~task:t.t_id ctx "step.complete"
-            "task #%d (thread %d) completed with no effect" t.t_id t.thread
+      | () -> ()
       | effect (New_signal (_)), k ->
           let s = fresh_event_signal st in
           Tempo_log.log ~task:t.t_id ~signal:s.s_id ctx "step.signal"
