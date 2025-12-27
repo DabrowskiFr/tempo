@@ -1,5 +1,5 @@
 [producer] emit guard only
 [consumer] guard present but payload missing, await should block
 [producer] re-emit guard and payload to release consumer
-[consumer] resumed when guard was re-emitted (value=21)
 [producer] done
+[consumer] resumed when guard was re-emitted (value=21)

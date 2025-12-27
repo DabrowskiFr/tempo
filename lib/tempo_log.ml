@@ -83,8 +83,7 @@ module Tempo_log = struct
       fmt
 
   let log_banner ctx scope label =
-    let line = String.make 18 '-' in
-    log ~level:Backend_logs.Debug ctx scope "%s %s %s" line label line
+    log ~level:Backend_logs.Info ctx scope "==================== %s ====================" label
 
   let log_info ctx scope label =
     log ~level:Backend_logs.Info ctx scope "%s" label
@@ -103,7 +102,6 @@ type step_stats =
   ; mutable spawns_next : int
   ; mutable blocks : int
   ; mutable aborted : int
-  ; mutable last_event : string option
   }
 
 let empty_stats () =
@@ -111,22 +109,29 @@ let empty_stats () =
   ; spawns_next = 0
   ; blocks = 0
   ; aborted = 0
-  ; last_event = None
   }
 
   let pp_span fmt span =
     let ms = Mtime.Span.to_float_ns span /. 1e6 in
     Format.fprintf fmt "%.3fms" ms
 
-  let pp_last_effect fmt = function
-    | None -> Format.pp_print_string fmt "none"
-    | Some e -> Format.pp_print_string fmt e
+  let log_step_summary ctx _stats span =
+    log ~level:Backend_logs.Debug ctx "step" "step=%a" pp_span span
 
-  let log_step_summary ctx stats span =
-    log ~level:Backend_logs.Debug ctx "step"
-      "step=%a | now=%d next=%d blocks=%d aborted=%d | effect=%a"
-      pp_span span stats.spawns_now stats.spawns_next stats.blocks stats.aborted
-      pp_last_effect stats.last_event
+  let pp_waiting fmt waits =
+    match waits with
+    | [] -> Format.pp_print_string fmt "none"
+    | lst ->
+        let pp_pair fmt (w, t) =
+          Format.fprintf fmt "%d→%d" w t
+        in
+        Format.pp_print_list
+          ~pp_sep:(fun fmt () -> Format.pp_print_string fmt ", ")
+          pp_pair fmt lst
+
+  let log_waiting ctx waits =
+    log ~level:Backend_logs.Debug ctx "step.wait"
+      "thread join waiters: %a" pp_waiting waits
 
   (* --- Printers for runtime data structures ------------------------------- *)
   let snapshot_queue q =
@@ -149,7 +154,7 @@ let empty_stats () =
     Format.pp_print_list ~pp_sep pp_task_id fmt ts
 
   let pp_queue_compact fmt tasks =
-    Format.fprintf fmt "[%d] %a" (List.length tasks)
+    Format.fprintf fmt "[%a]"
       (Format.pp_print_list
          ~pp_sep:(fun fmt () -> Format.pp_print_string fmt " ")
          pp_task_id)
@@ -172,6 +177,32 @@ let empty_stats () =
 
   let pp_task_list_brief = pp_task_list ~pp_sep:default_sep ~brief:true
   let pp_task_list_full = pp_task_list ~pp_sep:default_sep ~brief:false
+
+  let pp_signal_waiters fmt signals =
+    let waiting =
+      List.filter_map
+        (fun (Any s) ->
+          let awaits = s.awaiters in
+          if awaits = [] then None
+          else
+            let aw_count = List.length awaits in
+            Some (s.s_id, aw_count))
+        signals
+    in
+    match waiting with
+    | [] -> Format.pp_print_string fmt "none"
+    | lst ->
+        let pp_entry fmt (sid, aw_count) =
+          Format.fprintf fmt "signal #%d awaiters=%d" sid aw_count
+        in
+        Format.pp_print_list
+          ~pp_sep:(fun fmt () -> Format.pp_print_string fmt " ")
+          pp_entry fmt lst
+
+  let log_signal_waiters ctx signals =
+    log ~level:Backend_logs.Debug ctx "step.wait"
+      "signal awaiters: %a"
+      pp_signal_waiters signals
 
   let pp_limited_list ?(pp_sep = default_sep) ?(max_items = None) printer fmt
       lst =
@@ -205,7 +236,8 @@ let empty_stats () =
   let pp_any_guard_list ?brief = Format.pp_print_list (pp_any_guard ?brief)
 
   let log_pick ctx task =
-    log ~task:task.t_id ctx "step.select" "pick task #%d (thread=%d guards=%d)"
+    log ~task:task.t_id ctx "step.select"
+      "pick task #%d (logical thread=%d guards=%d)"
       task.t_id task.thread (List.length task.guards)
 
   let log_block ctx task missing_guards =

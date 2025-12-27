@@ -48,6 +48,16 @@ let spawn_next st thread guards kills run =
   let t = create_task st thread guards kills run in
   enqueue_next st t
 
+let spawn_now_with_id st thread guards kills run =
+  let t = create_task st thread guards kills run in
+  enqueue_now st t;
+  t
+
+let spawn_next_with_id st thread guards kills run =
+  let t = create_task st thread guards kills run in
+  enqueue_next st t;
+  t
+
 let block_on_guards st t =
   assert (kills_alive t.kills);
   if not t.blocked then begin
