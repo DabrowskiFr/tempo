@@ -18,16 +18,11 @@
 
 open Tempo_types
 
-let log_ctx st =
-  Tempo_log.context ~instant:st.debug.instant_counter ~step:st.debug.step_counter
-
 let kills_alive kills = List.for_all (fun k -> !(k.alive)) kills
 
 let enqueue_now st t =
   assert (kills_alive t.kills);
   if not t.queued then begin
-    Tempo_log.log ~task:t.t_id (log_ctx st) "tasks.current"
-      "push task %a" (Tempo_log.pp_task ~brief:false) t;
     t.queued <- true;
     t.blocked <- false;
     Queue.add t st.current
@@ -35,11 +30,7 @@ let enqueue_now st t =
 
 let enqueue_next st t =
   assert (kills_alive t.kills);
-  Tempo_log.log ~task:t.t_id (log_ctx st) "tasks.next"
-    "schedule task for next instant";
-  st.next_instant <- t :: st.next_instant;
-  Tempo_log.log (log_ctx st) "tasks.next" "pending next instant: %a"
-    Tempo_log.pp_task_list_brief st.next_instant
+  st.next_instant <- t :: st.next_instant
 
 let create_task st thread guards kills run =
   let state = Tempo_thread.ensure st.threads thread in
@@ -51,13 +42,11 @@ let create_task st thread guards kills run =
 
 let spawn_now st thread guards kills run =
   let t = create_task st thread guards kills run in
-  enqueue_now st t;
-  t
+  enqueue_now st t
 
 let spawn_next st thread guards kills run =
   let t = create_task st thread guards kills run in
-  enqueue_next st t;
-  t
+  enqueue_next st t
 
 let block_on_guards st t =
   assert (kills_alive t.kills);
@@ -69,13 +58,6 @@ let block_on_guards st t =
     List.filter (fun (Any s) -> not s.present) guards
   in
   let miss = missing_guards t.guards in
-  Tempo_log.log ~task:t.t_id
-    (Tempo_log.context ~instant:st.debug.instant_counter ~step:st.debug.step_counter)
-    "tasks.block"
-    "blocked on guards %a" (Tempo_log.pp_any_guard_list ~brief:false) miss;
-  Tempo_log.log_guard ~task:t.t_id
-    (Tempo_log.context ~instant:st.debug.instant_counter ~step:st.debug.step_counter)
-    "waiting for guards %a" (Tempo_log.pp_any_guard_list ~brief:false) miss;
   List.iter (fun (Tempo_types.Any s) -> s.guard_waiters <- t :: s.guard_waiters) miss
 
 let wake_guard_waiters st s =

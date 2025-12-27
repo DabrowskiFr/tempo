@@ -59,10 +59,10 @@ module Tempo_log = struct
 
   let color_of_scope scope =
     if String.starts_with ~prefix:"instant" scope then "\027[35m"
-    else if String.starts_with ~prefix:"step" scope then "\027[33m"
-    else if String.starts_with ~prefix:"tasks" scope then "\027[32m"
+    else if String.starts_with ~prefix:"step" scope then "\027[34m"
+    else if String.starts_with ~prefix:"tasks" scope then "\027[36m"
     else if String.starts_with ~prefix:"signals" scope then "\027[36m"
-    else if String.starts_with ~prefix:"queues" scope then "\027[34m"
+    else if String.starts_with ~prefix:"queues" scope then "\027[36m"
     else if String.starts_with ~prefix:"run" scope then "\027[36m"
     else "\027[37m"
 
@@ -70,7 +70,7 @@ module Tempo_log = struct
     if use_color then color_of_scope scope ^ text ^ ansi_reset else text
 
   (* --- Logging front-end -------------------------------------------------- *)
-  let log ?(level = Backend_logs.Debug) ?task ?signal ctx scope fmt =
+  let log ?(level = Backend_logs.Debug) ?task ?signal _ctx scope fmt =
     Format.kasprintf
       (fun msg ->
         let tags =
@@ -78,10 +78,7 @@ module Tempo_log = struct
           |> add_opt_tag Log_tags.task_id task
           |> add_opt_tag Log_tags.signal_id signal
         in
-        let formatted =
-          Format.asprintf "[%s][I%03d|S%03d] %s" scope ctx.instant ctx.step msg
-        in
-        let colored = colorize scope formatted in
+        let colored = colorize scope (Format.asprintf "\t%s" msg) in
         Backend_logs.msg level (fun m -> m ~tags "%s" colored))
       fmt
 
@@ -91,6 +88,45 @@ module Tempo_log = struct
 
   let log_info ctx scope label =
     log ~level:Backend_logs.Info ctx scope "%s" label
+
+  (* Compact helpers for scheduler snapshots. *)
+  let log_banner_instant ctx instant =
+    log ~level:Backend_logs.Info ctx "instant"
+      "==================== INSTANT %03d ====================" instant
+
+  let log_banner_step ctx =
+    log ~level:Backend_logs.Info ctx "step"
+      "====================== STEP %03d ======================" ctx.step
+
+type step_stats =
+  { mutable spawns_now : int
+  ; mutable spawns_next : int
+  ; mutable blocks : int
+  ; mutable aborted : int
+  ; mutable last_event : string option
+  }
+
+let empty_stats () =
+  { spawns_now = 0
+  ; spawns_next = 0
+  ; blocks = 0
+  ; aborted = 0
+  ; last_event = None
+  }
+
+  let pp_span fmt span =
+    let ms = Mtime.Span.to_float_ns span /. 1e6 in
+    Format.fprintf fmt "%.3fms" ms
+
+  let pp_last_effect fmt = function
+    | None -> Format.pp_print_string fmt "none"
+    | Some e -> Format.pp_print_string fmt e
+
+  let log_step_summary ctx stats span =
+    log ~level:Backend_logs.Debug ctx "step"
+      "step=%a | now=%d next=%d blocks=%d aborted=%d | effect=%a"
+      pp_span span stats.spawns_now stats.spawns_next stats.blocks stats.aborted
+      pp_last_effect stats.last_event
 
   (* --- Printers for runtime data structures ------------------------------- *)
   let snapshot_queue q =
@@ -111,6 +147,22 @@ module Tempo_log = struct
 
   let pp_task_id_list ?(pp_sep = default_sep) fmt ts =
     Format.pp_print_list ~pp_sep pp_task_id fmt ts
+
+  let pp_queue_compact fmt tasks =
+    Format.fprintf fmt "[%d] %a" (List.length tasks)
+      (Format.pp_print_list
+         ~pp_sep:(fun fmt () -> Format.pp_print_string fmt " ")
+         pp_task_id)
+      tasks
+
+  let pp_signal_compact fmt (Any s) =
+    let present = if s.present then "✓" else "·" in
+    Format.fprintf fmt "#%d(%s)" s.s_id present
+
+  let pp_signal_list_compact fmt signals =
+    Format.pp_print_list
+      ~pp_sep:(fun fmt () -> Format.pp_print_string fmt " ")
+      pp_signal_compact fmt signals
 
   let pp_task_id_list_default = pp_task_id_list ~pp_sep:default_sep
 
@@ -152,6 +204,20 @@ module Tempo_log = struct
 
   let pp_any_guard_list ?brief = Format.pp_print_list (pp_any_guard ?brief)
 
+  let log_pick ctx task =
+    log ~task:task.t_id ctx "step.select" "pick task #%d (thread=%d guards=%d)"
+      task.t_id task.thread (List.length task.guards)
+
+  let log_block ctx task missing_guards =
+    log ~task:task.t_id ctx "step.block"
+      "block (guards missing %a)"
+      (pp_any_guard_list ~brief:true) missing_guards
+
+  let log_snapshot ctx ~current ~blocked ~next ~signals =
+    log ctx "queues" "queues  current=%a blocked=%a next=%a" pp_queue_compact
+      current pp_queue_compact blocked pp_queue_compact next;
+    log ctx "signals" "signals %a" pp_signal_list_compact signals
+
   let log_queue_state ctx scope current blocked paused =
     let pp_ids = pp_task_id_list_default in
     log ~level:Backend_logs.Debug ctx scope
@@ -164,10 +230,6 @@ module Tempo_log = struct
   let log_guard ?task ?signal ctx fmt =
     if trace_guards then log ?task ?signal ctx "guards" fmt
     else Format.ifprintf Format.std_formatter fmt
-
-  let pp_span fmt span =
-    let ms = Mtime.Span.to_float_ns span /. 1e6 in
-    Format.fprintf fmt "%.3fms" ms
 
   (* --- Duration metrics --------------------------------------------------- *)
   module Scope_metrics = struct
