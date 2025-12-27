@@ -53,6 +53,29 @@ and any_signal = Any : ('emit, 'agg, 'mode) signal_core -> any_signal
 type 'a signal = ('a, 'a, event) signal_core
 type ('emit, 'agg) agg_signal = ('emit, 'agg, aggregate) signal_core
 
+type thread_state =
+  { mutable active : int
+  ; mutable completed : bool
+  ; mutable waiters : (unit -> unit) list
+  }
+
+type debug_info =
+  { mutable sig_counter : int
+  ; mutable task_counter : int
+  ; mutable step_counter : int
+  ; mutable instant_counter : int
+  }
+
+type scheduler_state =
+  { current : task Queue.t
+  ; mutable next_instant : task list
+  ; mutable blocked : task list
+  ; mutable signals : any_signal list
+  ; mutable thread_counter : int
+  ; threads : (thread, thread_state) Hashtbl.t
+  ; debug : debug_info
+  }
+
 type _ Effect.t +=
   | New_signal : unit -> ('a, 'a, event) signal_core Effect.t
   | New_signal_agg :
