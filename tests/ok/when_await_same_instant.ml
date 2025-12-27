@@ -3,15 +3,16 @@ open Tempo
 let log tag instant message =
   Format.printf "[%s] instant %d: %s@.%!" tag instant message
 
-  let consumer guard payload () =
-    when_ guard (fun () ->
-        log "scenario1/consumer" 0 "guard satisfied, awaiting payload";
-        let value = await payload in
-        log "scenario1/consumer" 0
-          (Printf.sprintf "payload received immediately (%d)" value))
+let consumer guard payload () =
+  when_ guard (fun () ->
+      log "scenario1/consumer" 0 "guard satisfied, awaiting payload";
+      let value = await payload in
+      log "scenario1/consumer" 0
+        (Printf.sprintf "payload received immediately (%d)" value))
 
 let producer guard payload () =
-  log "scenario1/driver" 0 "emit guard and payload in the same instant (fails, awaits is delayed)";
+  log "scenario1/driver" 0
+    "emit guard and payload in the same instant (fails, awaits is delayed)";
   emit guard ();
   emit payload 10;
   log "scenario1/driver" 0 "done"
@@ -19,6 +20,6 @@ let producer guard payload () =
 let scenario () =
   let guard = new_signal () in
   let payload = new_signal () in
-    parallel [producer guard payload; consumer guard payload]
+  parallel [ producer guard payload; consumer guard payload ]
 
 let () = execute ~instants:3 (fun _ _ -> scenario ())

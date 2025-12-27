@@ -14,7 +14,8 @@ let producer signal () =
 let scenario () =
   let payload = new_signal () in
   parallel
-    [ consumer "consumer1" payload
+    [
+      consumer "consumer1" payload
     ; consumer "consumer2" payload
     ; producer payload
     ]
