@@ -1,13 +1,11 @@
 open Tempo
 
-let log tag message =
-  Format.printf "[%s] %s@.%!" tag message
+let log tag message = Format.printf "[%s] %s@.%!" tag message
 
 let consumer guard payload () =
   when_ guard (fun () ->
-    log "consumer"
-        "guard present but payload missing, await should block";
-    let value = await_immediate payload in
+      log "consumer" "guard present but payload missing, await should block";
+      let value = await_immediate payload in
       log "consumer"
         (Printf.sprintf "resumed when guard was re-emitted (value=%d)" value))
 
@@ -23,6 +21,6 @@ let producer guard payload () =
 let scenario () =
   let guard = new_signal () in
   let payload = new_signal () in
-    parallel [producer guard payload; consumer guard payload]
+  parallel [ producer guard payload; consumer guard payload ]
 
 let () = execute ~instants:10 (fun _ _ -> scenario ())

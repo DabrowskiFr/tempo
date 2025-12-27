@@ -28,6 +28,6 @@ let scenario () =
     let total = await sum_signal in
     log "consumer-2" 1 (Printf.sprintf "sum=%d" total)
   in
-  parallel [consumer_first; consumer_second; producer]
+  parallel [ consumer_first; consumer_second; producer ]
 
 let () = execute (fun _ _ -> scenario ())

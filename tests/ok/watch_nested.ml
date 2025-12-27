@@ -3,11 +3,10 @@ open Tempo
 let rec workload label step limit () =
   if step >= limit then
     Format.printf "[%s] completed (%d steps)@.%!" label limit
-  else begin
+  else (
     Format.printf "[%s] step %d@.%!" label step;
     pause ();
-    workload label (step + 1) limit ()
-  end
+    workload label (step + 1) limit ())
 
 let scenario () =
   let stop = new_signal () in
@@ -30,6 +29,6 @@ let scenario () =
     emit stop ();
     Format.printf "[driver] done@.%!"
   in
-  parallel [body; driver]
+  parallel [ body; driver ]
 
 let () = execute (fun _ _ -> scenario ())

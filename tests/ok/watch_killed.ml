@@ -13,14 +13,14 @@ let scenario () =
         work "body" 0 ());
     Printf.printf "[body] end (killed)\n%!"
   in
-  let driver () = 
-      pause ();
-      pause();
-      Printf.printf "[driver] emit trigger\n%!";
-      emit trigger ();
-      pause ();
-      Printf.printf "[driver] end\n%!"
-  in 
-  parallel [body ; driver]
+  let driver () =
+    pause ();
+    pause ();
+    Printf.printf "[driver] emit trigger\n%!";
+    emit trigger ();
+    pause ();
+    Printf.printf "[driver] end\n%!"
+  in
+  parallel [ body; driver ]
 
 let () = execute (fun _ _ -> scenario ())
