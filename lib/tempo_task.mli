@@ -32,5 +32,11 @@ val spawn_now :
 val spawn_next :
   scheduler_state -> thread -> any_signal list -> kill list -> (unit -> unit) -> unit
 
+val spawn_now_with_id :
+  scheduler_state -> thread -> any_signal list -> kill list -> (unit -> unit) -> task
+
+val spawn_next_with_id :
+  scheduler_state -> thread -> any_signal list -> kill list -> (unit -> unit) -> task
+
 val wake_guard_waiters :
   scheduler_state -> ('e, 'a, 'm) signal_core -> unit

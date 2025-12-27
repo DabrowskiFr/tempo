@@ -74,6 +74,7 @@ type scheduler_state =
   ; mutable thread_counter : int
   ; threads : (thread, thread_state) Hashtbl.t
   ; debug : debug_info
+  ; mutable waiting : (thread * thread) list
   }
 
 type _ Effect.t +=

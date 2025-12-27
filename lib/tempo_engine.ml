@@ -26,101 +26,134 @@ let () = Tempo_log.init ()
 let log_ctx st =
   Tempo_log.context ~instant:st.debug.instant_counter ~step:st.debug.step_counter
 
-(* Allow signal helpers to annotate the current step stats when available. *)
+(* Keep a mutable reference to the stats of the step currently being
+   executed. This allows resumed continuations (captured in a previous step)
+   to still record their spawns in the stats of the step that is actually
+   running. *)
 let current_step_stats : Tempo_log.step_stats option ref = ref None
 
-let mark_emit () =
+let with_stats f =
   match !current_step_stats with
-  | Some stats -> stats.last_event <- Some "emit"
+  | Some stats -> f stats
   | None -> ()
 
-let update_signal st s v =
-  mark_emit ();
-  Tempo_signal.update_signal st s v
+let inc_spawns_now () = with_stats (fun stats -> stats.spawns_now <- stats.spawns_now + 1)
+let inc_spawns_next () = with_stats (fun stats -> stats.spawns_next <- stats.spawns_next + 1)
+let inc_aborted () = with_stats (fun stats -> stats.aborted <- stats.aborted + 1)
 
-let emit_event_from_host st s v =
-  mark_emit ();
-  Tempo_signal.emit_event_from_host st s v
+let update_signal st s v = Tempo_signal.update_signal st s v
+let emit_event_from_host st s v = Tempo_signal.emit_event_from_host st s v
+
+let prune_waiting st thread =
+  st.waiting <- List.filter (fun (_, target) -> target <> thread) st.waiting
 
 let handle_task : scheduler_state -> Tempo_log.step_stats -> task -> unit =
-  fun st stats t ->
-    let set_event e = stats.last_event <- Some e in
-    let run_task () =
-      let inc_now () = stats.spawns_now <- stats.spawns_now + 1
-      and inc_next () = stats.spawns_next <- stats.spawns_next + 1 in
+  fun st _stats t ->
+    let ctx = log_ctx st in
+      let run_task () =
       match t.run () with
       | () ->
-          if stats.last_event = None then set_event "complete"
+          Tempo_log.log ~task:t.t_id ctx "step.complete"
+            "task #%d (thread %d) completed with no effect" t.t_id t.thread
       | effect (New_signal (_)), k ->
           let s = fresh_event_signal st in
-          inc_now ();
-          spawn_now st t.thread t.guards t.kills (fun () -> continue k s);
-          set_event "new_signal"
+          Tempo_log.log ~task:t.t_id ~signal:s.s_id ctx "step.signal"
+            "create event signal #%d" s.s_id;
+          continue k s
       | effect (New_signal_agg (initial, combine)), k ->
           let s = fresh_aggregate_signal st ~initial ~combine in
-          inc_now ();
-          spawn_now st t.thread t.guards t.kills (fun () -> continue k s);
-          set_event "new_signal_agg"
+          Tempo_log.log ~task:t.t_id ~signal:s.s_id ctx "step.signal"
+            "create aggregate signal #%d" s.s_id;
+          continue k s
       | effect (Emit (s, v)), k ->
+          Tempo_log.log ~task:t.t_id ~signal:s.s_id ctx "step.emit"
+            "emit signal #%d" s.s_id;
           update_signal st s v;
-          inc_now ();
-          spawn_now st t.thread t.guards t.kills (fun () -> continue k ());
-          set_event "emit"
+          continue k ()
       | effect (Await s), k ->
+          Tempo_log.log ~task:t.t_id ~signal:s.s_id ctx "step.await"
+            "await signal #%d" s.s_id;
           let resume v =
-            inc_next ();
-            spawn_next st t.thread t.guards t.kills (fun () -> continue k v)
+            inc_spawns_next ();
+            let new_task =
+              spawn_next_with_id st t.thread t.guards t.kills
+                (fun () -> continue k v)
+            in
+            Tempo_log.log ~task:new_task.t_id ~signal:s.s_id ctx "step.await"
+              "resume continuation of task #%d as task #%d after signal #%d"
+              t.t_id new_task.t_id s.s_id
           in
           if s.present then
             match s.kind with
-            | Event_signal -> resume (Option.get s.value)
+            | Event_signal -> 
+                resume (Option.get s.value)
             | Aggregate_signal _ -> s.awaiters <- resume :: s.awaiters
-          else s.awaiters <- resume :: s.awaiters;
-          set_event "await"
+          else begin
+            Tempo_log.log ~task:t.t_id ~signal:s.s_id ctx "step.await"
+              "signal #%d absent: enqueue continuation in awaiters" s.s_id;
+            s.awaiters <- resume :: s.awaiters
+          end;
       | effect (Await_immediate s), k ->
+          Tempo_log.log ~task:t.t_id ~signal:s.s_id ctx "step.await"
+            "await_immediate signal #%d" s.s_id;
           if s.present then
             match s.value with
             | Some v ->
-                inc_now ();
-                spawn_now st t.thread t.guards t.kills (fun () -> continue k v);
-                set_event "await_immediate"
+                Tempo_log.log ~task:t.t_id ~signal:s.s_id ctx "step.await"
+                  "await_immediate satisfied immediately for task #%d signal #%d"
+                  t.t_id s.s_id;
+                continue k v;
             | None -> failwith "Error : present but no value"
           else
             let resume v =
-              inc_now ();
-              spawn_now st t.thread t.guards t.kills (fun () -> continue k v)
+              inc_spawns_now ();
+              Tempo_log.log ~task:t.t_id ~signal:s.s_id ctx "step.await"
+                "signal #%d absent: enqueue await_immediate continuation" s.s_id;
+              let new_task =
+                spawn_now_with_id st t.thread t.guards t.kills
+                  (fun () -> continue k v)
+              in
+              Tempo_log.log ~task:new_task.t_id ~signal:s.s_id ctx "step.await"
+                "resume continuation of task #%d as task #%d after await_immediate on signal #%d"
+                t.t_id new_task.t_id s.s_id
             in
             s.awaiters <- resume :: s.awaiters;
-            set_event "await_immediate"
       | effect Pause, k ->
-          inc_next ();
-          spawn_next st t.thread t.guards t.kills (fun () -> continue k ());
-          set_event "pause"
+          inc_spawns_next ();
+          let new_task =
+            spawn_next_with_id st t.thread t.guards t.kills (fun () -> continue k ())
+          in
+          Tempo_log.log ~task:new_task.t_id ctx "step.pause"
+            "pause: resumed as task #%d" new_task.t_id;
       | effect (Fork p_child), k ->
           let child_thread = Tempo_thread.new_thread_id st in
-          inc_now ();
+          Tempo_log.log ~task:t.t_id ctx "step.fork"
+            "spawn logical thread %d" child_thread;
+          inc_spawns_now ();
           spawn_now st child_thread t.guards t.kills p_child;
-          inc_now ();
-          spawn_now st t.thread t.guards t.kills (fun () -> continue k child_thread);
-          set_event "fork"
+          continue k child_thread;
+            
       | effect (With_guard (s, body)), k ->
-          inc_now ();
-          spawn_now st t.thread (Any s :: t.guards) t.kills
-            (fun () ->
-              body (); (* body may perform an abort_kill*)
-              if kills_alive t.kills then begin
-                inc_now ();
-                spawn_now st t.thread t.guards t.kills (fun () -> continue k ())
-              end);
-          set_event "with_guard"
+          inc_spawns_now ();
+          let guard_task =
+            spawn_now_with_id st t.thread (Any s :: t.guards) t.kills
+              (fun () ->
+                body (); (* body may perform an abort_kill*)
+                if kills_alive t.kills then begin
+                  inc_spawns_now ();
+                  spawn_now st t.thread t.guards t.kills (fun () -> continue k ())
+                end)
+          in
+          Tempo_log.log ~task:guard_task.t_id ~signal:s.s_id ctx "step.guard"
+            "with_guard signal #%d spawned task #%d" s.s_id guard_task.t_id;
       | effect (With_kill (kk, body)), k ->
           let continue_now () =
             kk.cleanup <- None;
-            inc_now ();
+            inc_spawns_now ();
             spawn_now st t.thread t.guards t.kills (fun () -> continue k ())
           and continue_later () =
             kk.cleanup <- None;
-            inc_next ();
+            inc_spawns_next ();
             spawn_next st t.thread t.guards t.kills (fun () -> continue k ())
           in
           kk.cleanup <- Some continue_later;
@@ -128,22 +161,34 @@ let handle_task : scheduler_state -> Tempo_log.step_stats -> task -> unit =
             body ();
             continue_now ()
           in
-          inc_now ();
-          spawn_now st t.thread t.guards (kk :: t.kills) runner;
-          set_event "with_kill"
+          inc_spawns_now ();
+          let new_task =
+            spawn_now_with_id st t.thread t.guards (kk :: t.kills) runner
+          in
+          Tempo_log.log ~task:new_task.t_id ctx "step.kill"
+            "with_kill spawned task #%d" new_task.t_id;
       | effect (Join thread_id), k ->
           if thread_id = t.thread then invalid_arg "join: cannot join current thread";
           let resume () =
-            inc_now ();
+            inc_spawns_now ();
             spawn_now st t.thread t.guards t.kills (fun () -> continue k ())
           in
-          add_join_waiter st.threads thread_id resume;
-          set_event "join"
+          let state = Tempo_thread.find st.threads thread_id in
+          if state.completed && state.active = 0 then resume ()
+          else begin
+            Tempo_log.log ~task:t.t_id ctx "step.join"
+              "wait for logical thread %d" thread_id;
+            if not (List.exists (fun (w, tgt) -> w = t.thread && tgt = thread_id) st.waiting)
+            then st.waiting <- (t.thread, thread_id) :: st.waiting;
+            add_join_waiter st.threads thread_id resume
+          end
     in
-    try Fun.protect ~finally:(fun () -> finish_task st.threads t.thread) run_task with
-    | Aborted ->
-        stats.aborted <- stats.aborted + 1;
-        set_event "aborted"
+    let cleanup () =
+      finish_task st.threads t.thread;
+      prune_waiting st t.thread
+    in
+    try Fun.protect ~finally:cleanup run_task with
+    | Aborted -> inc_aborted ()
 
 (* Scheduler main loop *)
   let rec step : scheduler_state -> unit =
@@ -158,10 +203,10 @@ let handle_task : scheduler_state -> Tempo_log.step_stats -> task -> unit =
       ~blocked:st.blocked ~next:st.next_instant ~signals:st.signals;
     st.debug.step_counter <- st.debug.step_counter + 1;
     if Queue.is_empty st.current then begin
-      stats.last_event <- Some "idle";
       Tempo_log.log ~level:Logs.Debug ctx "step" "queue empty, stopping current instant";
       let span = Mtime_clock.count counter in
       Tempo_log.log_step_summary ctx stats span;
+      Tempo_log.log_waiting ctx st.waiting;
       Tempo_log.record_duration "step" span;
       current_step_stats := None
     end else begin
@@ -171,22 +216,28 @@ let handle_task : scheduler_state -> Tempo_log.step_stats -> task -> unit =
           let t = Queue.take st.current in
           t.queued <- false;
           if kills_alive t.kills then Some t
-          else (finish_task st.threads t.thread; take_next ())
+          else (
+            finish_task st.threads t.thread;
+            prune_waiting st t.thread;
+            take_next ())
       in
       match take_next () with
       | None ->
-          stats.last_event <- Some "idle";
           let span = Mtime_clock.count counter in
           Tempo_log.log_step_summary ctx stats span;
-          Tempo_log.record_duration "step" span
+          Tempo_log.log_waiting ctx st.waiting;
+          Tempo_log.log_signal_waiters ctx st.signals;
+          Tempo_log.record_duration "step" span;
+          current_step_stats := None
       | Some t ->
           Tempo_log.log_pick ctx t;
           let continue =
             if not (guard_ok t.guards) then begin
               let missing = Tempo_signal.missing_guards t.guards in
               Tempo_log.log_block ctx t missing;
+              Tempo_log.log ~task:t.t_id ctx "step.block"
+                "guards not satisfied, task blocked";
               stats.blocks <- stats.blocks + 1;
-              stats.last_event <- Some "block";
               block_on_guards st t;
               fun () -> step st
             end else begin
@@ -199,6 +250,8 @@ let handle_task : scheduler_state -> Tempo_log.step_stats -> task -> unit =
             ~current:(Tempo_log.snapshot_queue st.current)
             ~blocked:st.blocked ~next:st.next_instant ~signals:st.signals;
           Tempo_log.log_step_summary ctx stats span;
+          Tempo_log.log_waiting ctx st.waiting;
+          Tempo_log.log_signal_waiters ctx st.signals;
           Tempo_log.record_duration "step" span;
           current_step_stats := None;
           continue ()
@@ -243,7 +296,10 @@ let rec run_instant :
             List.filter
               (fun t ->
                  if kills_alive t.kills then true
-                else (finish_task st.threads t.thread; false))
+                else (
+                  finish_task st.threads t.thread;
+                  prune_waiting st t.thread;
+                  false))
               ts
           in
           Tempo_log.log ctx "instant" "➡️  moving %d tasks to next instant"
@@ -261,10 +317,11 @@ let execute ?instants ?(input = fun () -> None) ?(output = fun _ -> ()) initial 
         thread_counter  = 0;
         debug           =
           { sig_counter     = 0;
-            task_counter    = 0;
+            task_counter    = 1;
             step_counter    = 0;
             instant_counter = 0; };
         threads         = Hashtbl.create 16;
+        waiting         = [];
       } in
   Tempo_log.log_banner (log_ctx st) "run" "Runtime Start";
   Tempo_log.log (log_ctx st) "run" "push initial tasks...";
