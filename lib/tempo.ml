@@ -20,11 +20,11 @@ open Effect
 open Effect.Deep
 open Tempo_types
 
-(* -------------------------------------------------------------------------- *)
-(* Types and aliases                                                          *)
-(* -------------------------------------------------------------------------- *)
-
 let () = Tempo_log.init ()
+
+(* ================================ *)
+(* 1. Types                         *)
+(* ================================ *)
 
 type event = Tempo_types.event
 
@@ -51,10 +51,6 @@ type thread_state =
   ; mutable completed : bool
   ; mutable waiters : (unit -> unit) list
   }
-
-(* -------------------------------------------------------------------------- *)
-(* Scheduler state                                                            *)
-(* -------------------------------------------------------------------------- *)
 
 (* structure for debug purpose *)
 
@@ -86,34 +82,9 @@ type scheduler_state =
 let log_ctx st =
   Tempo_log.context ~instant:st.debug.instant_counter ~step:st.debug.step_counter
 
-let ensure_thread_state st thread =
-  match Hashtbl.find_opt st.threads thread with
-  | Some ts -> ts
-  | None ->
-      let ts = { active = 0; completed = false; waiters = [] } in
-      Hashtbl.add st.threads thread ts;
-      ts
-
-let find_thread_state st thread =
-  match Hashtbl.find_opt st.threads thread with
-  | Some ts -> ts
-  | None -> invalid_arg (Printf.sprintf "unknown thread %d" thread)
-
-let new_thread_id st =
-  let id = st.thread_counter in
-  st.thread_counter <- id + 1;
-  let _ = ensure_thread_state st id in
-  id
-
-
-let add_join_waiter st thread waiter =
-  let state = find_thread_state st thread in
-  if state.completed then waiter ()
-  else state.waiters <- waiter :: state.waiters
-
-(* -------------------------------------------------------------------------- *)
-(* Guard helpers                                                              *)
-(* -------------------------------------------------------------------------- *)
+(* ================================ *)
+(* 2. Helpers                       *)
+(* ================================ *)
 
 (* Checks that every kill token in the list is still alive (i.e. not cancelled). *)
 let kills_alive kills = List.for_all (fun k -> !(k.alive)) kills
@@ -132,10 +103,9 @@ let guard_ok : any_signal list -> bool =
 let missing_guards : any_signal list -> any_signal list = 
   List.filter (fun (Any s) -> not s.present)
 
-
-(******************************************************************)
-(* Task scheduling                                                *)
-(******************************************************************)
+(* ================================ *)
+(* 3. Enqueuing / Dequeuing         *)
+(* ================================ *)
 
 (* Enqueue a task to be scheduled in the current instant. 
    pre : the task is alive *)
@@ -175,9 +145,117 @@ let block_on_guards : scheduler_state -> task -> unit =
       "waiting for guards %a" (Tempo_log.pp_any_guard_list ~brief:false) miss;
     List.iter (fun (Any s) -> s.guard_waiters <- t :: s.guard_waiters) miss
 
+(* ================================ *)
+(* 4. Threads                       *)
+(* ================================ *)
+let ensure_thread_state st thread =
+  match Hashtbl.find_opt st.threads thread with
+  | Some ts -> ts
+  | None ->
+      let ts = { active = 0; completed = false; waiters = [] } in
+      Hashtbl.add st.threads thread ts;
+      ts
 
-(* Given a signal s, wake up all tasks waiting on the guard s 
-   if the guard is satisfied, otherwise block the task on its missing guards *)
+let find_thread_state st thread =
+  match Hashtbl.find_opt st.threads thread with
+  | Some ts -> ts
+  | None -> invalid_arg (Printf.sprintf "unknown thread %d" thread)
+
+let new_thread_id st =
+  let id = st.thread_counter in
+  st.thread_counter <- id + 1;
+  let _ = ensure_thread_state st id in
+  id
+
+let add_join_waiter st thread waiter =
+  let state = find_thread_state st thread in
+  if state.completed then waiter ()
+  else state.waiters <- waiter :: state.waiters
+
+(* ================================ *)
+(* 5. Task management               *)
+(* ================================ *)
+
+(* Internal task constructor. Prefer [spawn_now]/[spawn_next] to ensure the task is enqueued. *)
+let create_task : scheduler_state -> thread -> any_signal list -> kill list -> (unit -> unit)-> task =
+  fun st thread guards kills run ->
+    let state = ensure_thread_state st thread in
+    if state.completed && state.active = 0 then state.completed <- false;
+    state.active <- state.active + 1;
+    let t_id = st.debug.task_counter in 
+    st.debug.task_counter <- st.debug.task_counter + 1;
+    { t_id; thread; guards; kills; run; queued = false; blocked = false }
+
+let spawn_now st thread guards kills run =
+  let t = create_task st thread guards kills run in
+  enqueue_now st t;
+  t
+
+let spawn_next st thread guards kills run =
+  let t = create_task st thread guards kills run in
+  enqueue_next st t;
+  t
+
+let finish_task st thread =
+  let rec resume_waiters waiters =
+    match waiters with
+    | [] -> ()
+    | f :: rest ->
+        f ();
+        resume_waiters rest
+  in
+  let state = find_thread_state st thread in
+  state.active <- state.active - 1;
+  if state.active = 0 then begin
+    state.completed <- true;
+    let waiters = List.rev state.waiters in
+    state.waiters <- [];
+    resume_waiters waiters
+  end
+
+(* ================================ *)
+(* 6. Signal management             *)
+(* ================================ *)
+
+(** Reset all signals for a new instant.
+    The status becomes absent and the value is undefined.
+    Awaiters are left unchanged because a process can wait 
+    for a signal for many instants Guarded awaiters are 
+    cleared *)
+
+let fresh_signal_id st = 
+  let id = st.debug.sig_counter in 
+    st.debug.sig_counter <- id + 1; 
+    id 
+
+let register_signal : scheduler_state -> ('emit, 'agg, 'mode) signal_core -> unit =
+  fun st s -> 
+    st.signals <- (Any s) :: st.signals
+
+let fresh_event_signal st : 'a signal =
+  let s = 
+  { s_id = fresh_signal_id st;
+    present = false; value = None;
+    awaiters = []; guard_waiters = [];
+    kind = Event_signal }
+  in register_signal st s; s
+
+let fresh_aggregate_signal : 
+scheduler_state -> initial:'agg -> combine:('agg -> 'emit -> 'agg) -> ('emit,'agg) agg_signal = 
+  fun st ~initial ~combine ->
+  let s =
+    { s_id = fresh_signal_id st
+    ; present = false
+    ; value = None
+    ; awaiters = []
+    ; guard_waiters = []
+    ; kind = Aggregate_signal { combine; initial }
+    }
+  in register_signal st s; s
+
+(* on ne reinitialise pas awaiter pour un signal aggregate,
+  la valeur ne sera connue qu'à la fin de l'instant et 
+  finalize leur transmettra la valeur *)
 
 let wake_guard_waiters : 
     scheduler_state -> ('emit, 'agg, 'mode) signal_core -> unit =
@@ -186,47 +264,6 @@ let wake_guard_waiters :
         (fun t -> if guard_ok t.guards && kills_alive t.kills then enqueue_now st t) 
         s.guard_waiters;
       s. guard_waiters <- []
-
-
-(**********************************************************)
-(* Scheduler functions                                    *)
-(**********************************************************)
-
-(* -------------------------------------------------------------------------- *)
-(* Signal registry                                                            *)
-(* -------------------------------------------------------------------------- *)
-
-(** Reset all signals for a new instant.
-    The status becomes absent and the value is undefined.
-    Awaiters are left unchanged because a process can wait 
-    for a signal for many instants Guarded awaiters are 
-    cleared *)
-
-
-let register_signal : scheduler_state -> ('emit, 'agg, 'mode) signal_core -> unit =
-  fun st s -> 
-    st.signals <- (Any s) :: st.signals
-
-let create_event_signal st =
-  let id = st.debug.sig_counter in
-  st.debug.sig_counter <- id + 1;
-  let s =
-    { s_id = id
-    ; present = false
-    ; value = None
-    ; awaiters = []
-    ; guard_waiters = []
-    ; kind = Event_signal
-    }
-  in
-  register_signal st s;
-  Tempo_log.log ~signal:s.s_id (log_ctx st) "signals"
-    "created IO signal %d" s.s_id;
-  s
-
-(* on ne reinitialise pas awaiter pour un signal aggregate,
-  la valeur ne sera connue qu'à la fin de l'instant et 
-  finalize leur transmettra la valeur *)
 
 let update_signal : 
   type emit agg mode. scheduler_state -> (emit, agg, mode) signal_core -> emit -> unit = 
@@ -249,6 +286,7 @@ let update_signal :
         in s.value <- Some acc
     end;
     wake_guard_waiters st s
+
 let finalize_signals : scheduler_state -> unit =
   fun st ->
     List.iter
@@ -269,43 +307,6 @@ let finalize_signals : scheduler_state -> unit =
          s.guard_waiters <- [])
       st.signals
 
-(******************************************************************)
-(* Tasks management                                               *)
-(******************************************************************)
-
-let register_task st thread =
-  let state = ensure_thread_state st thread in
-  if state.completed && state.active = 0 then state.completed <- false;
-  state.active <- state.active + 1
-
-let mk_task : scheduler_state -> thread -> any_signal list -> kill list -> (unit -> unit)-> task =
-  fun st thread guards kills run ->
-    let t_id = st.debug.task_counter in 
-    st.debug.task_counter <- st.debug.task_counter + 1;
-    register_task st thread;
-    { t_id; thread; guards; kills; run; queued = false; blocked = false }
-
-let finish_task st thread =
-  let rec resume_waiters waiters =
-    match waiters with
-    | [] -> ()
-    | f :: rest ->
-        f ();
-        resume_waiters rest
-  in
-  let state = find_thread_state st thread in
-  state.active <- state.active - 1;
-  if state.active = 0 then begin
-    state.completed <- true;
-    let waiters = List.rev state.waiters in
-    state.waiters <- [];
-    resume_waiters waiters
-  end
-
-(*****************************************************************************)
-(* Host input *)
-(*****************************************************************************)
-
 (* Emits an event signal initiated by the host (outside the effect handler), 
    waking awaiters immediately. *)
 let emit_event_from_host :
@@ -322,37 +323,9 @@ let emit_event_from_host :
   List.iter (fun resume -> resume value) resumes;
   wake_guard_waiters st s
 
-(* -------------------------------------------------------------------------- *)
-(* Effect handler                                                             *)
-(* -------------------------------------------------------------------------- *)
-
-(* Handle a task by performing its effect *)
-
-let fresh_signal_id st = 
-  let id = st.debug.sig_counter in 
-    st.debug.sig_counter <- id + 1; 
-    id 
-
-let fresh_event_signal st : 'a signal =
-  let s = 
-  { s_id = fresh_signal_id st;
-    present = false; value = None;
-    awaiters = []; guard_waiters = [];
-    kind = Event_signal }
-  in register_signal st s; s
-
-let fresh_aggregate_signal : 
-  scheduler_state -> initial:'agg -> combine:('agg -> 'emit -> 'agg) -> ('emit,'agg) agg_signal = 
-    fun st ~initial ~combine ->
-    let s =
-      { s_id = fresh_signal_id st
-      ; present = false
-      ; value = None
-      ; awaiters = []
-      ; guard_waiters = []
-      ; kind = Aggregate_signal { combine; initial }
-      }
-    in register_signal st s; s
+(* ================================ *)
+(* 7. Scheduler                     *)
+(* ================================ *)
 
 let handle_task : scheduler_state -> task -> unit = 
   fun st t ->
@@ -361,22 +334,18 @@ let handle_task : scheduler_state -> task -> unit =
         | () -> ()
         | effect (New_signal (_)), k -> 
           let s = fresh_event_signal st in
-          let t' = mk_task st t.thread t.guards t.kills (fun () -> continue k s) in
-            enqueue_now st t'
+          ignore (spawn_now st t.thread t.guards t.kills (fun () -> continue k s))
         | effect (New_signal_agg (initial, combine)), k ->
             let s = fresh_aggregate_signal st ~initial ~combine in
-            let t' = mk_task st t.thread t.guards t.kills (fun () -> continue k s) in
-              enqueue_now st t'
+            ignore (spawn_now st t.thread t.guards t.kills (fun () -> continue k s))
         | effect (Emit (s, v)), k  ->
             update_signal st s v;
-            let t' = mk_task st t.thread t.guards t.kills (fun () -> continue k ()) in
-              enqueue_now st t';
+            ignore (spawn_now st t.thread t.guards t.kills (fun () -> continue k ()));
               Tempo_log.log (log_ctx st) "signals" "state: %a" (Tempo_log.pp_any_signal_list ~brief:true) st.signals    
         | effect (Await s), k ->
               Tempo_log.log ~task:t.t_id ~signal:s.s_id (log_ctx st) "tasks.await" "waiting for signal";
               let resume v =
-                let t' = mk_task st t.thread t.guards t.kills (fun () -> continue k v) in
-                  enqueue_next st t'
+                ignore (spawn_next st t.thread t.guards t.kills (fun () -> continue k v))
               in
                 if s.present then
                   match s.kind with
@@ -388,39 +357,28 @@ let handle_task : scheduler_state -> task -> unit =
             if s.present then
               match s.value with
               | Some v ->
-                  let t' = mk_task st t.thread t.guards t.kills (fun () -> continue k v) in
-                  Tempo_log.log ~task:t'.t_id ~signal:s.s_id (log_ctx st) "tasks.await_immediate"
-                    "signal already present, resume in current instant as task %d" t'.t_id;
-                  enqueue_now st t'
+                  ignore (spawn_now st t.thread t.guards t.kills (fun () -> continue k v))
               | None -> failwith "Error : present but no value"
             else
               let resume v =
-                let t = mk_task st t.thread t.guards t.kills (fun () -> continue k v) in
-                Tempo_log.log ~task:t.t_id ~signal:s.s_id (log_ctx st) "tasks.await_immediate"
-                  "resume task in current instant (task %d)" t.t_id;
-                assert (kills_alive t.kills);
-                  enqueue_now st t
+                ignore (spawn_now st t.thread t.guards t.kills (fun () -> continue k v))
               in
               s.awaiters <- resume :: s.awaiters
         | effect Pause, k -> 
-            let t' = mk_task st t.thread t.guards t.kills (fun() -> continue k ()) in
-            Tempo_log.log ~task:t.t_id (log_ctx st) "tasks.pause"
-              "rescheduled as task %d next instant" t'.t_id;
-            enqueue_next st t'
+            ignore (spawn_next st t.thread t.guards t.kills (fun() -> continue k ()));
+            Tempo_log.log ~task:t.t_id (log_ctx st) "tasks.pause" "rescheduled next instant"
         | effect (Fork p_child), k -> 
               let child_thread = new_thread_id st in
-              enqueue_now st (mk_task st child_thread t.guards t.kills p_child);
-              enqueue_now st (mk_task st t.thread t.guards t.kills (fun () -> continue k child_thread))
+              ignore (spawn_now st child_thread t.guards t.kills p_child);
+              ignore (spawn_now st t.thread t.guards t.kills (fun () -> continue k child_thread))
         | effect (With_guard (s, body)), k -> 
            let t' = 
-            mk_task st t.thread (Any s :: t.guards) t.kills 
+            spawn_now st t.thread (Any s :: t.guards) t.kills 
             (
               fun () -> 
                 body (); (* body may perform an abort_kill*)
                 if (kills_alive t.kills) then begin
-                  let t'' = (mk_task st t.thread t.guards t.kills (fun () -> continue k ())) in
-                  assert (kills_alive t''.kills);
-                  enqueue_now st t''
+                  ignore (spawn_now st t.thread t.guards t.kills (fun () -> continue k ()))
                 end
               )
             in 
@@ -429,15 +387,14 @@ let handle_task : scheduler_state -> task -> unit =
               Tempo_log.log_guard ~task:t.t_id ~signal:s.s_id (log_ctx st)
                 "task %d registered guard on signal %d" t'.t_id s.s_id;
                                 assert (kills_alive t'.kills);
-              enqueue_now st t'
+              ()
         | effect (With_kill (kk, body)), k ->
             let continue_now () =
               kk.cleanup <- None;
-              let t' = (mk_task st t.thread t.guards t.kills (fun () -> continue k ())) in
-              enqueue_now st t'
+              ignore (spawn_now st t.thread t.guards t.kills (fun () -> continue k ()))
             and continue_later () =
               kk.cleanup <- None;
-              enqueue_next st (mk_task st t.thread t.guards t.kills (fun () -> continue k ()))
+              ignore (spawn_next st t.thread t.guards t.kills (fun () -> continue k ()))
             in
             kk.cleanup <- Some continue_later;
             let runner () =
@@ -446,13 +403,11 @@ let handle_task : scheduler_state -> task -> unit =
             in
               Tempo_log.log ~task:t.t_id (log_ctx st) "tasks.watched"
               "updated as task %d, now watched by signal" t.t_id;
-            let t' = mk_task st t.thread t.guards (kk :: t.kills) runner in
-            enqueue_now st t'
+            ignore (spawn_now st t.thread t.guards (kk :: t.kills) runner)
         | effect (Join thread_id), k ->
             if thread_id = t.thread then invalid_arg "join: cannot join current thread";
             let resume () =
-              let t' = (mk_task st t.thread t.guards t.kills (fun () -> continue k ())) in
-              enqueue_now st t'
+              ignore (spawn_now st t.thread t.guards t.kills (fun () -> continue k ()))
             in
             add_join_waiter st thread_id resume
    in
@@ -462,9 +417,9 @@ let handle_task : scheduler_state -> task -> unit =
        Tempo_log.log ~task:t.t_id (log_ctx st) "tasks" "aborted";
        ()
   
-(* -------------------------------------------------------------------------- *)
-(* Scheduler loop                                                             *)
-(* -------------------------------------------------------------------------- *)
+(* ================================ *)
+(* Scheduler loop                  *)
+(* ================================ *)
 
 (* Scheduler main loop *)
 let rec step : scheduler_state -> unit =
@@ -573,9 +528,9 @@ let rec run_instant :
           List.iter (enqueue_now st) (List.rev survivors);
           run_instant ~before_step ~after_step st (Option.map pred remaining)
 
-(* -------------------------------------------------------------------------- *)
-(* Public API entry point                                                     *)
-(* -------------------------------------------------------------------------- *)
+(* ================================ *)
+(* Public API entry point           *)
+(* ================================ *)
 
 let execute ?instants ?(input = fun () -> None) ?(output = fun _ -> ()) initial =
   let st =
@@ -593,8 +548,8 @@ let execute ?instants ?(input = fun () -> None) ?(output = fun _ -> ()) initial 
       } in
   Tempo_log.log_banner (log_ctx st) "run" "Runtime Start";
   Tempo_log.log (log_ctx st) "run" "push initial tasks...";
-  let input_signal = create_event_signal st in
-  let output_signal = create_event_signal st in
+  let input_signal = fresh_event_signal st in
+  let output_signal = fresh_event_signal st in
   let before_step () =
     match input () with
     | None -> ()
@@ -607,10 +562,9 @@ let execute ?instants ?(input = fun () -> None) ?(output = fun _ -> ()) initial 
       | None -> ()
   in
   let thread = new_thread_id st in
-  let root =
-    mk_task st thread [] [] (fun () -> initial input_signal output_signal)
+  let _ =
+    spawn_now st thread [] [] (fun () -> initial input_signal output_signal)
   in
-  enqueue_now st root;
   run_instant ~before_step ~after_step st instants;
   Tempo_log.log_duration_summary ()
 
@@ -826,13 +780,13 @@ let with_kill k body = perform (With_kill (k, body)) *)
 
   (* | effect (With_kill (kk, body)), k ->
           enqueue_now st  
-            (mk_task st
+            (create_task st
               t.guards
               (kk::t.kills)
               (fun () -> 
                   body ();
                   enqueue_now st (
-                    mk_task st
+                    create_task st
                       t.guards 
                       t.kills
                       (fun () -> continue k ())

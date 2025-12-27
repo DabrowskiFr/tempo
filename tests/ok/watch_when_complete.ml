@@ -1,8 +1,6 @@
 open Tempo
 
-let log tag message =
-  Format.printf "[%s] %s@.%!" tag message
-
+let log tag message = Format.printf "[%s] %s@.%!" tag message
 
 let scenario () =
   let guard = new_signal () in
@@ -16,7 +14,7 @@ let scenario () =
             pause ();
             log "worker" "finished without preemption"))
   in
-  let driver () = 
+  let driver () =
     log "driver" "emit guard to start worker";
     emit guard ();
     pause ();
@@ -27,6 +25,7 @@ let scenario () =
     emit guard ();
     pause ();
     log "driver" "worker finished normally"
-  in parallel [driver; worker]
- 
+  in
+  parallel [ driver; worker ]
+
 let () = execute ~instants:7 (fun _ _ -> scenario ())
