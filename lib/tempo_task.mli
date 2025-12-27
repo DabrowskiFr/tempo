@@ -16,27 +16,21 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *---------------------------------------------------------------------------*)
 
-type thread_state = Tempo_types.thread_state
+open Tempo_types
 
-val ensure :
-  (Tempo_types.thread, thread_state) Hashtbl.t ->
-  Tempo_types.thread ->
-  thread_state
+val kills_alive : kill list -> bool
 
-val find :
-  (Tempo_types.thread, thread_state) Hashtbl.t ->
-  Tempo_types.thread ->
-  thread_state
+val enqueue_now : scheduler_state -> task -> unit
 
-val add_join_waiter :
-  (Tempo_types.thread, thread_state) Hashtbl.t ->
-  Tempo_types.thread ->
-  (unit -> unit) ->
-  unit
+val enqueue_next : scheduler_state -> task -> unit
 
-val new_thread_id : Tempo_types.scheduler_state -> Tempo_types.thread
+val block_on_guards : scheduler_state -> task -> unit
 
-val finish_task :
-  (Tempo_types.thread, thread_state) Hashtbl.t ->
-  Tempo_types.thread ->
-  unit
+val spawn_now :
+  scheduler_state -> thread -> any_signal list -> kill list -> (unit -> unit) -> task
+
+val spawn_next :
+  scheduler_state -> thread -> any_signal list -> kill list -> (unit -> unit) -> task
+
+val wake_guard_waiters :
+  scheduler_state -> ('e, 'a, 'm) signal_core -> unit
