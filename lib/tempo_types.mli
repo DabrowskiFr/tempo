@@ -17,52 +17,79 @@
  *---------------------------------------------------------------------------*)
 
 type kill = { alive : bool ref; mutable cleanup : (unit -> unit) option }
-
 type thread = int
-
 type event
 type aggregate
 
-type ('emit, 'agg, 'mode) signal_core =
-  { s_id : int
+type ('emit, 'agg, 'mode) signal_core = {
+    s_id : int
   ; mutable present : bool
   ; mutable value : 'agg option
   ; mutable awaiters : ('agg -> unit) list
   ; mutable guard_waiters : task list
   ; kind : ('emit, 'agg, 'mode) signal_kind
-  }
+}
+
 and ('emit, 'agg, 'mode) signal_kind =
   | Event_signal : ('a, 'a, event) signal_kind
-  | Aggregate_signal :
-      { combine : 'agg -> 'emit -> 'agg
+  | Aggregate_signal : {
+        combine : 'agg -> 'emit -> 'agg
       ; initial : 'agg
-      } -> ('emit, 'agg, aggregate) signal_kind
-and task =
-  {
-    t_id            : int;
-    guards          : any_signal list;
-    kills           : kill list;
-  thread         : thread;
-  run             : unit -> unit;
-  mutable queued  : bool;
-  mutable blocked : bool;
-  }
+    }
+      -> ('emit, 'agg, aggregate) signal_kind
+
+and task = {
+    t_id : int
+  ; guards : any_signal list
+  ; kills : kill list
+  ; thread : thread
+  ; run : unit -> unit
+  ; mutable queued : bool
+  ; mutable blocked : bool
+}
+
 and any_signal = Any : ('emit, 'agg, 'mode) signal_core -> any_signal
 
 type 'a signal = ('a, 'a, event) signal_core
 type ('emit, 'agg) agg_signal = ('emit, 'agg, aggregate) signal_core
 
+type thread_state =
+  { mutable active : int
+  ; mutable completed : bool
+  ; mutable waiters : (unit -> unit) list
+  }
+
+type debug_info =
+  { mutable sig_counter : int
+  ; mutable task_counter : int
+  ; mutable step_counter : int
+  ; mutable instant_counter : int
+  }
+
+type scheduler_state =
+  { current : task Queue.t
+  ; mutable next_instant : task list
+  ; mutable blocked : task list
+  ; mutable signals : any_signal list
+  ; mutable thread_counter : int
+  ; threads : (thread, thread_state) Hashtbl.t
+  ; debug : debug_info
+  }
+
 type _ Effect.t +=
-  | New_signal  : unit -> ('a, 'a, event) signal_core Effect.t
+  | New_signal : unit -> ('a, 'a, event) signal_core Effect.t
   | New_signal_agg :
-      'agg * ('agg -> 'emit -> 'agg) -> ('emit, 'agg, aggregate) signal_core Effect.t
-  | Emit        : ('emit, 'agg, 'mode) signal_core * 'emit -> unit Effect.t
-  | Await       : ('emit, 'agg, 'mode) signal_core -> 'agg Effect.t
+      'agg * ('agg -> 'emit -> 'agg)
+      -> ('emit, 'agg, aggregate) signal_core Effect.t
+  | Emit : ('emit, 'agg, 'mode) signal_core * 'emit -> unit Effect.t
+  | Await : ('emit, 'agg, 'mode) signal_core -> 'agg Effect.t
   | Await_immediate : ('a, 'a, event) signal_core -> 'a Effect.t
-  | Pause       : unit Effect.t
-  | Fork        : (unit -> unit) -> thread Effect.t
-  | Join        : thread -> unit Effect.t
-  | With_guard  : ('emit, 'agg, 'mode) signal_core * (unit -> unit) -> unit Effect.t
-  | With_kill   : kill * (unit -> unit) -> unit Effect.t
+  | Pause : unit Effect.t
+  | Fork : (unit -> unit) -> thread Effect.t
+  | Join : thread -> unit Effect.t
+  | With_guard :
+      ('emit, 'agg, 'mode) signal_core * (unit -> unit)
+      -> unit Effect.t
+  | With_kill : kill * (unit -> unit) -> unit Effect.t
 
 exception Aborted

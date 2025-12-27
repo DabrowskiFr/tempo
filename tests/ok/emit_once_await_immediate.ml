@@ -10,6 +10,6 @@ let scenario () =
     Format.printf "[producer] emit value@.%!";
     emit payload 42
   in
-  parallel [consumer; producer]
+  parallel [ consumer; producer ]
 
 let () = execute (fun _ _ -> scenario ())

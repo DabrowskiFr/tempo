@@ -1,20 +1,20 @@
 open Tempo
 
-let log tag message =
-  Format.printf "[%s] %s@.%!" tag message
+let log tag message = Format.printf "[%s] %s@.%!" tag message
 
 let scenario () =
   let guard = new_signal () in
   let cancel = new_signal () in
-  let worker  () =
+  let worker () =
     watch cancel (fun () ->
         when_ guard (fun () ->
             log "worker" "guard satisfied, watch started";
             pause ();
             log "worker" "still running under guard";
             pause ();
-            log "worker" "UNREACHABLE: watch should have killed me")) 
-  in let driver  () = 
+            log "worker" "UNREACHABLE: watch should have killed me"))
+  in
+  let driver () =
     log "driver" "emit guard to start worker";
     emit guard ();
     pause ();
@@ -23,6 +23,7 @@ let scenario () =
     emit cancel ();
     pause ();
     log "driver" "worker aborted by watch"
-    in parallel [driver ; worker]
+  in
+  parallel [ driver; worker ]
 
 let () = execute (fun _ _ -> scenario ())

@@ -1,7 +1,10 @@
 (tests
- (names 
+ (names
+  await_fixpoint
+  await_agg_same_instant
   emit_agg_collect
   emit_agg_sum
+  emit_event_wakes_awaiters
   emit_once_await_immediate
   emit_once_await_many
   emit_once_await_one
@@ -25,6 +28,5 @@
   when_same_instant
   when_tick_tock
   with_kill_abort
-  with_kill_inherit
-  )
+  with_kill_inherit)
  (libraries tempo))

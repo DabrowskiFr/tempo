@@ -5,14 +5,12 @@ let log tag instant message =
 
 let observe_guard ~name ~guard ~events () =
   let rec loop seen remaining =
-    if remaining = 0 then
-      log name seen "done observing guard"
-    else begin
+    if remaining = 0 then log name seen "done observing guard"
+    else (
       when_ guard (fun () ->
           log name seen "guard present, branch resumes in parallel");
       pause ();
-      loop (seen + 1) (remaining - 1)
-    end
+      loop (seen + 1) (remaining - 1))
   in
   loop 0 events
 
@@ -40,10 +38,11 @@ let scenario () =
   let guard_a = new_signal () in
   let guard_b = new_signal () in
   parallel
-    [ (driver guard_a guard_b)
-    ; (observe_guard ~name:"listener/A" ~guard:guard_a ~events:3)
-    ; (observe_guard ~name:"listener/B" ~guard:guard_b ~events:1)
-    ; (combined_listener guard_a guard_b)
+    [
+      driver guard_a guard_b
+    ; observe_guard ~name:"listener/A" ~guard:guard_a ~events:3
+    ; observe_guard ~name:"listener/B" ~guard:guard_b ~events:1
+    ; combined_listener guard_a guard_b
     ];
   Format.printf "[scenario] all parallel branches completed@.%!"
 
