@@ -42,13 +42,13 @@ let create_task st thread guards kills run =
 
 let spawn_now st thread guards kills run =
   let t = create_task st thread guards kills run in
-  enqueue_now st t
+  enqueue_now st t; t
 
 let spawn_next st thread guards kills run =
   let t = create_task st thread guards kills run in
-  enqueue_next st t
+  enqueue_next st t; t
 
-let spawn_now_with_id st thread guards kills run =
+(* let spawn_now_with_id st thread guards kills run =
   let t = create_task st thread guards kills run in
   enqueue_now st t;
   t
@@ -56,7 +56,7 @@ let spawn_now_with_id st thread guards kills run =
 let spawn_next_with_id st thread guards kills run =
   let t = create_task st thread guards kills run in
   enqueue_next st t;
-  t
+  t *)
 
 let block_on_guards st t =
   assert (kills_alive t.kills);
