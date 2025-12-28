@@ -28,5 +28,8 @@
   when_same_instant
   when_tick_tock
   with_kill_abort
-  with_kill_inherit)
+  with_kill_inherit
+  invariants_finalize_signals
+  invariants_finish_task
+  invariants_run_cleanup)
  (libraries tempo))

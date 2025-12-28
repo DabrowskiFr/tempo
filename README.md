@@ -1,7 +1,6 @@
 # Tempo
 
-> A lightweight synchronous runtime inspired by Esterel, Boussinot’s FairThreads, and ReactiveML.
-
+A lightweight synchronous runtime inspired by Esterel, Boussinot’s FairThreads, and ReactiveML.
 All three are grounded in the idea that deterministic concurrency can be made tractable by discretizing time into logical instants, during which all components react to the signals emitted in that instant. In Esterel, the absence of a signal is decided immediately, which enforces a static scheduling discipline and consequently rules out many forms of dynamic behavior. FairThreads addressed this limitation by postponing the observation of absence until the end of the instant, thereby enabling more flexible execution patterns. ReactiveML carried these ideas into OCaml, retaining Boussinot’s delayed-absence semantics while enriching the model with higher-order programming constructs. Tempo keeps that “reaction delayed to absence” principle while leveraging OCaml 5 effects to experiment with modern implementations.
 
 ## Table of contents

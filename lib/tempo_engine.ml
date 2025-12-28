@@ -89,6 +89,7 @@ let handle_task : scheduler_state -> task -> unit =
                 spawn_now st t.thread t.guards t.kills
                   (fun () -> continue k v)
               in
+              (* assert (kills_alive t.kills); *)
               Tempo_log.log ~task:t.t_id ~signal:s.s_id ctx "step"
                 "resume await imm | task=#%d -> task=#%d signal`#%d" t.t_id new_task.t_id s.s_id
             in
@@ -103,11 +104,13 @@ let handle_task : scheduler_state -> task -> unit =
             "pause | task=#%d resume next instant as task #%d" t.t_id new_task.t_id;
       | effect (Fork p_child), k ->
           let child_thread = Tempo_thread.new_thread_id st in
+          (* assert (kills_alive t.kills); *)
           let t' = spawn_now st child_thread t.guards t.kills p_child in
           Tempo_log.log ~task:t.t_id ctx "step"
             "spawn logical thread=#%d as task=#%d" child_thread t'.t_id;
           continue k child_thread;
       | effect (With_guard (s, body)), k ->
+          (* assert (kills_alive t.kills); *)
           let guard_task =
             spawn_now st t.thread (Any s :: t.guards) t.kills
               (fun () ->
@@ -123,6 +126,7 @@ let handle_task : scheduler_state -> task -> unit =
       | effect (With_kill (kk, body)), k ->
           let continue_now () =
             kk.cleanup <- None;
+            (* assert (kills_alive t.kills); *)
             let t' = spawn_now st t.thread t.guards t.kills (fun () -> continue k ()) in 
             Tempo_log.log ~task:t.t_id ctx "step"
             "with_kill exit | normal termination : task=#%d -> task=#%d" t.t_id t'.t_id;
@@ -138,6 +142,7 @@ let handle_task : scheduler_state -> task -> unit =
             body ();
             continue_now ()
           in
+          (* assert (kills_alive (kk :: t.kills)); *)
           let new_task =
             spawn_now st t.thread t.guards (kk :: t.kills) runner
           in
@@ -146,6 +151,7 @@ let handle_task : scheduler_state -> task -> unit =
       | effect (Join thread_id), k ->
           if thread_id = t.thread then invalid_arg "join: cannot join current thread";
           let resume () =
+            (* assert (kills_alive t.kills); *)
             let t' = 
               spawn_now st t.thread t.guards t.kills (fun () -> continue k ()) in
             Tempo_log.log ~task:t.t_id ctx "step.join"
