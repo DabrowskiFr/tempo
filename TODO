@@ -1,0 +1,2 @@
+The runtime stops when next_instant is empty but they may be tasks in signals awaiters list. They could be woken up by new inputs, so the runtime should pause until some occurs.
+We can sleep the program wih output, in the same way we can ask the input to block.
