@@ -17,6 +17,7 @@
  *---------------------------------------------------------------------------*)
 
 val fresh_event_signal : Tempo_types.scheduler_state -> 'a Tempo_types.signal
+
 val fresh_aggregate_signal :
   Tempo_types.scheduler_state ->
   initial:'agg ->
@@ -24,6 +25,7 @@ val fresh_aggregate_signal :
   ('emit, 'agg) Tempo_types.agg_signal
 
 val guard_ok : Tempo_types.any_signal list -> bool
+
 val missing_guards : Tempo_types.any_signal list -> Tempo_types.any_signal list
 
 val update_signal :

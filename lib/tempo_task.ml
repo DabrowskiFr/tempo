@@ -21,15 +21,14 @@ open Tempo_types
 let kills_alive kills = List.for_all (fun k -> !(k.alive)) kills
 
 let enqueue_now st t =
-  assert (kills_alive t.kills);
-  if not t.queued then begin
+  if (not t.queued && kills_alive t.kills) then begin
     t.queued <- true;
     t.blocked <- false;
     Queue.add t st.current
   end
 
 let enqueue_next st t =
-  assert (kills_alive t.kills);
+  if (kills_alive t.kills) then
   st.next_instant <- t :: st.next_instant
 
 let create_task st thread guards kills run =
@@ -47,16 +46,6 @@ let spawn_now st thread guards kills run =
 let spawn_next st thread guards kills run =
   let t = create_task st thread guards kills run in
   enqueue_next st t; t
-
-(* let spawn_now_with_id st thread guards kills run =
-  let t = create_task st thread guards kills run in
-  enqueue_now st t;
-  t
-
-let spawn_next_with_id st thread guards kills run =
-  let t = create_task st thread guards kills run in
-  enqueue_next st t;
-  t *)
 
 let block_on_guards st t =
   assert (kills_alive t.kills);
