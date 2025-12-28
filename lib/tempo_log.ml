@@ -114,25 +114,25 @@ module Tempo_log = struct
     log ~level:Backend_logs.Info ctx "step"
       "====================== STEP %03d ======================" ctx.step
 
-type step_stats =
+(* type step_stats =
   { mutable spawns_now : int
   ; mutable spawns_next : int
   ; mutable blocks : int
   ; mutable aborted : int
-  }
+  } *)
 
-let empty_stats () =
+(* let empty_stats () =
   { spawns_now = 0
   ; spawns_next = 0
   ; blocks = 0
   ; aborted = 0
-  }
+  } *)
 
   let pp_span fmt span =
     let ms = Mtime.Span.to_float_ns span /. 1e6 in
     Format.fprintf fmt "%.3fms" ms
 
-  let log_step_summary ctx _stats span =
+  let log_step_summary ctx span =
     log ~level:Backend_logs.Debug ctx "step" "step=%a" pp_span span
 
   let pp_waiting fmt waits =
@@ -145,10 +145,6 @@ let empty_stats () =
         Format.pp_print_list
           ~pp_sep:(fun fmt () -> Format.pp_print_string fmt ", ")
           pp_pair fmt lst
-
-  let log_waiting ctx waits =
-    log ~level:Backend_logs.Debug ctx "step.wait"
-      "thread join waiters: %a" pp_waiting waits
 
   (* --- Printers for runtime data structures ------------------------------- *)
   let snapshot_queue q =
@@ -215,11 +211,6 @@ let empty_stats () =
         Format.pp_print_list
           ~pp_sep:(fun fmt () -> Format.pp_print_string fmt " ")
           pp_entry fmt lst
-
-  let log_signal_waiters ctx signals =
-    log ~level:Backend_logs.Debug ctx "step.wait"
-      "signal awaiters: %a"
-      pp_signal_waiters signals
 
   let pp_limited_list ?(pp_sep = default_sep) ?(max_items = None) printer fmt
       lst =
