@@ -1,2 +1,12 @@
-The runtime stops when next_instant is empty but they may be tasks in signals awaiters list. They could be woken up by new inputs, so the runtime should pause until some occurs.
+- The runtime stops when next_instant is empty but they may be tasks in signals awaiters list. They could be woken up by new inputs, so the runtime should pause until some occurs.
 We can sleep the program wih output, in the same way we can ask the input to block.
+
+- Add a time for inter-instant when the simulation is too fast, include instant time in the bound. Add a warning if the simulation is too slow.
+
+- restructure the lib Tempo.ml/mli / subdir with files without suffixes
+
+- Déclarer explicitement les private_modules dans lib/dune pour que l’API publique
+reste claire
+
+- Ajouter un court “how to run” pour les exemples/tests dans le README (commandes dune exec/runtest)
+
