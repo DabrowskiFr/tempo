@@ -1,0 +1,3 @@
+(executables
+ (names balls solar_system)
+ (libraries tempo graphics unix))
