@@ -7,6 +7,7 @@ All three are grounded in the idea that deterministic concurrency can be made tr
 
 - [Instants and execution model](#instants-and-execution-model)
 - [Fundamental primitives](#fundamental-primitives)
+- [Derived functions](#derived-functions)
 - [Guards and preemption](#guards-and-preemption)
 - [Installation & usage](#installation--usage)
 - [Examples](#examples)
@@ -44,10 +45,24 @@ Reactive programs are built from seven primitive operations:
 - **`when_ guard body`** executes body only if guard is present in the current instant. Otherwise, the task is blocked and automatically resumes when the guard becomes present.
 - **`watch signal body`** executes body until signal is emitted. Such an emission causes body to be terminated at the end of the current instant, implementing weak preemption.
 
+--- 
+## Derived functions
+
+A few helpers are built on top of the primitives and exported by `Tempo`:
+
+- `present_then_else s then_ else_` — run `then_` if `s` is present in the current instant, otherwise run `else_` in the next instant.
+- `loop f` — repeat `f` forever with a `pause` between iterations.
+- `idle` — a `pause`-forever process.
+- `control toggle proc` — start/stop `proc` each time `toggle` is emitted (starts stopped).
+- `alternate toggle proc_a proc_b` — run `proc_a` immediately, then switch between `proc_a` and `proc_b` on each `toggle` emission.
+
+---
+
 > **Warning**  
 > Tempo also exposes a low-level module, Tempo.Low_level, intended for advanced use cases. This module provides direct access to primitive operations such as task termination (kill), explicit fork/join, and manual guard management. Unless you are implementing custom control structures, the high-level primitives should be preferred.
 
 ---
+
 
 ## Installation & usage
 

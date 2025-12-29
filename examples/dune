@@ -1,3 +1,13 @@
 (executables
- (names balls_control balls_alternate solar_system)
- (libraries tempo graphics unix))
+(names
+ balls_control_graphics
+ balls_alternate_graphics
+ boids_graphics
+ boids_tsdl
+ snake_tsdl
+ solar_system_graphics
+ solar_system_tsdl
+ ca_continuous_graphics
+ ca_continuous_tsdl
+ control_panel_tsdl)
+(libraries tempo graphics unix tsdl tsdl-ttf))

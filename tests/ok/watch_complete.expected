@@ -3,6 +3,6 @@
 [worker] instant 0
 [worker] instant 1
 [worker] instant 2
-[driver] done
 [worker] finished after 3 steps
+[driver] done
 [body] end (natural completion)

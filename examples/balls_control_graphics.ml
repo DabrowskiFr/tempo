@@ -1,20 +1,6 @@
 open Tempo
 open Graphics
 
-(* -- Additional combinator *)
-
-(* Toggle a process on/off each time [toggle] is emitted. Starts stopped. *)
-
-let control (toggle : unit signal) (proc : unit -> unit) =
-  let rec loop running =
-    if running then (
-      await toggle;
-      loop false)
-    else (
-      await toggle;
-      let _ = fork (fun () -> watch toggle proc) in
-      loop true)
-  in loop false
 
 (* -- Balls physics*)
 
@@ -28,8 +14,7 @@ let bounce pos vel max_coord =
   let next = pos + vel in
   if next < radius then (radius + (radius - next), -vel)
   else if next > max_coord - radius then
-    ( (max_coord - radius) - (next - (max_coord - radius))
-    , -vel )
+    (max_coord - radius - (next - (max_coord - radius)), -vel)
   else (next, vel)
 
 let step ({ x; y; vx; vy; _ } as s) =
@@ -39,8 +24,7 @@ let step ({ x; y; vx; vy; _ } as s) =
 
 (* -- Input/Output *)
 
-let input () = 
-  if key_pressed () then Some (read_key ()) else None
+let input () = if key_pressed () then Some (read_key ()) else None
 
 let output states =
   set_color white;
@@ -62,22 +46,19 @@ let drive_ball stop ctrl state_ref =
     pause ();
     loop state_ref
   in
-    watch stop (fun () -> 
-      control ctrl (fun () -> 
-        loop state_ref))
+  watch stop (fun () -> control ctrl (fun () -> loop state_ref))
 
 let rec handle_input input_signal stop ctrl1 ctrl2 =
   let c = await input_signal in
   if Char.equal c 'q' then emit stop ()
-  else begin
+  else (
     if Char.equal c 'p' then emit ctrl1 ();
     if Char.equal c 'o' then emit ctrl2 ();
     pause ();
-    handle_input input_signal stop ctrl1 ctrl2
-  end
+    handle_input input_signal stop ctrl1 ctrl2)
 
 let rec render_loop stop output_signal state_ref1 state_ref2 =
-  emit output_signal [!state_ref1; !state_ref2];
+  emit output_signal [ !state_ref1; !state_ref2 ];
   pause ();
   render_loop stop output_signal state_ref1 state_ref2
 
@@ -93,7 +74,8 @@ let scenario input_signal output_signal =
   emit ctrl2 ();
   watch stop (fun () ->
       parallel
-        [ (fun () -> handle_input input_signal stop ctrl1 ctrl2)
+        [
+          (fun () -> handle_input input_signal stop ctrl1 ctrl2)
         ; (fun () -> drive_ball stop ctrl1 state_ref1)
         ; (fun () -> drive_ball stop ctrl2 state_ref2)
         ; (fun () -> render_loop stop output_signal state_ref1 state_ref2)
@@ -102,8 +84,8 @@ let scenario input_signal output_signal =
 (** -- Execution *)
 
 let () =
-    Random.self_init ();
-    open_graph (Printf.sprintf " %dx%d" width height);
-    set_window_title "Tempo ball bounce";
-    auto_synchronize false;
-    execute ~input ~output scenario
+  Random.self_init ();
+  open_graph (Printf.sprintf " %dx%d" width height);
+  set_window_title "Tempo ball bounce";
+  auto_synchronize false;
+  execute ~input ~output scenario

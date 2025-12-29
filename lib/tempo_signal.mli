@@ -19,23 +19,24 @@
 val fresh_event_signal : Tempo_types.scheduler_state -> 'a Tempo_types.signal
 
 val fresh_aggregate_signal :
-  Tempo_types.scheduler_state ->
-  initial:'agg ->
-  combine:('agg -> 'emit -> 'agg) ->
-  ('emit, 'agg) Tempo_types.agg_signal
+     Tempo_types.scheduler_state
+  -> initial:'agg
+  -> combine:('agg -> 'emit -> 'agg)
+  -> ('emit, 'agg) Tempo_types.agg_signal
 
 val guard_ok : Tempo_types.any_signal list -> bool
-
 val missing_guards : Tempo_types.any_signal list -> Tempo_types.any_signal list
 
 val update_signal :
-  Tempo_types.scheduler_state ->
-  ('emit, 'agg, 'mode) Tempo_types.signal_core ->
-  'emit -> unit
+     Tempo_types.scheduler_state
+  -> ('emit, 'agg, 'mode) Tempo_types.signal_core
+  -> 'emit
+  -> unit
 
 val emit_event_from_host :
-  Tempo_types.scheduler_state ->
-  ('a, 'a, Tempo_types.event) Tempo_types.signal_core ->
-  'a -> unit
+     Tempo_types.scheduler_state
+  -> ('a, 'a, Tempo_types.event) Tempo_types.signal_core
+  -> 'a
+  -> unit
 
 val finalize_signals : Tempo_types.scheduler_state -> unit

@@ -26,18 +26,13 @@ let () = Tempo_log.init ()
 let log_ctx st =
   Tempo_log.context ~instant:st.debug.instant_counter ~step:st.debug.step_counter
 
-(* Keep a mutable reference to the stats of the step currently being
-   executed. This allows resumed continuations (captured in a previous step)
-   to still record their spawns in the stats of the step that is actually
-   running. *)
-
 let handle_task : scheduler_state -> task -> unit =
   fun st t ->
     let ctx = log_ctx st in
     let run_task () =
       match t.run () with
       | () -> Tempo_log.log ~task:t.t_id  ctx "step" "task done | task=#%d thread=#%d" t.t_id t.thread 
-      | effect (New_signal (_)), k ->
+      | effect (New_signal ()), k ->
           let s = fresh_event_signal st in
           Tempo_log.log ~task:t.t_id ~signal:s.s_id ctx "step"
             "create event signal | task=#%d | signal=#%d" t.t_id s.s_id;
@@ -89,7 +84,6 @@ let handle_task : scheduler_state -> task -> unit =
                 spawn_now st t.thread t.guards t.kills
                   (fun () -> continue k v)
               in
-              (* assert (kills_alive t.kills); *)
               Tempo_log.log ~task:t.t_id ~signal:s.s_id ctx "step"
                 "resume await imm | task=#%d -> task=#%d signal`#%d" t.t_id new_task.t_id s.s_id
             in
@@ -104,13 +98,11 @@ let handle_task : scheduler_state -> task -> unit =
             "pause | task=#%d resume next instant as task #%d" t.t_id new_task.t_id;
       | effect (Fork p_child), k ->
           let child_thread = Tempo_thread.new_thread_id st in
-          (* assert (kills_alive t.kills); *)
           let t' = spawn_now st child_thread t.guards t.kills p_child in
           Tempo_log.log ~task:t.t_id ctx "step"
             "spawn logical thread=#%d as task=#%d" child_thread t'.t_id;
           continue k child_thread;
       | effect (With_guard (s, body)), k ->
-          (* assert (kills_alive t.kills); *)
           let guard_task =
             spawn_now st t.thread (Any s :: t.guards) t.kills
               (fun () ->
@@ -126,7 +118,6 @@ let handle_task : scheduler_state -> task -> unit =
       | effect (With_kill (kk, body)), k ->
           let continue_now () =
             kk.cleanup <- None;
-            (* assert (kills_alive t.kills); *)
             let t' = spawn_now st t.thread t.guards t.kills (fun () -> continue k ()) in 
             Tempo_log.log ~task:t.t_id ctx "step"
             "with_kill exit | normal termination : task=#%d -> task=#%d" t.t_id t'.t_id;
@@ -142,7 +133,6 @@ let handle_task : scheduler_state -> task -> unit =
             body ();
             continue_now ()
           in
-          (* assert (kills_alive (kk :: t.kills)); *)
           let new_task =
             spawn_now st t.thread t.guards (kk :: t.kills) runner
           in
@@ -151,7 +141,6 @@ let handle_task : scheduler_state -> task -> unit =
       | effect (Join thread_id), k ->
           if thread_id = t.thread then invalid_arg "join: cannot join current thread";
           let resume () =
-            (* assert (kills_alive t.kills); *)
             let t' = 
               spawn_now st t.thread t.guards t.kills (fun () -> continue k ()) in
             Tempo_log.log ~task:t.t_id ctx "step.join"
@@ -173,7 +162,6 @@ let handle_task : scheduler_state -> task -> unit =
     try Fun.protect ~finally:cleanup run_task with
     | Aborted -> ()
 
-(* Scheduler main loop *)
   let rec step : scheduler_state -> unit =
   fun st ->
     let counter = Mtime_clock.counter () in
@@ -183,14 +171,15 @@ let handle_task : scheduler_state -> task -> unit =
       ~current:(Tempo_log.snapshot_queue st.current)
       ~blocked:st.blocked ~next:st.next_instant ~signals:st.signals;
     st.debug.step_counter <- st.debug.step_counter + 1;
-    if Queue.is_empty st.current then begin
-      Tempo_log.log ~level:Logs.Debug ctx "step" "queue empty | stop current instant";
-      let span = Mtime_clock.count counter in
-      Tempo_log.log_step_summary ctx span;
-      Tempo_log.record_duration "step" span
-    end else begin
       let rec take_next () =
-        if Queue.is_empty st.current then None
+        if Queue.is_empty st.current then 
+          begin 
+            Tempo_log.log ~level:Logs.Debug ctx "step" "queue empty | stop current instant";
+            let span = Mtime_clock.count counter in
+            Tempo_log.log_step_summary ctx span;
+            Tempo_log.record_duration "step" span;
+            None
+          end
         else
           let t = Queue.take st.current in
           t.queued <- false;
@@ -224,13 +213,10 @@ let handle_task : scheduler_state -> task -> unit =
           Tempo_log.log_step_summary ctx span;
           Tempo_log.record_duration "step" span;
           continue ()
-    end
 
-let rec run_instant :
-      ?before_step:(unit -> unit) ->
-      ?after_step:(unit -> unit) ->
-      scheduler_state -> int option -> unit =
-  fun ?(before_step = fun () -> ()) ?(after_step = fun () -> ()) st remaining ->
+let rec run_instant : (unit -> unit) -> (unit -> unit) -> 
+    scheduler_state -> int option -> unit =
+  fun before_step after_step  st remaining ->
     (match remaining with
     | Some n when n <= 0 -> Stdlib.exit 0
     | _ -> ());
@@ -273,25 +259,26 @@ let rec run_instant :
           Tempo_log.log ctx "instant" "rollover tasks | moving %d tasks to next instant"
             (List.length survivors);
           st.next_instant <- [];
-          List.iter (enqueue_now st) (List.rev survivors);
-          run_instant ~before_step ~after_step st (Option.map pred remaining)
+          List.iter (enqueue_now st) survivors;
+          run_instant before_step after_step st (Option.map pred remaining)
+
+let create_scheduler_state () = 
+  { current         = Queue.create ()
+    ;next_instant    = []
+    ;blocked         = []
+    ;signals         = []
+    ;thread_counter  = 0
+    ;debug           =
+      { sig_counter     = 0
+      ; task_counter    = 1
+      ; step_counter    = 0
+      ; instant_counter = 0 }
+    ;threads         = Hashtbl.create 16
+    ;waiting         = []
+  }
 
 let execute ?instants ?(input = fun () -> None) ?(output = fun _ -> ()) initial =
-  let st =
-      { current         = Queue.create ();
-        next_instant    = [];
-        blocked         = [];
-        signals         = [];
-        thread_counter  = 0;
-        debug           =
-          { sig_counter     = 0;
-            task_counter    = 1;
-            step_counter    = 0;
-            instant_counter = 0; };
-        threads         = Hashtbl.create 16;
-        waiting         = [];
-      } in
-  Tempo_log.log_banner (log_ctx st) "run" "runtime start | push initial tasks";
+  let st = create_scheduler_state () in
   let input_signal = fresh_event_signal st in
   let output_signal = fresh_event_signal st in
   let before_step () =
@@ -300,14 +287,12 @@ let execute ?instants ?(input = fun () -> None) ?(output = fun _ -> ()) initial 
     | Some payload -> emit_event_from_host st input_signal payload
   in
   let after_step () =
-    if output_signal.present then
       match output_signal.value with
       | Some value -> output value
       | None -> ()
   in
   let thread = Tempo_thread.new_thread_id st in
-  let _ =
-    spawn_now st thread [] [] (fun () -> initial input_signal output_signal)
-  in
-  run_instant ~before_step ~after_step st instants;
+  ignore (spawn_now st thread [] [] (fun () -> initial input_signal output_signal));
+  Tempo_log.log_banner (log_ctx st) "execute" "runtime start | schedule initial task=#%d";
+  run_instant before_step after_step st instants;
   Tempo_log.log_duration_summary ()

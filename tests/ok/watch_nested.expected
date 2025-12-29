@@ -2,9 +2,9 @@
 [body] outer watch entered
 [body] inner watch entered
 [body] step 0
-[driver] override emitted
 [body] step 1
+[driver] override emitted
+[body] inner watch exited
 [driver] stop emitted
 [driver] done
-[body] inner watch exited
 [body] outer watch exited
