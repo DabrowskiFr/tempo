@@ -6,9 +6,9 @@ name: CI
 on:
   # Triggers the workflow on push or pull request events but only for the "main" branch
   push:
-    branches: [ "main" ]
+    branches: [ "main", "develop" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "develop" ]
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
@@ -36,8 +36,7 @@ jobs:
         with:
           ocaml-compiler: ocaml-variants.5.3.0+options
       - run: opam update
-      - run: opam install logs
-      - run: opam install mtime
+      - run: opam install logs mtime
       - run: opam install . --deps-only --with-doc --with-test
       - run: opam exec -- dune build lib
       - run: opam exec -- dune build tests
