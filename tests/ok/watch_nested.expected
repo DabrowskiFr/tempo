@@ -6,5 +6,5 @@
 [driver] override emitted
 [body] inner watch exited
 [driver] stop emitted
-[driver] done
 [body] outer watch exited
+[driver] done

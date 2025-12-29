@@ -1,0 +1,3 @@
+producer-first: 42
+waiter-first: 42
+same-result: true

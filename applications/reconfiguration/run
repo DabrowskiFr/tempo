@@ -1,0 +1,35 @@
+#!/bin/sh
+set -eu
+
+if [ -n "${DUNE_SOURCEROOT:-}" ]; then
+  ROOT_DIR="${DUNE_SOURCEROOT}/applications/reconfiguration"
+else
+  ROOT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
+fi
+
+if [ "${1:-}" = "" ] || [ "${1:-}" = "help" ] || [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+  cat <<'EOT'
+Usage:
+  dune exec ./applications/reconfiguration/run -- <app> [-- <args...>]
+
+Apps:
+  reactive-reconfiguration-engine
+EOT
+  exit 0
+fi
+
+APP="$1"
+shift
+
+case "$APP" in
+  reactive-reconfiguration-engine)
+    TARGET="$ROOT_DIR/$APP/run"
+    ;;
+  *)
+    echo "Unknown reconfiguration app: $APP" >&2
+    echo "Run: dune exec ./applications/reconfiguration/run -- help" >&2
+    exit 2
+    ;;
+esac
+
+exec "$TARGET" "$@"

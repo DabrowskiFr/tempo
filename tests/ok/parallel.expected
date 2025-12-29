@@ -2,13 +2,13 @@
 [fast] start
 [medium] start
 [slow] start
-[slow] middle
-[medium] middle
 [fast] finish
+[medium] middle
+[slow] middle
 [fast] done
 [medium] finish
 [slow] one more time
-[slow] finish
 [medium] done
+[slow] finish
 [slow] done
 [driver] instant 3: all branches completed

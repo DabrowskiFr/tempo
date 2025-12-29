@@ -1,0 +1,11 @@
+{
+  "seed": 11,
+  "policy": "Aggressive",
+  "scenario": "Lossy",
+  "steps": 800,
+  "commits": 0,
+  "aborts": 4,
+  "rollbacks": 4,
+  "violations": 232,
+  "invariant_ok": false
+}

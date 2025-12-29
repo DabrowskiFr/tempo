@@ -1,0 +1,3 @@
+(lang dune 3.10)
+(name tempo_reconfiguration_app)
+(generate_opam_files false)

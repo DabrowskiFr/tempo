@@ -1,0 +1,56 @@
+#!/bin/sh
+set -eu
+
+if [ -n "${DUNE_SOURCEROOT:-}" ]; then
+  ROOT_DIR="${DUNE_SOURCEROOT}/applications"
+else
+  ROOT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
+fi
+
+if [ "${1:-}" = "" ] || [ "${1:-}" = "help" ] || [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+  cat <<'EOT'
+Usage:
+  dune exec ./applications/run -- <app> [-- <args...>]
+
+Categories:
+  game:
+    game-univ
+    snake-raylib
+  simulation:
+    boids-raylib
+    ca-continuous-raylib
+    lenia-raylib
+    solar-system-raylib
+  logic:
+    logicgroove
+    temporalsim
+  reconfiguration:
+    reactive-reconfiguration-engine
+EOT
+  exit 0
+fi
+
+APP="$1"
+shift
+
+case "$APP" in
+  game-univ|snake-raylib)
+    TARGET="$ROOT_DIR/game/$APP/run"
+    ;;
+  boids-raylib|ca-continuous-raylib|lenia-raylib|solar-system-raylib)
+    TARGET="$ROOT_DIR/simulation/$APP/run"
+    ;;
+  logicgroove|temporalsim)
+    TARGET="$ROOT_DIR/logic/$APP/run"
+    ;;
+  reactive-reconfiguration-engine)
+    TARGET="$ROOT_DIR/reconfiguration/$APP/run"
+    ;;
+  *)
+    echo "Unknown app: $APP" >&2
+    echo "Run: dune exec ./applications/run -- help" >&2
+    exit 2
+    ;;
+esac
+
+exec "$TARGET" "$@"

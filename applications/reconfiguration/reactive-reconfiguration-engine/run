@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+if [ -n "${DUNE_SOURCEROOT:-}" ]; then
+  cd "${DUNE_SOURCEROOT}/applications/reconfiguration/reactive-reconfiguration-engine"
+else
+  cd "$(dirname "$0")"
+fi
+exec dune exec ./src/main.exe -- "$@"

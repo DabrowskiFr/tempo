@@ -1,5 +1,5 @@
 [consumer 1] await payload...
 [consumer 2] await payload...
 [producer] emit payload
-[consumer 1] received payload 42
 [consumer 2] received payload 42
+[consumer 1] received payload 42
