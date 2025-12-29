@@ -1,5 +1,5 @@
 [consumer1] waiting for payload...
 [consumer2] waiting for payload...
 [producer] emit payload
-[consumer2] received payload 7
 [consumer1] received payload 7
+[consumer2] received payload 7

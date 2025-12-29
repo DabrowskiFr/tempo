@@ -23,9 +23,7 @@ let ensure (threads : (Tempo_types.thread, thread_state) Hashtbl.t)
   match Hashtbl.find_opt threads thread with
   | Some ts -> ts
   | None ->
-      let ts =
-        Tempo_types.{ active = 0; completed = false; waiters = [] }
-      in
+      let ts = Tempo_types.{ active = 0; completed = false; waiters = [] } in
       Hashtbl.add threads thread ts;
       ts
 
@@ -56,9 +54,8 @@ let finish_task threads (thread : Tempo_types.thread) =
   in
   let state = find threads thread in
   state.active <- state.active - 1;
-  if state.active = 0 then begin
+  if state.active = 0 then (
     state.completed <- true;
     let waiters = List.rev state.waiters in
     state.waiters <- [];
-    resume_waiters waiters
-  end
+    resume_waiters waiters)

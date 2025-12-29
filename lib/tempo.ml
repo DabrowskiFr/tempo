@@ -26,11 +26,11 @@ type 'a signal = ('a, 'a, event) signal_core
 type ('emit, 'agg) agg_signal = ('emit, 'agg, aggregate) signal_core
 type kill = Tempo_types.kill
 
-let new_signal : unit -> 'a signal =
-  fun () -> perform (New_signal ())
+let new_signal : unit -> 'a signal = fun () -> perform (New_signal ())
 
 let new_signal_agg :
-    initial:'agg -> combine:('agg -> 'emit -> 'agg) -> ('emit, 'agg) agg_signal =
+    initial:'agg -> combine:('agg -> 'emit -> 'agg) -> ('emit, 'agg) agg_signal
+    =
  fun ~initial ~combine -> perform (New_signal_agg (initial, combine))
 
 let emit : type emit agg mode. (emit, agg, mode) signal_core -> emit -> unit =
@@ -39,17 +39,10 @@ let emit : type emit agg mode. (emit, agg, mode) signal_core -> emit -> unit =
 let await : type emit agg mode. (emit, agg, mode) signal_core -> agg =
  fun s -> perform (Await s)
 
-let await_immediate : 'a signal -> 'a =
-  fun s -> perform (Await_immediate s)
-
-let pause : unit -> unit =
-  fun () -> perform Pause
-
-let fork (proc : unit -> unit) : thread =
-  perform (Fork proc)
-
-let join (thread_id : thread) : unit =
-  perform (Join thread_id)
+let await_immediate : 'a signal -> 'a = fun s -> perform (Await_immediate s)
+let pause : unit -> unit = fun () -> perform Pause
+let fork (proc : unit -> unit) : thread = perform (Fork proc)
+let join (thread_id : thread) : unit = perform (Join thread_id)
 
 module Low_level = struct
   type kill = Tempo_types.kill
@@ -64,13 +57,11 @@ module Low_level = struct
         k.cleanup <- None;
         cleanup ()
 
-  let with_kill (k : kill) (f : unit -> unit) =
-    perform (With_kill (k, f))
-
+  let with_kill (k : kill) (f : unit -> unit) = perform (With_kill (k, f))
   let fork (proc : unit -> unit) : thread = perform (Fork proc)
-
   let join (thread_id : thread) : unit = perform (Join thread_id)
 end
+
 let when_ (s : ('emit, 'agg, 'mode) signal_core) (body : unit -> unit) : unit =
   perform (With_guard (s, body))
 
@@ -80,10 +71,8 @@ let watch (s : ('emit, 'agg, 'mode) signal_core) (body : unit -> unit) : unit =
   Low_level.with_kill kill body;
   if !(kill.alive) then Low_level.abort_kill kill
 
-let present_then_else
-    (s : ('emit, 'agg, 'mode) signal_core)
-    (then_ : unit -> unit)
-    (else_ : unit -> unit) : unit =
+let present_then_else (s : ('emit, 'agg, 'mode) signal_core)
+    (then_ : unit -> unit) (else_ : unit -> unit) : unit =
   let seen = ref false in
   let kill = Low_level.new_kill () in
   let _ =
@@ -103,5 +92,40 @@ let present_then_else
 let parallel procs =
   let threads = List.map fork procs in
   List.iter join threads
+
+(* Toggle a process on/off each time [toggle] is emitted. Starts stopped. *)
+
+let rec loop p () =
+  p ();
+  pause ();
+  loop p ()
+
+let rec idle () =
+  pause ();
+  idle ()
+
+let control (toggle : unit signal) (proc : unit -> unit) =
+  let rec loop running =
+    if running then (
+      await toggle;
+      loop false)
+    else (
+      await toggle;
+      let _ = fork (fun () -> watch toggle proc) in
+      loop true)
+  in
+  loop false
+
+(* Toggle between two behaviors each time [toggle] is emitted.
+   Starts immediately with [proc_a], then switches on every toggle. *)
+let alternate (toggle : unit signal) (proc_a : unit -> unit)
+    (proc_b : unit -> unit) =
+  let rec loop use_a =
+    let proc = if use_a then proc_a else proc_b in
+    let _ = fork (fun () -> watch toggle proc) in
+    await toggle;
+    loop (not use_a)
+  in
+  loop true
 
 let execute = Tempo_engine.execute

@@ -86,8 +86,7 @@ module Tempo_log = struct
   let log ?(level = Backend_logs.Debug) ?task ?signal _ctx scope fmt =
     let printer =
       if level_enabled level then
-        Format.kasprintf
-          (fun msg ->
+        Format.kasprintf (fun msg ->
             let tags =
               Backend_logs.Tag.empty
               |> add_opt_tag Log_tags.task_id task
@@ -100,7 +99,8 @@ module Tempo_log = struct
     printer fmt
 
   let log_banner ctx scope label =
-    log ~level:Backend_logs.Info ctx scope "==================== %s ====================" label
+    log ~level:Backend_logs.Info ctx scope
+      "==================== %s ====================" label
 
   let log_info ctx scope label =
     log ~level:Backend_logs.Info ctx scope "%s" label
@@ -114,14 +114,14 @@ module Tempo_log = struct
     log ~level:Backend_logs.Info ctx "step"
       "====================== STEP %03d ======================" ctx.step
 
-(* type step_stats =
+  (* type step_stats =
   { mutable spawns_now : int
   ; mutable spawns_next : int
   ; mutable blocks : int
   ; mutable aborted : int
   } *)
 
-(* let empty_stats () =
+  (* let empty_stats () =
   { spawns_now = 0
   ; spawns_next = 0
   ; blocks = 0
@@ -139,9 +139,7 @@ module Tempo_log = struct
     match waits with
     | [] -> Format.pp_print_string fmt "none"
     | lst ->
-        let pp_pair fmt (w, t) =
-          Format.fprintf fmt "%d→%d" w t
-        in
+        let pp_pair fmt (w, t) = Format.fprintf fmt "%d→%d" w t in
         Format.pp_print_list
           ~pp_sep:(fun fmt () -> Format.pp_print_string fmt ", ")
           pp_pair fmt lst
@@ -245,13 +243,13 @@ module Tempo_log = struct
 
   let log_pick ctx task =
     log ~task:task.t_id ctx "step.select"
-      "pick task #%d (logical thread=%d guards=%d)"
-      task.t_id task.thread (List.length task.guards)
+      "pick task #%d (logical thread=%d guards=%d)" task.t_id task.thread
+      (List.length task.guards)
 
   let log_block ctx task missing_guards =
-    log ~task:task.t_id ctx "step.block"
-      "block (guards missing %a)"
-      (pp_any_guard_list ~brief:true) missing_guards
+    log ~task:task.t_id ctx "step.block" "block (guards missing %a)"
+      (pp_any_guard_list ~brief:true)
+      missing_guards
 
   let log_snapshot ctx ~current ~blocked ~next ~signals =
     log ctx "queues" "queues  current=%a blocked=%a next=%a" pp_queue_compact

@@ -19,24 +19,22 @@
 type thread_state = Tempo_types.thread_state
 
 val ensure :
-  (Tempo_types.thread, thread_state) Hashtbl.t ->
-  Tempo_types.thread ->
-  thread_state
+     (Tempo_types.thread, thread_state) Hashtbl.t
+  -> Tempo_types.thread
+  -> thread_state
 
 val find :
-  (Tempo_types.thread, thread_state) Hashtbl.t ->
-  Tempo_types.thread ->
-  thread_state
+     (Tempo_types.thread, thread_state) Hashtbl.t
+  -> Tempo_types.thread
+  -> thread_state
 
 val add_join_waiter :
-  (Tempo_types.thread, thread_state) Hashtbl.t ->
-  Tempo_types.thread ->
-  (unit -> unit) ->
-  unit
+     (Tempo_types.thread, thread_state) Hashtbl.t
+  -> Tempo_types.thread
+  -> (unit -> unit)
+  -> unit
 
 val new_thread_id : Tempo_types.scheduler_state -> Tempo_types.thread
 
 val finish_task :
-  (Tempo_types.thread, thread_state) Hashtbl.t ->
-  Tempo_types.thread ->
-  unit
+  (Tempo_types.thread, thread_state) Hashtbl.t -> Tempo_types.thread -> unit
