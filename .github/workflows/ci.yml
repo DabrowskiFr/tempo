@@ -38,7 +38,6 @@ jobs:
       - run: opam update
       - run: opam install logs
       - run: opam install mtime
-      - run: opam install graphics
       - run: opam install . --deps-only --with-doc --with-test
       - run: opam exec -- dune build lib
       - run: opam exec -- dune build tests
