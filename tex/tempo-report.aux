@@ -1,0 +1,215 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyperFirstAtBeginDocument{\AtBeginDocument}
+\HyperFirstAtBeginDocument{\ifx\hyper@anchor\@undefined
+\global\let\oldnewlabel\newlabel
+\gdef\newlabel#1#2{\newlabelxx{#1}#2}
+\gdef\newlabelxx#1#2#3#4#5#6{\oldnewlabel{#1}{{#2}{#3}}}
+\AtEndDocument{\ifx\hyper@anchor\@undefined
+\let\newlabel\oldnewlabel
+\fi}
+\fi}
+\global\let\hyper@last\relax 
+\gdef\HyperFirstAtBeginDocument#1{#1}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\citation{esterel1992,lustre1991}
+\citation{benveniste2003}
+\citation{esterel1992}
+\citation{fairthreads2003}
+\citation{reactiveml2005}
+\citation{frp1997}
+\citation{fairthreads2003,reactiveml2005}
+\citation{fairthreads2003}
+\@writefile{toc}{\contentsline {section}{Abstract}{1}{section*.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {1}Introduction}{1}{section.1}\protected@file@percent }
+\citation{esterel1992,fairthreads2003}
+\citation{reactiveml2005}
+\citation{frp1997}
+\citation{perez2016frp,bahr2019ratt,bahr2022modalfrp,bahr2023async}
+\citation{reactiveml2005}
+\@writefile{toc}{\contentsline {section}{\numberline {2}Boussinot's Reactive Control Model}{2}{section.2}\protected@file@percent }
+\newlabel{sec:boussinot-control}{{2}{2}{Boussinot's Reactive Control Model}{section.2}{}}
+\@writefile{toc}{\contentsline {paragraph}{Signals (unvalued)}{2}{section*.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Suspension}{2}{section*.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Algorithmic view (abstract)}{2}{section*.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Micro-examples (abstract)}{2}{lstlisting.-2}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Preemption and Esterel}{2}{section*.8}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{From FairThreads to ReactiveML (abstract view)}{2}{section*.9}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3}ReactiveML Context and Core Constructs}{3}{section.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Semantic contract (informal)}{3}{section*.10}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Non-guarantees}{3}{section*.11}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Minimal vocabulary}{3}{section*.12}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Determinism statement (informal)}{3}{section*.13}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Observable vs non-observable (summary)}{3}{section*.14}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Aggregate signals and \texttt  {await\_immediate}}{3}{section*.15}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Observable trace (informal)}{3}{section*.16}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{\texttt  {await} vs \texttt  {await\_immediate}}{3}{section*.17}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Observables that define determinism at instant boundaries.\relax }}{3}{figure.caption.18}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Determinism in action}{3}{section*.19}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Timeline for the simple echo program.\relax }}{3}{table.caption.20}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Mini-specification (informal)}{4}{section*.21}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Intuitive timeline}{4}{section*.22}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {4}\textsc  {Tempo}{} Overview}{4}{section.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Programming model}{4}{section*.23}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Determinism and control}{4}{section*.24}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Design rationale}{4}{section*.25}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Non-goals (current scope)}{4}{section*.26}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {5}Public API}{4}{section.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Signal types}{4}{section*.27}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Informal type signatures}{5}{section*.28}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Signal creation and communication}{5}{section*.29}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Control flow and concurrency}{5}{section*.30}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Execution entry point}{5}{section*.31}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Low-level API}{5}{section*.32}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Summary table}{5}{table.caption.34}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {6}Usage and Examples}{5}{section.6}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces API summary with roles and constraints.\relax }}{6}{table.caption.34}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{End-to-end example 1: input/output echo}{6}{section*.35}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{End-to-end example 2: guarded wait with timeout}{6}{section*.36}\protected@file@percent }
+\newlabel{ex:guard-watch}{{6}{6}{Running example used in the implementation section}{section*.37}{}}
+\@writefile{toc}{\contentsline {paragraph}{Running example used in the implementation section}{6}{section*.37}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Guard disjunctions and preemption}{6}{section*.38}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Derived control primitives}{7}{section*.39}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Use case: reactive I/O protocol}{7}{section*.40}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Timeline for the reactive I/O protocol.\relax }}{7}{table.caption.42}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Timeline (environment vs internal)}{7}{table.caption.42}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Extended scenario: periodic sampling with timeout}{7}{section*.43}\protected@file@percent }
+\citation{plotkinpretnar2009}
+\citation{eff2013}
+\citation{multicoreocaml2020}
+\citation{danvyfilinski1990,filinski1994}
+\@writefile{toc}{\contentsline {section}{\numberline {7}Algebraic Effects in OCaml}{8}{section.7}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{One-sentence intuition}{8}{section*.44}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Deep vs shallow handlers}{8}{section*.45}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Cooperative threads via effects}{8}{section*.46}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Intuition (small example)}{8}{section*.47}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Effect handling and continuation scheduling.\relax }}{8}{figure.caption.48}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {8}Implementation with Algebraic Effects (OCaml 5.3)}{9}{section.8}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Implementation map}{9}{section*.49}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Scheduler state and task queues}{9}{section*.50}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Task lifecycle and bookkeeping}{9}{section*.51}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Threads, \texttt  {fork}, and \texttt  {join}}{9}{section*.52}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Invariants}{9}{section*.53}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Failure modes and debug hooks}{9}{section*.54}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Core runtime types}{9}{section*.55}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Declared effects}{9}{section*.57}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces Key runtime structures used by the scheduler.\relax }}{10}{table.caption.56}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{From effect to scheduler (worked example)}{10}{section*.58}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {5}{\ignorespaces Effect-to-scheduler mapping.\relax }}{10}{table.caption.59}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Instant loop and signal finalization}{10}{section*.60}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Queue discipline and fairness}{11}{section*.61}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Instant loop pseudo-code}{11}{lstlisting.-22}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Execution trace (guard + watch)}{11}{section*.64}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces High-level flowchart of the instant-based scheduler.\relax }}{11}{figure.caption.63}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {6}{\ignorespaces Concrete execution trace for guard + watch (example above).\relax }}{11}{table.caption.65}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {7}{\ignorespaces Two-instant observable trace for the example program.\relax }}{11}{table.caption.66}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Signal operations}{11}{section*.67}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Guards and blocking}{12}{section*.69}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Signal state evolution within an instant.\relax }}{12}{figure.caption.68}\protected@file@percent }
+\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
+\newlabel{fig:signal-state}{{4}{12}{Signal state evolution within an instant.\relax }{figure.caption.68}{}}
+\@writefile{toc}{\contentsline {paragraph}{Guard disjunction by nesting}{12}{section*.70}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Effect \texttt  {With\_guard} and \texttt  {when\_}}{13}{section*.71}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Guard resumption trace}{13}{section*.72}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Effect \texttt  {With\_kill} and \texttt  {watch}}{13}{section*.73}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Worked walkthrough: \texttt  {watch}}{13}{section*.74}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Weak preemption with kill tokens}{13}{section*.75}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Kill tokens and nested \texttt  {watch}}{13}{section*.76}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Kill cleanup timing}{13}{section*.77}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Host I/O hooks}{14}{section*.78}\protected@file@percent }
+\newlabel{sec:helper-glossary}{{8}{14}{Runtime helper glossary}{section*.79}{}}
+\@writefile{toc}{\contentsline {paragraph}{Runtime helper glossary}{14}{section*.79}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.1}Algebraic Effects in Detail}{14}{subsection.8.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Handler pseudo-code}{14}{lstlisting.-28}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.2}Detailed Effect Traces}{14}{subsection.8.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Trace: \texttt  {await\_immediate}}{14}{section*.81}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {8}{\ignorespaces Scheduler actions for \texttt  {await\_immediate}.\relax }}{14}{table.caption.82}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Trace: \texttt  {pause}}{14}{section*.83}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Trace: \texttt  {parallel}}{14}{section*.84}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Trace: \texttt  {watch}}{15}{section*.85}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {9}{\ignorespaces Execution trace for \texttt  {watch}.\relax }}{15}{table.caption.86}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Trace: \texttt  {when\_}}{15}{section*.87}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.3}Code Map: from API to Runtime}{15}{subsection.8.3}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {10}{\ignorespaces Mapping from API to runtime mechanisms.\relax }}{15}{table.caption.88}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {9}Performance}{15}{section.9}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Scheduler complexity}{15}{section*.89}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Signal operations}{15}{section*.90}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Queue sizes and memory}{15}{section*.91}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Assumptions}{15}{section*.92}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Effect and allocation overhead}{15}{section*.93}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Preemption and guard costs}{15}{section*.94}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{ReactiveML comparison plan}{15}{section*.95}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Benchmark parameters}{15}{table.caption.97}\protected@file@percent }
+\citation{esterel1992,fairthreads2003,reactiveml2005}
+\citation{lustre1991,signal1987,benveniste2003}
+\citation{harel1987statecharts}
+\citation{berry2007scade}
+\citation{caspihamonpouzet2008lucid,schneider2017quartz}
+\@writefile{lot}{\contentsline {table}{\numberline {11}{\ignorespaces Benchmark parameters and expected cost drivers.\relax }}{16}{table.caption.97}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Reproducibility outline}{16}{section*.98}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Concrete protocol}{16}{section*.99}\protected@file@percent }
+\newlabel{sec:feature-tests}{{9}{16}{Test coverage map}{section*.100}{}}
+\@writefile{toc}{\contentsline {paragraph}{Test coverage map}{16}{section*.100}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Testing strategy (summary)}{16}{section*.101}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {10}Limitations and Trade-offs}{16}{section.10}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {11}Related Work}{16}{section.11}\protected@file@percent }
+\citation{frp1997}
+\citation{ashcroft1977lucid,thies2002streamit}
+\citation{bahr2019ratt,bahr2022modalfrp,bahr2023async}
+\citation{bahr2025gui}
+\citation{cheng2017reactivestreams,davis2019reactivestreams}
+\citation{multicoreocaml2020}
+\citation{danvyfilinski1990,filinski1994,plotkinpretnar2009}
+\citation{eff2013}
+\citation{esterel1985,esterel1992,reactiveml2008}
+\citation{plotkinpretnar2009,eff2013}
+\citation{mendlerpouzet2025psm}
+\citation{lustre1991,esterel1992}
+\citation{lustre1991,esterel1992}
+\citation{esterel1992}
+\citation{reactiveml2015}
+\citation{kahn1974}
+\@writefile{toc}{\contentsline {section}{\numberline {12}Conclusion}{17}{section.12}\protected@file@percent }
+\newlabel{sec:future-work}{{12}{17}{Future work}{section*.102}{}}
+\@writefile{toc}{\contentsline {paragraph}{Future work}{17}{section*.102}\protected@file@percent }
+\bibstyle{ACM-Reference-Format}
+\bibdata{references}
+\bibcite{ashcroft1977lucid}{{1}{1977}{{Ashcroft and Wadge}}{{}}}
+\bibcite{bahr2022modalfrp}{{2}{2022}{{Bahr}}{{}}}
+\bibcite{bahr2019ratt}{{3}{2019}{{Bahr et~al\mbox  {.}}}{{}}}
+\bibcite{bahr2023async}{{4}{2023}{{Bahr and M{\o }gelberg}}{{}}}
+\bibcite{eff2013}{{5}{2015}{{Bauer and Pretnar}}{{}}}
+\bibcite{benveniste2003}{{6}{2003}{{Benveniste et~al\mbox  {.}}}{{}}}
+\bibcite{esterel1985}{{7}{1985}{{Berry}}{{}}}
+\bibcite{berry2007scade}{{8}{2007}{{Berry}}{{}}}
+\bibcite{esterel1992}{{9}{1992}{{Berry and Gonthier}}{{}}}
+\bibcite{fairthreads2003}{{10}{2005}{{Boussinot}}{{}}}
+\bibcite{caspihamonpouzet2008lucid}{{11}{2008}{{Caspi et~al\mbox  {.}}}{{}}}
+\bibcite{cheng2017reactivestreams}{{12}{2017}{{Cheng}}{{}}}
+\bibcite{danvyfilinski1990}{{13}{1990}{{Danvy and Filinski}}{{}}}
+\bibcite{davis2019reactivestreams}{{14}{2019}{{Davis}}{{}}}
+\bibcite{bahr2025gui}{{15}{2025}{{Disch et~al\mbox  {.}}}{{}}}
+\bibcite{multicoreocaml2020}{{16}{2021}{{Dolan et~al\mbox  {.}}}{{}}}
+\bibcite{frp1997}{{17}{1997}{{Elliott and Hudak}}{{}}}
+\bibcite{filinski1994}{{18}{1994}{{Filinski}}{{}}}
+\bibcite{lustre1991}{{19}{1991}{{Halbwachs et~al\mbox  {.}}}{{}}}
+\bibcite{harel1987statecharts}{{20}{1987}{{Harel}}{{}}}
+\bibcite{kahn1974}{{21}{1974}{{Kahn}}{{}}}
+\bibcite{signal1987}{{22}{1987}{{Le~Guernic et~al\mbox  {.}}}{{}}}
+\bibcite{reactiveml2005}{{23}{2005}{{Mandel and Pouzet}}{{}}}
+\bibcite{reactiveml2008}{{24}{2008}{{Mandel and Pouzet}}{{}}}
+\bibcite{reactiveml2015}{{25}{2015}{{Mandel et~al\mbox  {.}}}{{}}}
+\bibcite{mendlerpouzet2025psm}{{26}{2025}{{Mendler and Pouzet}}{{}}}
+\bibcite{perez2016frp}{{27}{2016}{{Perez et~al\mbox  {.}}}{{}}}
+\bibcite{plotkinpretnar2009}{{28}{2009}{{Plotkin and Pretnar}}{{}}}
+\bibcite{schneider2017quartz}{{29}{2017}{{Schneider and Brandt}}{{}}}
+\bibcite{thies2002streamit}{{30}{2002}{{Thies et~al\mbox  {.}}}{{}}}
+\newlabel{tocindent-1}{0pt}
+\newlabel{tocindent0}{0pt}
+\newlabel{tocindent1}{8.37pt}
+\newlabel{tocindent2}{10.34999pt}
+\newlabel{tocindent3}{0pt}
+\@writefile{toc}{\contentsline {section}{References}{18}{section*.104}\protected@file@percent }
+\newlabel{TotPages}{{18}{18}{}{page.18}{}}
+\gdef \@abspage@last{18}

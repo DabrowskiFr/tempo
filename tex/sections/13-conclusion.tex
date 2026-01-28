@@ -1,0 +1,72 @@
+\section{Conclusion}
+This draft presented \tempo{} as a lightweight synchronous runtime and explained
+how its control constructs are implemented with OCaml 5.3 algebraic effects.
+The report positioned \tempo{} within the reactive control lineage, clarified the
+core constructs (logical instants, signals, guards, weak preemption), and
+detailed the scheduler and effect-handler design. The current level of
+confidence in correctness relies on an extensive test suite that exercises the
+expected instant-based semantics across all public features (signals, aggregate
+signals, guards, preemption, await\_immediate, parallel composition, and
+derived combinators).
+See Section~\ref{sec:feature-tests} for a feature-to-test mapping.
+
+The determinism guarantees discussed in this report assume standard purity
+discipline: programs should avoid shared mutable state whose outcomes depend on
+intra-instant scheduling, and aggregate combine functions should be
+order-insensitive. These assumptions match the synchronous control model and
+clarify the scope of the current guarantees.
+
+\paragraph{Future work}\label{sec:future-work}
+We plan to formalize correctness in two steps. First, we will define a
+high-level synchronous semantics and prove a refinement relation with an
+abstract scheduler model (e.g., along the lines of formal treatments of
+synchronous languages and their operational models
+\cite{esterel1985,esterel1992,reactiveml2008}). Second, we will connect this
+abstract scheduler to the concrete effect-handler implementation, drawing on
+formal work on algebraic effects and handlers
+\cite{plotkinpretnar2009,eff2013}. This two-layer approach is intended to
+bridge the gap between the user-facing semantics and the low-level execution
+mechanism.
+
+Two additional concerns are central. First, the use of references for
+communication can break semantic determinism: even if the implementation fixes
+the evaluation order within an instant, that order is not specified by the
+semantics and can change across versions. Addressing this requires static
+analyses that detect or rule out order-sensitive behaviors. Second, \tempo{}'s
+parallelism is currently logical rather than physical. Supporting physical
+parallelism risks reintroducing nondeterminism unless the scheduler enforces a
+deterministic memory discipline. We plan to investigate recent work by Pouzet
+and Mendler on PSM for guidance on deterministic shared-memory parallelism
+\cite{mendlerpouzet2025psm} (currently a preprint). Finally, adding asynchronous
+computations for selected programming idioms is an open direction, provided
+their interaction with instant-based determinism remains controlled.
+
+Additional avenues include: (1) formalizing the host I/O contract with a
+precise notion of input injection and output observation per instant, aligned
+with synchronous language interfaces \cite{lustre1991,esterel1992}; (2)
+designing static analyses or effect disciplines to detect order-sensitive use
+of shared mutable state, in the spirit of clock/causality analyses
+\cite{lustre1991,esterel1992}; (3) exploring partial compilation or macro
+expansion to reduce effect overhead in hot paths, following compilation
+strategies in synchronous languages \cite{esterel1992}; (4) adding instant-level
+profiling support (queue sizes, wakeups, guard checks) to aid performance
+diagnosis, building on tooling experience from reactive implementations
+\cite{reactiveml2015}; and (5) clarifying aggregation semantics for
+non-commutative combines, either by fixing a reduction order or by restricting
+such combines to controlled modes, drawing on deterministic stream models
+\cite{kahn1974}.
+
+As a simple illustration, two parallel tasks that both mutate a shared
+reference and then emit a signal can produce different outcomes depending on
+their evaluation order within the instant. Since that order is not part of the
+semantic contract, relying on it compromises determinism and motivates static
+analyses that forbid or control such patterns.
+\begin{lstlisting}[style=tempo]
+let r = ref 0 in
+parallel [
+  (fun () -> r := 1; emit s !r);
+  (fun () -> r := 2; emit s !r)
+]
+\end{lstlisting}
+Depending on the evaluation order in the instant, the emitted value can be
+\texttt{1} or \texttt{2}, despite identical source code.

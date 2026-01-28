@@ -1,0 +1,245 @@
+\section{Usage and Examples}
+This section provides a minimal example that emits a signal and awaits its
+presence in the next instant, followed by a larger example that uses guarded
+execution and weak preemption. The examples are aligned with the tests in
+\texttt{tests/ok} to ensure they are executable and representative (e.g.,
+\texttt{emit\_once\_await\_one.ml}, \texttt{watch\_when\_complete.ml}).
+
+To execute the examples, run the corresponding test binaries, e.g.:
+\begin{lstlisting}[style=tempo]
+dune exec tests/ok/emit_once_await_one.exe
+dune exec tests/ok/watch_when_complete.exe
+\end{lstlisting}
+
+Reading the examples. Each example is written as a function \texttt{program}
+passed to \texttt{execute}. The host provides an input stream by emitting on
+the input signal before each instant and observes output after each instant.
+Thus, the observable behavior of a program is a sequence of values emitted on
+the output signal at instant boundaries.
+
+\paragraph{End-to-end example 1: input/output echo}
+This example waits for an input value and echoes it on the output signal in the
+next instant.
+\begin{lstlisting}[style=tempo]
+let program input output =
+  let v = await input in
+  emit output v
+
+let () = execute program
+\end{lstlisting}
+Step-by-step behavior:
+\begin{enumerate}
+\item Instant $t$: the host emits on \texttt{input} via the \texttt{execute}
+  hook; the program is awaiting and either registers a waiter or is scheduled
+  for the next instant if the signal is already present.
+\item Instant $t{+}1$: the awaiting continuation resumes and emits on
+  \texttt{output}, which the host observes at the end of the step.
+\end{enumerate}
+
+\paragraph{End-to-end example 2: guarded wait with timeout}
+This example waits for a request, but is weakly preempted if a timeout signal
+is emitted after $n$ instants.
+\begin{lstlisting}[style=tempo]
+let rec timeout_after n s =
+  if n = 0 then emit s ()
+  else (pause (); timeout_after (n - 1) s)
+
+let program input output =
+  let request = new_signal () in
+  let timeout = new_signal () in
+  let _ = fork (fun () -> timeout_after 3 timeout) in
+  let handled = new_signal () in
+  let _ = fork (fun () ->
+    watch timeout (fun () ->
+      let v = await request in
+      emit handled ();
+      emit output (`Ok v))) in
+  let _ = fork (fun () ->
+    when_ timeout (fun () ->
+      present_then_else handled
+        (fun () -> ())
+        (fun () -> emit output `Timeout))) in
+  let v = await input in
+  emit request v
+
+let () = execute program
+\end{lstlisting}
+Step-by-step behavior:
+\begin{enumerate}
+\item A timer process emits \texttt{timeout} after 3 instants.
+\item A forked branch waits on \texttt{request} but is wrapped in
+  \texttt{watch timeout}, so it is terminated at the end of the instant in
+  which \texttt{timeout} is emitted.
+\item If \texttt{request} arrives before timeout, the guarded branch emits
+  \texttt{\`Ok v} and marks \texttt{handled}. Otherwise, the timeout branch
+  emits \texttt{\`Timeout}.
+\end{enumerate}
+Note: the \texttt{handled} guard prevents emitting \texttt{\`Timeout} in the
+same instant as \texttt{\`Ok v}, even under weak preemption.
+
+In practice, this pattern makes timeouts compositional: the timeout branch is
+expressed separately from the request handler, while determinism is preserved
+through explicit guards and instant boundaries.
+
+\paragraph{Running example used in the implementation section}\label{ex:guard-watch}
+The following small program appears again in the implementation section to
+illustrate queue movement, guard blocking, and weak preemption:
+\begin{lstlisting}[style=tempo]
+let g = new_signal () in
+let s = new_signal () in
+let guarded = (fun () -> when_ g (fun () -> emit s ())) in
+let watched = (fun () -> watch s (fun () -> pause (); emit s ())) in
+parallel [guarded; watched]
+\end{lstlisting}
+The key behaviors are: (1) the guarded task blocks until \texttt{g} is present;
+(2) the watched task can emit \texttt{s} in the same instant; (3) the
+\texttt{watch} prevents the watched task from continuing in the next instant.
+
+\paragraph{Guard disjunctions and preemption}
+The following patterns illustrate that guard disjunctions are obtained by
+parallel guarded branches, and that nested preemptions act as a disjunction of
+stopping conditions.
+\begin{lstlisting}[style=tempo]
+(* Guard disjunction via parallel branches. *)
+let guarded body =
+  parallel [
+    (fun () -> when_ g1 (fun () -> body ()));
+    (fun () -> when_ g2 (fun () -> body ()))
+  ]
+
+(* Preemption disjunction: stop if s1 OR s2 is emitted. *)
+let preempted body =
+  watch s1 (fun () ->
+    watch s2 (fun () ->
+      body ()))
+\end{lstlisting}
+
+\paragraph{Derived control primitives}
+\tempo{} provides higher-level control structures built from the primitives.
+For instance, \linebreak \texttt{present\_then\_else} branches on signal
+presence at the end of an instant. It provides a deterministic conditional
+construct.
+\begin{lstlisting}[style=tempo]
+(* Execute then_body if s becomes present this instant, else else_body. *)
+present_then_else s
+  (fun () -> then_body ())
+  (fun () -> else_body ())
+\end{lstlisting}
+
+Another derived pattern is \texttt{every\_do}, which executes a body whenever
+the signal becomes present, while avoiding immediate re-triggering within the
+same instant.
+\begin{lstlisting}[style=tempo]
+let rec every_do s body =
+  let _ = await s in
+  pause ();
+  let completion = new_signal () in
+  watch s (fun () ->
+    body ();
+    emit completion ());
+  present_then_else completion
+    (fun () -> pause (); every_do s body)
+    (fun () -> every_do s body)
+\end{lstlisting}
+This pattern uses a \texttt{pause} to avoid strong re-triggering in the same
+instant, preserving weak restart semantics aligned with synchronous control.
+This corresponds to the restart discipline described in Section~4, where
+explicit pauses separate instants to keep reactions deterministic.
+
+\paragraph{Use case: reactive I/O protocol}
+This example models a simple device handshake: a request from the environment
+must be acknowledged within a bounded number of instants. If the acknowledgement
+does not arrive in time, the protocol emits a timeout. This pattern is typical
+of sensor/actuator control loops where a response deadline is required.
+Here, the environment is the host input stream provided to \texttt{execute}.
+The device model is a simulated internal component used to illustrate the
+protocol; in a real system it would be replaced by actual I/O.
+\begin{lstlisting}[style=tempo]
+let rec timeout_after n timeout =
+  if n = 0 then emit timeout ()
+  else (pause (); timeout_after (n - 1) timeout)
+
+let protocol request ack output =
+  let timeout = new_signal () in
+  let _ = fork (fun () -> timeout_after 2 timeout) in
+  let handled = new_signal () in
+  let _ = fork (fun () ->
+    watch timeout (fun () ->
+      let payload = await request in
+      emit handled ();
+      emit output (`Got payload))) in
+  let _ = fork (fun () ->
+    when_ timeout (fun () ->
+      present_then_else handled
+        (fun () -> ())
+        (fun () -> emit output `Timeout))) in
+  let _ = await ack in
+  ()
+
+let program input output =
+  let ack = new_signal () in (* internal ack from device model *)
+  let _ = fork (fun () -> protocol input ack output) in
+  (* Environment-provided request; internal device emits ack. *)
+  let _ = fork (fun () ->
+    let _ = await input in
+    pause ();
+    emit ack ()) in
+  ()
+
+let () = execute program
+\end{lstlisting}
+Step-by-step behavior:
+\begin{enumerate}
+\item Instant $t$: the protocol waits for \texttt{request} and arms a timer.
+\item Instant $t{+}1$: if \texttt{request} arrives, the simulated device emits
+  \texttt{ack} in the next instant; the protocol can emit \texttt{`Got payload}
+  unless the timeout fires first.
+\item Instant $t{+}2$: if no request was handled, the timeout branch emits
+  \texttt{`Timeout}. The \texttt{watch} ensures the request handler is
+  preempted once the timeout is present.
+\end{enumerate}
+
+\paragraph{Timeline (environment vs internal)}
+\begin{table}[h]
+\centering
+\begin{tabularx}{\linewidth}{lY}
+\hline
+Instant & Observable events \\ \hline
+$t$ & Environment may emit \texttt{request}. \\
+$t{+}1$ & Internal: \texttt{ack} emitted by device model; protocol may emit
+\texttt{`Got payload}. \\
+$t{+}2$ & Internal: timeout may emit \texttt{`Timeout} if not handled. \\ \hline
+\end{tabularx}
+\caption{Timeline for the reactive I/O protocol.}
+\end{table}
+
+\paragraph{Extended scenario: periodic sampling with timeout}
+This example models a periodic sensor read where a sample must be acknowledged
+within a fixed number of instants; otherwise a timeout is raised.
+\begin{lstlisting}[style=tempo]
+let rec every_tick tick body =
+  let _ = await tick in
+  body ();
+  pause ();
+  every_tick tick body
+
+let rec timeout_after n timeout =
+  if n = 0 then emit timeout ()
+  else (pause (); timeout_after (n - 1) timeout)
+
+let program input output =
+  let tick = new_signal () in
+  let ack = new_signal () in
+  let timeout = new_signal () in
+  let _ = fork (fun () -> every_tick tick (fun () -> emit input ())) in
+  let _ = fork (fun () -> timeout_after 2 timeout) in
+  let _ = fork (fun () ->
+    watch timeout (fun () ->
+      let _ = await input in
+      emit ack ())) in
+  when_ timeout (fun () -> emit output `Timeout);
+  let _ = await ack in
+  emit output `Ok
+\end{lstlisting}
+This scenario highlights the interaction between periodic activation, weak
+preemption, and bounded response times.

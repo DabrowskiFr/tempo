@@ -1,0 +1,11 @@
+\tempo{} is a lightweight synchronous runtime for OCaml that revisits the
+reactive control lineage of Esterel, FairThreads, and ReactiveML using OCaml
+5.3 algebraic effects. The library implements logical instants, valued signals,
+guards, and weak preemption while preserving the delayed-absence discipline
+that enables deterministic concurrency under standard purity assumptions (no
+shared mutable state dependent on intra-instant order and order-insensitive
+aggregation). This report positions \tempo{} in its
+semantic context, explains its API and usage patterns, and provides a detailed
+account of how effect handlers realize the scheduler and control primitives at
+library level. The current draft emphasizes design and implementation; formal
+correctness and quantitative evaluation are identified as future work.

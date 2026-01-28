@@ -1,0 +1,461 @@
+%%% -*-BibTeX-*-
+%%% Do NOT edit. File created by BibTeX with style
+%%% ACM-Reference-Format-Journals [18-Jan-2012].
+
+\begin{thebibliography}{30}
+
+%%% ====================================================================
+%%% NOTE TO THE USER: you can override these defaults by providing
+%%% customized versions of any of these macros before the \bibliography
+%%% command.  Each of them MUST provide its own final punctuation,
+%%% except for \shownote{}, \showDOI{}, and \showURL{}.  The latter two
+%%% do not use final punctuation, in order to avoid confusing it with
+%%% the Web address.
+%%%
+%%% To suppress output of a particular field, define its macro to expand
+%%% to an empty string, or better, \unskip, like this:
+%%%
+%%% \newcommand{\showDOI}[1]{\unskip}   % LaTeX syntax
+%%%
+%%% \def \showDOI #1{\unskip}           % plain TeX syntax
+%%%
+%%% ====================================================================
+
+\ifx \showCODEN    \undefined \def \showCODEN     #1{\unskip}     \fi
+\ifx \showDOI      \undefined \def \showDOI       #1{#1}\fi
+\ifx \showISBNx    \undefined \def \showISBNx     #1{\unskip}     \fi
+\ifx \showISBNxiii \undefined \def \showISBNxiii  #1{\unskip}     \fi
+\ifx \showISSN     \undefined \def \showISSN      #1{\unskip}     \fi
+\ifx \showLCCN     \undefined \def \showLCCN      #1{\unskip}     \fi
+\ifx \shownote     \undefined \def \shownote      #1{#1}          \fi
+\ifx \showarticletitle \undefined \def \showarticletitle #1{#1}   \fi
+\ifx \showURL      \undefined \def \showURL       {\relax}        \fi
+% The following commands are used for tagged output and should be
+% invisible to TeX
+\providecommand\bibfield[2]{#2}
+\providecommand\bibinfo[2]{#2}
+\providecommand\natexlab[1]{#1}
+\providecommand\showeprint[2][]{arXiv:#2}
+
+\bibitem[Ashcroft and Wadge(1977)]%
+        {ashcroft1977lucid}
+\bibfield{author}{\bibinfo{person}{E.~A. Ashcroft} {and} \bibinfo{person}{W.~W.
+  Wadge}.} \bibinfo{year}{1977}\natexlab{}.
+\newblock \showarticletitle{Lucid, a Nonprocedural Language with Iteration}.
+\newblock \bibinfo{journal}{\emph{Commun. ACM}} \bibinfo{volume}{20},
+  \bibinfo{number}{7} (\bibinfo{year}{1977}), \bibinfo{pages}{519--526}.
+\newblock
+\urldef\tempurl%
+\url{https://doi.org/10.1145/359636.359715}
+\showDOI{\tempurl}
+
+
+\bibitem[Bahr(2022)]%
+        {bahr2022modalfrp}
+\bibfield{author}{\bibinfo{person}{Patrick Bahr}.}
+  \bibinfo{year}{2022}\natexlab{}.
+\newblock \showarticletitle{Modal FRP for All: Functional Reactive Programming
+  without Space Leaks in Haskell}.
+\newblock \bibinfo{journal}{\emph{Journal of Functional Programming}}
+  \bibinfo{volume}{32} (\bibinfo{year}{2022}).
+\newblock
+\urldef\tempurl%
+\url{https://doi.org/10.1017/S0956796822000132}
+\showDOI{\tempurl}
+
+
+\bibitem[Bahr et~al\mbox{.}(2019)]%
+        {bahr2019ratt}
+\bibfield{author}{\bibinfo{person}{Patrick Bahr},
+  \bibinfo{person}{Christian~Uldal Graulund}, {and}
+  \bibinfo{person}{Rasmus~Ejlers M{\o}gelberg}.}
+  \bibinfo{year}{2019}\natexlab{}.
+\newblock \showarticletitle{Simply RaTT: A Fitch-Style Modal Calculus for
+  Reactive Programming without Space Leaks}.
+\newblock \bibinfo{journal}{\emph{Proceedings of the ACM on Programming
+  Languages}} \bibinfo{volume}{3}, \bibinfo{number}{ICFP}
+  (\bibinfo{year}{2019}), \bibinfo{pages}{1--27}.
+\newblock
+\urldef\tempurl%
+\url{https://doi.org/10.1145/3341713}
+\showDOI{\tempurl}
+
+
+\bibitem[Bahr and M{\o}gelberg(2023)]%
+        {bahr2023async}
+\bibfield{author}{\bibinfo{person}{Patrick Bahr} {and}
+  \bibinfo{person}{Rasmus~Ejlers M{\o}gelberg}.}
+  \bibinfo{year}{2023}\natexlab{}.
+\newblock \showarticletitle{Asynchronous Modal FRP}.
+\newblock \bibinfo{journal}{\emph{Proceedings of the ACM on Programming
+  Languages}} \bibinfo{volume}{7}, \bibinfo{number}{ICFP}
+  (\bibinfo{year}{2023}), \bibinfo{pages}{476--510}.
+\newblock
+\urldef\tempurl%
+\url{https://doi.org/10.1145/3607847}
+\showDOI{\tempurl}
+
+
+\bibitem[Bauer and Pretnar(2015)]%
+        {eff2013}
+\bibfield{author}{\bibinfo{person}{Andrej Bauer} {and} \bibinfo{person}{Matija
+  Pretnar}.} \bibinfo{year}{2015}\natexlab{}.
+\newblock \showarticletitle{Programming with Algebraic Effects and Handlers}.
+\newblock \bibinfo{journal}{\emph{Journal of Logical and Algebraic Methods in
+  Programming}} \bibinfo{volume}{84}, \bibinfo{number}{1}
+  (\bibinfo{year}{2015}), \bibinfo{pages}{108--123}.
+\newblock
+\urldef\tempurl%
+\url{https://doi.org/10.1016/j.jlamp.2014.02.001}
+\showDOI{\tempurl}
+
+
+\bibitem[Benveniste et~al\mbox{.}(2003)]%
+        {benveniste2003}
+\bibfield{author}{\bibinfo{person}{Albert Benveniste}, \bibinfo{person}{Paul
+  Caspi}, \bibinfo{person}{Stephen~A. Edwards}, \bibinfo{person}{Nicolas
+  Halbwachs}, \bibinfo{person}{Paul Le~Guernic}, {and} \bibinfo{person}{Roberto
+  de Simone}.} \bibinfo{year}{2003}\natexlab{}.
+\newblock \showarticletitle{The Synchronous Languages 12 Years Later}.
+\newblock \bibinfo{journal}{\emph{Proc. IEEE}} \bibinfo{volume}{91},
+  \bibinfo{number}{1} (\bibinfo{year}{2003}), \bibinfo{pages}{64--83}.
+\newblock
+\urldef\tempurl%
+\url{https://doi.org/10.1109/JPROC.2002.805826}
+\showDOI{\tempurl}
+
+
+\bibitem[Berry(1985)]%
+        {esterel1985}
+\bibfield{author}{\bibinfo{person}{G{\'e}rard Berry}.}
+  \bibinfo{year}{1985}\natexlab{}.
+\newblock \showarticletitle{The ESTEREL Synchronous Programming Language and
+  Its Mathematical Semantics}. In \bibinfo{booktitle}{\emph{Lecture Notes in
+  Computer Science}}.
+\newblock
+\urldef\tempurl%
+\url{https://doi.org/10.1007/3-540-15670-4_19}
+\showDOI{\tempurl}
+\newblock
+\shownote{Add exact volume/pages if needed}.
+
+
+\bibitem[Berry(2007)]%
+        {berry2007scade}
+\bibfield{author}{\bibinfo{person}{G{\'e}rard Berry}.}
+  \bibinfo{year}{2007}\natexlab{}.
+\newblock \bibinfo{booktitle}{\emph{SCADE: Synchronous Design and Validation of
+  Embedded Control Software}}.
+\newblock \bibinfo{pages}{19--33}.
+\newblock
+\urldef\tempurl%
+\url{https://doi.org/10.1007/978-1-4020-6254-4_2}
+\showDOI{\tempurl}
+
+
+\bibitem[Berry and Gonthier(1992)]%
+        {esterel1992}
+\bibfield{author}{\bibinfo{person}{G{\'e}rard Berry} {and}
+  \bibinfo{person}{Georges Gonthier}.} \bibinfo{year}{1992}\natexlab{}.
+\newblock \showarticletitle{The Esterel Synchronous Programming Language:
+  Design, Semantics, Implementation}.
+\newblock \bibinfo{journal}{\emph{Science of Computer Programming}}
+  \bibinfo{volume}{19}, \bibinfo{number}{2} (\bibinfo{year}{1992}),
+  \bibinfo{pages}{87--152}.
+\newblock
+\urldef\tempurl%
+\url{https://doi.org/10.1016/0167-6423(92)90005-V}
+\showDOI{\tempurl}
+
+
+\bibitem[Boussinot(2005)]%
+        {fairthreads2003}
+\bibfield{author}{\bibinfo{person}{Fr{\'e}d{\'e}ric Boussinot}.}
+  \bibinfo{year}{2005}\natexlab{}.
+\newblock \showarticletitle{FairThreads: Mixing Cooperative and Preemptive
+  Threads in C}.
+\newblock \bibinfo{journal}{\emph{Concurrency and Computation: Practice and
+  Experience}} \bibinfo{volume}{18}, \bibinfo{number}{5}
+  (\bibinfo{year}{2005}), \bibinfo{pages}{445--469}.
+\newblock
+\urldef\tempurl%
+\url{https://doi.org/10.1002/cpe.919}
+\showDOI{\tempurl}
+
+
+\bibitem[Caspi et~al\mbox{.}(2008)]%
+        {caspihamonpouzet2008lucid}
+\bibfield{author}{\bibinfo{person}{Paul Caspi}, \bibinfo{person}{Gr{\'e}goire
+  Hamon}, {and} \bibinfo{person}{Marc Pouzet}.}
+  \bibinfo{year}{2008}\natexlab{}.
+\newblock \bibinfo{title}{Synchronous Functional Programming with Lucid
+  Synchrone}.
+\newblock , \bibinfo{numpages}{207--247}~pages.
+\newblock
+\urldef\tempurl%
+\url{https://doi.org/10.1002/9780470611012.ch7}
+\showDOI{\tempurl}
+
+
+\bibitem[Cheng(2017)]%
+        {cheng2017reactivestreams}
+\bibfield{author}{\bibinfo{person}{Fu Cheng}.} \bibinfo{year}{2017}\natexlab{}.
+\newblock \bibinfo{booktitle}{\emph{Reactive Streams}}.
+\newblock \bibinfo{pages}{87--97}.
+\newblock
+\urldef\tempurl%
+\url{https://doi.org/10.1007/978-1-4842-3330-6_7}
+\showDOI{\tempurl}
+
+
+\bibitem[Danvy and Filinski(1990)]%
+        {danvyfilinski1990}
+\bibfield{author}{\bibinfo{person}{Olivier Danvy} {and}
+  \bibinfo{person}{Andrzej Filinski}.} \bibinfo{year}{1990}\natexlab{}.
+\newblock \showarticletitle{Abstracting Control}. In
+  \bibinfo{booktitle}{\emph{Proceedings of the 1990 ACM Conference on LISP and
+  Functional Programming (LFP)}}. \bibinfo{pages}{151--160}.
+\newblock
+\urldef\tempurl%
+\url{https://doi.org/10.1145/91556.91622}
+\showDOI{\tempurl}
+
+
+\bibitem[Davis(2019)]%
+        {davis2019reactivestreams}
+\bibfield{author}{\bibinfo{person}{Adam~L. Davis}.}
+  \bibinfo{year}{2019}\natexlab{}.
+\newblock \bibinfo{booktitle}{\emph{Reactive Streams in Java: Concurrency with
+  RxJava, Reactor, and Akka Streams}}.
+\newblock
+\urldef\tempurl%
+\url{https://doi.org/10.1007/978-1-4842-4176-9}
+\showDOI{\tempurl}
+
+
+\bibitem[Disch et~al\mbox{.}(2025)]%
+        {bahr2025gui}
+\bibfield{author}{\bibinfo{person}{Jean-Claude Disch}, \bibinfo{person}{Asger
+  Heegaard}, {and} \bibinfo{person}{Patrick Bahr}.}
+  \bibinfo{year}{2025}\natexlab{}.
+\newblock \showarticletitle{Functional Reactive GUI Programming with Modal
+  Types}. In \bibinfo{booktitle}{\emph{Trends in Functional Programming}}.
+  \bibinfo{pages}{93--114}.
+\newblock
+\urldef\tempurl%
+\url{https://doi.org/10.1007/978-3-031-99751-8_5}
+\showDOI{\tempurl}
+
+
+\bibitem[Dolan et~al\mbox{.}(2021)]%
+        {multicoreocaml2020}
+\bibfield{author}{\bibinfo{person}{Stephen Dolan}, \bibinfo{person}{Leo White},
+  \bibinfo{person}{Anil Madhavapeddy}, {et~al\mbox{.}}}
+  \bibinfo{year}{2021}\natexlab{}.
+\newblock \showarticletitle{Retrofitting Effect Handlers onto OCaml}. In
+  \bibinfo{booktitle}{\emph{Proceedings of the 42nd ACM SIGPLAN International
+  Conference on Programming Language Design and Implementation (PLDI)}}.
+  \bibinfo{pages}{206--221}.
+\newblock
+\urldef\tempurl%
+\url{https://doi.org/10.1145/3453483.3454039}
+\showDOI{\tempurl}
+
+
+\bibitem[Elliott and Hudak(1997)]%
+        {frp1997}
+\bibfield{author}{\bibinfo{person}{Conal Elliott} {and} \bibinfo{person}{Paul
+  Hudak}.} \bibinfo{year}{1997}\natexlab{}.
+\newblock \showarticletitle{Functional Reactive Animation}. In
+  \bibinfo{booktitle}{\emph{Proceedings of the International Conference on
+  Functional Programming (ICFP)}}. \bibinfo{pages}{263--273}.
+\newblock
+\urldef\tempurl%
+\url{https://doi.org/10.1145/258949.258973}
+\showDOI{\tempurl}
+
+
+\bibitem[Filinski(1994)]%
+        {filinski1994}
+\bibfield{author}{\bibinfo{person}{Andrzej Filinski}.}
+  \bibinfo{year}{1994}\natexlab{}.
+\newblock \showarticletitle{Representing Monads}. In
+  \bibinfo{booktitle}{\emph{Proceedings of the 21st ACM SIGPLAN-SIGACT
+  Symposium on Principles of Programming Languages (POPL)}}.
+  \bibinfo{pages}{446--457}.
+\newblock
+\urldef\tempurl%
+\url{https://doi.org/10.1145/174675.178047}
+\showDOI{\tempurl}
+
+
+\bibitem[Halbwachs et~al\mbox{.}(1991)]%
+        {lustre1991}
+\bibfield{author}{\bibinfo{person}{Nicolas Halbwachs}, \bibinfo{person}{Paul
+  Caspi}, \bibinfo{person}{Pascal Raymond}, {and} \bibinfo{person}{Daniel
+  Pilaud}.} \bibinfo{year}{1991}\natexlab{}.
+\newblock \showarticletitle{The Synchronous Data Flow Programming Language
+  LUSTRE}.
+\newblock \bibinfo{journal}{\emph{Proc. IEEE}} \bibinfo{volume}{79},
+  \bibinfo{number}{9} (\bibinfo{year}{1991}), \bibinfo{pages}{1305--1320}.
+\newblock
+\urldef\tempurl%
+\url{https://doi.org/10.1109/5.97300}
+\showDOI{\tempurl}
+
+
+\bibitem[Harel(1987)]%
+        {harel1987statecharts}
+\bibfield{author}{\bibinfo{person}{David Harel}.}
+  \bibinfo{year}{1987}\natexlab{}.
+\newblock \showarticletitle{Statecharts: A Visual Formalism for Complex
+  Systems}.
+\newblock \bibinfo{journal}{\emph{Science of Computer Programming}}
+  \bibinfo{volume}{8}, \bibinfo{number}{3} (\bibinfo{year}{1987}),
+  \bibinfo{pages}{231--274}.
+\newblock
+\urldef\tempurl%
+\url{https://doi.org/10.1016/0167-6423(87)90035-9}
+\showDOI{\tempurl}
+
+
+\bibitem[Kahn(1974)]%
+        {kahn1974}
+\bibfield{author}{\bibinfo{person}{Gilles Kahn}.}
+  \bibinfo{year}{1974}\natexlab{}.
+\newblock \showarticletitle{The Semantics of a Simple Language for Parallel
+  Programming}. In \bibinfo{booktitle}{\emph{Proceedings of IFIP Congress}}.
+  \bibinfo{pages}{471--475}.
+\newblock
+
+
+\bibitem[Le~Guernic et~al\mbox{.}(1987)]%
+        {signal1987}
+\bibfield{author}{\bibinfo{person}{Paul Le~Guernic}, \bibinfo{person}{Albert
+  Benveniste}, \bibinfo{person}{Paul Bournai}, {and} \bibinfo{person}{Thierry
+  Gautier}.} \bibinfo{year}{1987}\natexlab{}.
+\newblock \showarticletitle{Synchronous Data Flow Programming with the Language
+  SIGNAL}.
+\newblock \bibinfo{journal}{\emph{IFAC Proceedings Volumes}}
+  \bibinfo{volume}{20}, \bibinfo{number}{2} (\bibinfo{year}{1987}),
+  \bibinfo{pages}{359--364}.
+\newblock
+\urldef\tempurl%
+\url{https://doi.org/10.1016/S1474-6670(17)55987-X}
+\showDOI{\tempurl}
+
+
+\bibitem[Mandel and Pouzet(2005)]%
+        {reactiveml2005}
+\bibfield{author}{\bibinfo{person}{Louis Mandel} {and} \bibinfo{person}{Marc
+  Pouzet}.} \bibinfo{year}{2005}\natexlab{}.
+\newblock \showarticletitle{ReactiveML: A Reactive Extension to ML}. In
+  \bibinfo{booktitle}{\emph{Proceedings of the 7th ACM SIGPLAN International
+  Conference on Principles and Practice of Declarative Programming (PPDP)}}.
+  \bibinfo{pages}{82--93}.
+\newblock
+\urldef\tempurl%
+\url{https://doi.org/10.1145/1069774.1069782}
+\showDOI{\tempurl}
+
+
+\bibitem[Mandel and Pouzet(2008)]%
+        {reactiveml2008}
+\bibfield{author}{\bibinfo{person}{Louis Mandel} {and} \bibinfo{person}{Marc
+  Pouzet}.} \bibinfo{year}{2008}\natexlab{}.
+\newblock \showarticletitle{ReactiveML, un langage fonctionnel pour la
+  programmation r{\'e}active}.
+\newblock \bibinfo{journal}{\emph{Techniques et sciences informatiques}}
+  \bibinfo{volume}{27}, \bibinfo{number}{9-10} (\bibinfo{year}{2008}),
+  \bibinfo{pages}{1097--1128}.
+\newblock
+\urldef\tempurl%
+\url{https://doi.org/10.3166/tsi.27.1097-1128}
+\showDOI{\tempurl}
+
+
+\bibitem[Mandel et~al\mbox{.}(2015)]%
+        {reactiveml2015}
+\bibfield{author}{\bibinfo{person}{Louis Mandel}, \bibinfo{person}{Marc
+  Pouzet}, {and} \bibinfo{person}{Luc Maranget}.}
+  \bibinfo{year}{2015}\natexlab{}.
+\newblock \showarticletitle{ReactiveML, Ten Years Later}. In
+  \bibinfo{booktitle}{\emph{Proceedings of the 17th ACM SIGPLAN International
+  Symposium on Principles and Practice of Declarative Programming (PPDP)}}.
+\newblock
+\urldef\tempurl%
+\url{https://doi.org/10.1145/2790449.2790509}
+\showDOI{\tempurl}
+\newblock
+\shownote{Add exact pages if needed}.
+
+
+\bibitem[Mendler and Pouzet(2025)]%
+        {mendlerpouzet2025psm}
+\bibfield{author}{\bibinfo{person}{Michael Mendler} {and} \bibinfo{person}{Marc
+  Pouzet}.} \bibinfo{year}{2025}\natexlab{}.
+\newblock \showarticletitle{PSM: Policy Synchronised Deterministic Memory}.
+\newblock \bibinfo{journal}{\emph{CoRR}}  \bibinfo{volume}{abs/2506.15424}
+  (\bibinfo{year}{2025}).
+\newblock
+\urldef\tempurl%
+\url{https://doi.org/10.48550/ARXIV.2506.15424}
+\showDOI{\tempurl}
+
+
+\bibitem[Perez et~al\mbox{.}(2016)]%
+        {perez2016frp}
+\bibfield{author}{\bibinfo{person}{Ivan Perez}, \bibinfo{person}{Manuel
+  B{\"a}renz}, {and} \bibinfo{person}{Henrik Nilsson}.}
+  \bibinfo{year}{2016}\natexlab{}.
+\newblock \showarticletitle{Functional Reactive Programming, Refactored}. In
+  \bibinfo{booktitle}{\emph{Proceedings of the 9th International Symposium on
+  Haskell}}. \bibinfo{pages}{33--44}.
+\newblock
+\urldef\tempurl%
+\url{https://doi.org/10.1145/2976002.2976010}
+\showDOI{\tempurl}
+
+
+\bibitem[Plotkin and Pretnar(2009)]%
+        {plotkinpretnar2009}
+\bibfield{author}{\bibinfo{person}{Gordon Plotkin} {and}
+  \bibinfo{person}{Matija Pretnar}.} \bibinfo{year}{2009}\natexlab{}.
+\newblock \showarticletitle{Handlers of Algebraic Effects}. In
+  \bibinfo{booktitle}{\emph{European Symposium on Programming (ESOP)}}
+  \emph{(\bibinfo{series}{Lecture Notes in Computer Science},
+  Vol.~\bibinfo{volume}{5502})}. \bibinfo{pages}{80--94}.
+\newblock
+\urldef\tempurl%
+\url{https://doi.org/10.1007/978-3-642-00590-9_7}
+\showDOI{\tempurl}
+
+
+\bibitem[Schneider and Brandt(2017)]%
+        {schneider2017quartz}
+\bibfield{author}{\bibinfo{person}{Klaus Schneider} {and} \bibinfo{person}{Jens
+  Brandt}.} \bibinfo{year}{2017}\natexlab{}.
+\newblock \bibinfo{booktitle}{\emph{Quartz: A Synchronous Language for
+  Model-Based Design of Reactive Embedded Systems}}.
+\newblock \bibinfo{pages}{29--58}.
+\newblock
+\urldef\tempurl%
+\url{https://doi.org/10.1007/978-94-017-7267-9_3}
+\showDOI{\tempurl}
+
+
+\bibitem[Thies et~al\mbox{.}(2002)]%
+        {thies2002streamit}
+\bibfield{author}{\bibinfo{person}{William Thies}, \bibinfo{person}{Michal
+  Karczmarek}, {and} \bibinfo{person}{Saman Amarasinghe}.}
+  \bibinfo{year}{2002}\natexlab{}.
+\newblock \bibinfo{booktitle}{\emph{StreamIt: A Language for Streaming
+  Applications}}.
+\newblock \bibinfo{pages}{179--196}.
+\newblock
+\urldef\tempurl%
+\url{https://doi.org/10.1007/3-540-45937-5_14}
+\showDOI{\tempurl}
+
+
+\end{thebibliography}

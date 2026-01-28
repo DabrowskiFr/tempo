@@ -1,0 +1,181 @@
+\section{ReactiveML Context and Core Constructs}
+ReactiveML is the closest language-level incarnation of the control model
+described in Section~\ref{sec:boussinot-control}. It offers dedicated syntax,
+compiler support, and a runtime tailored to instants and delayed absence
+\cite{reactiveml2005}. We do not reproduce the language itself here; instead,
+we use it as a point of reference for the library-based approach of \tempo{}.
+
+The remainder of this section therefore focuses on the core control constructs
+and their synchronous properties, as they appear in \tempo{}'s library API.
+\tempo{} exposes a small set of constructs that mirror the common vocabulary of
+reactive control languages. Signals are the primary communication medium within
+an instant. A signal is either present or absent during an instant; presence is
+established by emission, while absence can only be observed at the end of the
+instant. This delayed observation is central to deterministic behavior.
+
+\paragraph{Semantic contract (informal)}
+\tempo{} guarantees determinism at instant boundaries: for a fixed input stream,
+the set of signals present at each instant and the values delivered to awaiters
+are deterministic. What is not specified is the internal evaluation order of
+tasks within an instant; relying on that order can break determinism when using
+shared mutable state. The semantics therefore define \emph{what} is observable
+per instant, not the precise scheduling order inside it.
+We use \emph{instant boundary} and \emph{end of the instant} interchangeably.
+
+\paragraph{Non-guarantees}
+\tempo{} does not guarantee deterministic outcomes when programs depend on the
+intra-instant evaluation order or shared mutable state (e.g., reference cells).
+Such behaviors are outside the semantic contract and must be avoided or
+controlled by static analyses.
+
+\paragraph{Minimal vocabulary}
+\begin{itemize}
+\item \textbf{Instant}: logical time step where reactions occur.
+\item \textbf{Presence/absence}: a signal is present if emitted in the instant.
+\item \textbf{Guard}: a condition that blocks a task until a signal is present.
+\item \textbf{Weak preemption}: termination at the end of the instant.
+\item \textbf{Determinism}: observables per instant are uniquely determined by inputs.
+\end{itemize}
+
+\paragraph{Determinism statement (informal)}
+Let $I$ be a fixed input sequence per instant. \tempo{} guarantees that, for each
+instant $t$, the multiset of event-signal emissions and the values returned by
+\texttt{await} and \texttt{await\_immediate} are uniquely determined by $I$,
+assuming programs avoid shared mutable state that depends on intra-instant
+ordering and aggregate combine functions are pure and order-insensitive. No
+guarantee is made about the relative order of tasks within an instant.
+\paragraph{Observable vs non-observable (summary)}
+\begin{itemize}
+\item \textbf{Observable:} which signals are present at each instant boundary,
+  and the values delivered to \texttt{await} and \texttt{await\_immediate}.
+\item \textbf{Not observable:} the order in which tasks run within the instant,
+  or the ordering of side effects on shared mutable state.
+\end{itemize}
+\paragraph{Aggregate signals and \texttt{await\_immediate}}
+Aggregate signals are delivered only at instant end; thus their determinism is
+defined by the combined value, not by the order of emissions within the instant.
+\texttt{await\_immediate} is restricted to event signals, which allows safe
+same-instant resumption without introducing ambiguity in the delivered value.
+For deterministic aggregation, the combine function should be pure and
+order-insensitive (associative/commutative), since the intra-instant order of
+emissions is not part of the semantics.
+
+\paragraph{Observable trace (informal)}
+An execution can be summarized by a per-instant trace $au(t)$ that records:
+\begin{itemize}
+\item \textbf{Event signals:} the unique value emitted in instant $t$, or
+  \emph{absent} if no emission occurs.
+\item \textbf{Aggregate signals:} the combined value delivered at instant end
+  (or the initial accumulator if no emission occurred).
+\item \textbf{Outputs:} values emitted on the output signal at instant end.
+\end{itemize}
+The trace intentionally omits intra-instant scheduling order. Two runs are
+observationally equivalent if they produce the same $au(t)$ for all $t$.
+
+\paragraph{\texttt{await} vs \texttt{await\_immediate}}
+\texttt{await} always resumes at the next instant, even if the signal is already
+present. If the event signal is present, \texttt{await\_\allowbreak immediate}
+may resume in the current instant. This can be useful for immediate reactions,
+but it is restricted to event signals to preserve determinism.
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[
+  box/.style=tempo,
+  draw,
+  rounded corners,
+  align=left,
+  minimum width=70mm,
+  minimum height=8mm
+]
+\node[box] {
+Observable per instant:\\
+1) set of present signals\\
+2) values delivered to awaiters\\
+3) outputs emitted to the environment
+};
+\end{tikzpicture}
+\caption{Observables that define determinism at instant boundaries.}
+\end{figure}
+
+\paragraph{Determinism in action}
+For the same input stream, the observables above do not change. For example,
+if the host emits input \texttt{1} at instant $t$ and \texttt{2} at instant
+$t{+}1$, then the program below deterministically emits \texttt{1} at $t{+}1$
+and \texttt{2} at $t{+}2$.
+\begin{lstlisting}[style=tempo]
+let program input output =
+  let v = await input in
+  emit output v
+\end{lstlisting}
+
+\begin{table}[h]
+\centering
+\begin{tabularx}{\linewidth}{lY}
+\hline
+Instant & Observable events \\ \hline
+$t$ & input emits \texttt{1}; no output yet. \\
+$t{+}1$ & output emits \texttt{1}; input emits \texttt{2}. \\
+$t{+}2$ & output emits \texttt{2}. \\ \hline
+\end{tabularx}
+\caption{Timeline for the simple echo program.}
+\end{table}
+
+\paragraph{Mini-specification (informal)}
+The behavior of a program can be described per instant:
+\begin{enumerate}
+\item At instant start, all signals are absent.
+\item Emissions during the instant mark signals present; event signals accept
+  at most one emission.
+\item \texttt{await} resumes at the next instant; \texttt{await\_immediate}
+  may resume in the current instant for event signals already present.
+\item Absence is observed only at instant end; guard rechecks occur at the next
+  instant.
+\end{enumerate}
+
+\paragraph{Intuitive timeline}
+Consider two instants with a single signal \texttt{s}. In instant $t$, a task
+emits \texttt{s} and another task awaits it. The awaiting task can only resume
+at the \emph{beginning} of instant $t{+}1$, because the presence of \texttt{s}
+becomes observable only after the instant ends. If \texttt{s} is never emitted
+in instant $t$, that absence is observable only at the end of $t$, and a
+guarded task can only retry in instant $t{+}1$. Observable events are therefore
+the set of signals present at instant boundaries, not intermediate scheduling
+steps within the instant.
+
+Emissions mark a signal as present and provide a value. \tempo{} supports two
+signal kinds: event signals accept at most one emission per instant, while
+aggregate signals combine multiple emissions through an associative folding
+function. Suspension is expressed through \texttt{await}, which resumes at the
+beginning of the next instant, and \texttt{await\_immediate}, which may resume
+in the current instant if an event signal is already present.
+
+Guards and preemption encode control flow. Guarded execution activates a
+behavior only when a guard signal becomes present. Weak preemption terminates a
+behavior at the end of the current instant after a preempting signal is
+emitted, allowing other concurrent tasks to observe the emission within the
+same instant. These constructs preserve determinism by maintaining a single
+global notion of instants and deferring absence decisions to instant boundaries.
+The distinction between strong and weak restart patterns is often encoded by
+explicit pauses: inserting a \texttt{pause} between successive activations
+ensures that a reaction cannot retrigger within the same instant, which matches
+the weak restart discipline commonly used in synchronous control.
+
+Guarded execution is \emph{blocking}, so a sequential nesting of \texttt{when\_}
+does not implement a disjunction. A disjunction is obtained by running
+multiple guarded branches in parallel, each able to unblock independently.
+Similarly, nested \texttt{watch} constructs compose as disjunctions: a body is
+preempted if any watched signal is emitted in the current instant. This is
+consistent with the control interpretation where multiple guards or preemption
+sources represent alternative enabling or disabling conditions.
+
+\begin{lstlisting}[style=tempo]
+(* Disjunction of guards: run guarded branches in parallel. *)
+parallel [
+  (fun () -> when_ g1 (fun () -> body ()));
+  (fun () -> when_ g2 (fun () -> body ()));
+];
+
+(* Disjunction of preemption: stop when s1 or s2 is emitted. *)
+watch s1 (fun () -> watch s2 (fun () -> body ()))
+\end{lstlisting}

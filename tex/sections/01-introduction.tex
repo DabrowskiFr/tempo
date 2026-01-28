@@ -1,0 +1,65 @@
+\section{Introduction}
+Reactive systems must continuously respond to an environment, often under
+strict timing and safety constraints. Programming such systems is difficult
+because concurrency, external events, and state updates interact in ways that
+can break determinism. Ad-hoc callback-based designs are common, but they make
+control flow implicit and complicate reasoning about ordering, causality, and
+reproducibility.
+
+Synchronous reactive programming addresses these challenges by discretizing
+time into logical instants and by defining what is observable at instant
+boundaries. A classic distinction is between control-flow and dataflow
+approaches: Esterel represents the control-flow lineage, while Lustre
+represents the dataflow lineage \cite{esterel1992,lustre1991}. In both cases,
+logical instants enable deterministic behavior and rigorous analyses of
+causality and scheduling. Survey discussions situate these languages within a
+shared semantic framework \cite{benveniste2003}.
+
+These synchronous languages achieve high assurance by imposing restrictions
+that permit static scheduling and causality checks. The restrictions make it
+possible to decide properties such as determinism and absence/presence
+consistency, but they also limit expressiveness when integrated with richer
+general-purpose languages.
+
+The key semantic question is when signal absence can be observed. In Esterel,
+absence is decided within the instant, enabling static scheduling but
+restricting dynamic behavior \cite{esterel1992}. Boussinot's FairThreads model
+defers absence observation to instant end, allowing more flexible composition
+while preserving determinism \cite{fairthreads2003}. From a programmer's
+perspective, each instant follows a two-phase discipline: react while tasks run
+and signals may become present, then finalize when the instant quiesces and
+absence becomes observable.
+This distinction is central because it determines which control patterns are
+expressible without sacrificing determinism.
+Subsequent work revisits the synchronous model inside richer language settings.
+On the control-flow side, ReactiveML adapts Esterel-style signals and the
+synchronous hypothesis to a higher-order language \cite{reactiveml2005}. On the
+dataflow side, FRP explores declarative, time-varying values with different
+operational priorities \cite{frp1997}. 
+
+This paper introduces \tempo{}: a library that revisits ReactiveML's control-flow
+model using OCaml 5.3 algebraic effects as its implementation mechanism. \tempo{}
+follows the delayed-absence discipline introduced by Boussinot's FairThreads,
+which ReactiveML also adopts, and brings this approach to a modern OCaml
+runtime without modifying the compiler \cite{fairthreads2003,reactiveml2005}.
+\tempo{} re-implements the core control constructs (signals, guards, weak
+preemption) as a pure library. It executes programs in discrete logical
+instants: signals can be emitted and tasks can run within an instant, but the
+\emph{absence} of a signal is only observable at the end of the instant. This
+article presents \tempo{} as a reactive control runtime and explains its design
+choices and effect-based implementation in OCaml 5.3. It does not attempt a
+formal semantics or a quantitative evaluation, and focuses instead on the
+design rationale, API, and implementation details needed to motivate future
+formalization. Determinism is discussed under standard purity assumptions:
+programs should avoid shared mutable state whose outcomes depend on
+intra-instant scheduling, and aggregate combine functions should be
+order-insensitive. These assumptions match the synchronous control model and
+are stated explicitly in the core constructs section.
+\begin{itemize}
+\item A library-level formulation of synchronous reactive control in OCaml,
+  positioned within the Esterel/FairThreads/ReactiveML lineage.
+\item An implementation account of how algebraic effects realize signals,
+  guards, suspension, and weak preemption.
+\item End-to-end examples that illustrate standard synchronous control idioms
+  using the \tempo{} API.
+\end{itemize}

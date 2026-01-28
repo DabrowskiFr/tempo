@@ -1,0 +1,116 @@
+\section{Algebraic Effects in OCaml}
+This section provides background on effects and handlers; readers focused on
+\tempo{} can skip to the overview and return here for implementation details.
+
+\paragraph{One-sentence intuition}
+An effect captures "what to do next" (the continuation), and the scheduler
+decides \emph{when} to resume it, which aligns naturally with instant-based
+reactive execution.
+Algebraic effects provide a structured way to model effectful operations by
+separating the declaration of an effect from its interpretation. Instead of
+hardwiring side effects into the runtime or encoding them as monads, a program
+\emph{performs} an effect at a call site, and a handler decides how to interpret
+it. The handler can resume the captured continuation immediately, defer it, or
+even resume it multiple times, which makes effects a natural fit for
+scheduling, suspension, and user-defined control operators.
+
+In OCaml 5, effect handlers are first-class and integrate with the language
+runtime. The model follows the theory of algebraic effects and handlers
+\cite{plotkinpretnar2009}, and it has been validated by practical systems such
+as Eff \cite{eff2013} and the Multicore OCaml project
+\cite{multicoreocaml2020}. For our purposes, the important point is that the
+handler sees the point of suspension as a value---a \emph{delimited
+continuation}---and can choose precisely when to resume it. Algebraic effects
+can therefore be viewed as a disciplined interface to delimited continuations,
+with the handler providing the delimiter \cite{danvyfilinski1990,filinski1994}.
+
+From the programmer's perspective, effects look like ordinary function calls
+with additional control semantics. For instance, an \texttt{Await} effect can be
+implemented so that it captures the continuation and stores it in a signal's
+waiter list, rather than resuming it immediately. A \texttt{Pause} effect can
+package the continuation into a task and enqueue it for the next instant.
+Similarly, \texttt{Emit} can be interpreted as a state update plus a resumption
+of waiting tasks. The key idea is that the operational behavior is defined in
+the handler, not at the call site.
+
+This style is particularly well suited to synchronous reactive runtimes, where
+the semantics depend on \emph{when} computations resume. By choosing whether a
+continuation is resumed in the current instant or deferred to the next one, the
+handler can implement the delayed-absence discipline and maintain determinism.
+In other words, algebraic effects provide the control lever that makes an
+instant-based scheduler possible at library level.
+
+For \tempo{}, algebraic effects are therefore not an implementation detail but the
+core enabler: they allow the library to encode reactive constructs (signals,
+guards, preemption) directly as effectful operations. The scheduler lives in
+user space, with explicit queues and signal registries, and the effect handler
+defines the boundary between instantaneous reactions and deferred computation.
+
+\paragraph{Deep vs shallow handlers}
+OCaml 5 distinguishes \emph{deep} handlers, where the continuation is
+automatically re-wrapped by the same handler upon resumption, from
+\emph{shallow} handlers, where the resuming code runs outside the handler
+unless it is re-installed explicitly. \tempo{} uses deep handlers (via
+\texttt{Effect.Deep}) to ensure that every resumed task continues under the
+same scheduler, which is essential for consistent instant semantics.
+
+\paragraph{Cooperative threads via effects}
+It is well known that algebraic effects and delimited continuations can be
+used to implement cooperative threading. A \texttt{Yield} or \texttt{Pause}
+effect captures the current continuation and enqueues it, while the scheduler
+selects another task to run. This is the same pattern used in many effect-based
+thread libraries and serves as the foundation for \tempo{}'s instant-based
+cooperative scheduler.
+
+\paragraph{Intuition (small example)}
+The following toy sketch shows how an effect is performed and how a handler
+decides when to resume the continuation.
+\begin{lstlisting}[style=tempo]
+(* Effect declaration *)
+type _ Effect.t +=
+  | Yield : unit Effect.t
+
+let yield () = perform Yield
+
+(* Handler decides when to resume *)
+let run f =
+  match f () with
+  | () -> ()
+  | effect Yield k ->
+      (* Defer continuation; resume later *)
+      Queue.add (fun () -> continue k ()) pending
+\end{lstlisting}
+
+\begin{figure}[h]
+\centering
+\resizebox{\columnwidth}{!}{%
+\begin{tikzpicture}[
+  node distance=10mm,
+  box/.style=tempo,
+  draw,
+  rounded corners,
+  align=center,
+  minimum width=34mm,
+  minimum height=8mm,
+  arrow/.style=tempo
+]
+\node[box] (effect) {Effect performed\\(Emit/Await/Pause/...)};
+\node[box, below=of effect] (handler) {Effect handler\\captures continuation};
+\node[box, below=of handler] (decision) {Schedule decision\\now or next instant};
+\node[box, left=of decision] (now) {Enqueue\\current instant};
+\node[box, right=of decision] (next) {Enqueue\\next instant};
+\node[box, below=of decision] (resume) {Continuation resumes\\when dequeued};
+
+\draw[arrow] (effect) -- (handler);
+\draw[arrow] (handler) -- (decision);
+\draw[arrow] (decision) -- (now);
+\draw[arrow] (decision) -- (next);
+\draw[arrow] (now) |- (resume);
+\draw[arrow] (next) |- (resume);
+\end{tikzpicture}%
+}
+\caption{Effect handling and continuation scheduling.}
+\end{figure}
+
+In the next section, we show how \tempo{} uses these mechanisms to implement a
+synchronous runtime with explicit instants, signals, and control primitives.

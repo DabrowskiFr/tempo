@@ -1,0 +1,46 @@
+\section{\tempo{} Overview}
+\tempo{} is a lightweight synchronous runtime for OCaml. It adopts the delayed
+absence principle of FairThreads and ReactiveML, but implements it entirely at
+library level using OCaml 5.3 algebraic effects. Programs execute over a
+sequence of logical instants, interact via valued signals, and compose
+concurrently under a deterministic scheduler.
+
+The runtime preserves the core control semantics: signal presence is decided
+within the instant, absence is observed only at instant end, and preemption is
+weak and instant-aligned. The key design choice is to encode these constructs
+as effectful operations interpreted by handlers. This keeps the model explicit
+in user code and avoids changes to the language runtime, while still enabling
+expressive control operators and a clear mapping to synchronous concepts.
+
+Compared to ReactiveML, \tempo{} trades language-level syntax and compilation
+support for a pure library approach based on OCaml 5.3 effects, making it
+easier to embed into existing codebases and to experiment with scheduling.
+
+\paragraph{Programming model}
+\tempo{} programs are written as ordinary OCaml functions that receive two
+signals: an input signal provided by the host and an output signal used to
+publish results at the end of each instant. Instants are advanced by the
+\texttt{execute} loop, which invokes host hooks before and after each instant.
+Signals are first-class values, so they can be stored in data structures,
+returned from functions, and passed between components.
+
+\paragraph{Determinism and control}
+Determinism is defined at instant boundaries: given the same input emissions,
+the observable outputs at each instant are fixed, regardless of internal task
+interleavings. Within an instant, the scheduler runs tasks in a fixed order,
+but the semantics does not expose this ordering, which keeps the model
+declarative from the user's perspective.
+
+\paragraph{Design rationale}
+\tempo{} adopts algebraic effects for three reasons. First, effects provide
+first-class, delimited continuations, which allow the scheduler to control
+resumption points precisely. Second, a library-level approach avoids modifying
+the OCaml compiler and keeps integration friction low. Third, handlers make the
+control flow explicit in user space, which simplifies experimentation with
+scheduling policies and debugging.
+
+\paragraph{Non-goals (current scope)}
+\tempo{} does not attempt to provide static guarantees (e.g., single-emission
+checks or determinism proofs) and does not perform compilation into automata.
+These choices keep the library small and explainable, but they also motivate
+the future work discussed in Section~\ref{sec:future-work}.

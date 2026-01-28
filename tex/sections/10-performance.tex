@@ -1,0 +1,125 @@
+\section{Performance}
+This section provides expected complexity and performance considerations in the
+absence of dedicated benchmarks.
+
+\paragraph{Scheduler complexity}
+Let $T$ be the number of runnable tasks in an instant, $B$ the number of
+blocked tasks, and $S$ the number of registered signals. The scheduler processes
+each runnable task at most once per step and checks guard satisfaction by
+scanning the task's guard list. Over an instant, the total cost is
+$O(T + G)$ where $G$ is the sum of guard-list sizes across tasks, plus
+signal finalization at $O(S)$.
+
+\paragraph{Signal operations}
+Emitting an event signal resumes all its awaiters immediately (in scheduler
+terms), so the cost is proportional to the number of waiters on that signal.
+Aggregate signals defer resumption to instant end, so emission cost is $O(1)$
+plus the cost of the user-provided combine function. Finalization resumes all
+aggregate awaiters once per instant.
+
+\paragraph{Queue sizes and memory}
+Memory usage grows with the number of tasks, signals, and registered waiters.
+In typical use, each \texttt{await} adds one continuation to a signal's waiter
+list, and each guard adds a task to a guard\_waiter list. Worst-case memory
+consumption is therefore linear in the number of suspended tasks and guards.
+
+\paragraph{Assumptions}
+These bounds assume: (1) guard lists are short; (2) signals are not created at
+unbounded rates per instant; (3) the combine function for aggregate signals is
+constant-time. Under these assumptions, the scheduler is expected to scale
+linearly with the number of active tasks and signals per instant.
+
+\paragraph{Effect and allocation overhead}
+Each reactive primitive is implemented as an effect, which captures a
+continuation and allocates a task record. The dominant overheads are therefore
+continuation capture, task allocation, and queue operations. In practice, this
+means performance is sensitive to allocation rates and GC behavior, especially
+in programs that spawn many short-lived tasks per instant.
+
+\paragraph{Preemption and guard costs}
+Weak preemption introduces a small constant overhead per protected task: a kill
+token, a cleanup closure, and a liveness check when the task is enqueued. Guard
+checks scale with the number of guard conditions attached to a task, which
+makes guard-heavy programs more sensitive to the size of guard lists than to
+the number of signals overall.
+
+\paragraph{ReactiveML comparison plan}
+To compare \tempo{} against ReactiveML, we propose a small benchmark suite that
+captures the common synchronous patterns shared by both systems:
+\begin{itemize}
+\item \textbf{Ping-pong signals}: two processes alternately emit and await
+  signals across instants (measures basic signaling and scheduling overhead).
+\item \textbf{Barrier synchronization}: $N$ parallel tasks emit on a barrier
+  signal and a coordinator waits for all emissions (measures aggregation and
+  guard wakeups).
+\item \textbf{Timeout and preemption}: a request handler guarded by a timeout,
+  implemented with weak preemption (measures watch/guard overhead).
+\item \textbf{Broadcast and fan-out}: one emitter wakes $N$ awaiters in the same
+  instant (measures awaiter resumption cost).
+\item \textbf{Guarded loops}: repeated guarded activation with pauses across
+  many instants (measures long-running scheduling stability).
+\end{itemize}
+For each scenario, the metrics of interest are throughput (instants per second),
+latency per instant, and memory usage as a function of the number of tasks and
+signals. These benchmarks are intended as future work; the current draft does
+not include measured results.
+
+\paragraph{Benchmark parameters}
+\begin{table}[h]
+\centering
+\begin{tabularx}{\linewidth}{lY}
+\hline
+Benchmark & Parameters and cost drivers \\ \hline
+Ping-pong & $I$ instants; cost dominated by signal wakeups. \\
+Barrier   & $N$ tasks; cost dominated by guard wakeups and aggregation. \\
+Timeout   & $I$ instants; cost dominated by watch/kill handling. \\
+Broadcast & $N$ awaiters; cost dominated by awaiter resumption. \\
+Guarded loop & $I$ instants; cost dominated by guard checks per instant. \\ \hline
+\end{tabularx}
+\caption{Benchmark parameters and expected cost drivers.}
+\end{table}
+
+\paragraph{Reproducibility outline}
+Each scenario can be implemented as a standalone executable in
+\texttt{tests/ok} (\tempo{}) and a corresponding ReactiveML program, compiled with
+the ReactiveML toolchain. A minimal protocol should record: (1) number of
+instants executed; (2) wall-clock time; (3) task/signal counts. This makes the
+comparison transparent even before results are reported.
+
+\paragraph{Concrete protocol}
+For each scenario, fix a parameter grid (e.g., number of tasks $N \in
+\{10, 10^2, 10^3\}$ and instants $I \in \{10^3, 10^4\}$), and run both \tempo{} and
+ReactiveML implementations on the same machine with CPU frequency scaling
+disabled. Measure wall-clock time for $I$ instants, record peak resident memory,
+and log the number of signals and waiters. Report median over at least 5 runs.
+
+\paragraph{Test coverage map}\label{sec:feature-tests}
+The list below shows which \texttt{tests/ok} programs exercise each public
+feature. This supports the claim that all features are covered by tests.
+\begin{itemize}
+\item \textbf{emit/await}:
+  \texttt{emit\_once\_await\_one.ml} \\
+  \texttt{emit\_once\_await\_many.ml}.
+\item \textbf{await\_immediate}: \texttt{emit\_once\_await\_immediate.ml},
+  \\ \texttt{when\_await\_imm\_same\_instant.ml},
+  \\ \texttt{when\_await\_imm\_next\_instant.ml}.
+\item \textbf{pause}: \texttt{pause.ml}.
+\item \textbf{parallel}: \texttt{parallel.ml}, \texttt{when\_parallel.ml}.
+\item \textbf{guards/when\_}: \texttt{when\_next\_instant.ml},
+  \\ \texttt{when\_same\_instant.ml}, \texttt{when\_nested.ml},
+  \\ \texttt{when\_complete.ml}.
+\item \textbf{watch/weak preemption}: \texttt{watch\_complete.ml},
+  \\ \texttt{watch\_nested.ml}, \texttt{watch\_killed.ml},
+  \\ \texttt{watch\_when\_complete.ml}, \texttt{watch\_when\_killed.ml}.
+\item \textbf{kill}: \texttt{with\_kill\_abort.ml}, \texttt{with\_kill\_inherit.ml}.
+\item \textbf{aggregate signals}:
+  \texttt{emit\_agg\_collect.ml} \\
+  \texttt{emit\_agg\_sum.ml}.
+\item \textbf{present\_then\_else}: \texttt{present\_then\_else.ml}.
+\end{itemize}
+
+\paragraph{Testing strategy (summary)}
+Tests are organized by primitive (signals, guards, preemption) and by
+composition patterns (parallel, nested guards, immediate awaits). Each test
+has an expected output, enabling regression checks on observable behavior at
+instant boundaries.

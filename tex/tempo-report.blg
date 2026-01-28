@@ -1,0 +1,91 @@
+This is BibTeX, Version 0.99d (TeX Live 2023)
+Capacity: max_strings=200000, hash_size=200000, hash_prime=170003
+The top-level auxiliary file: tempo-report.aux
+The style file: ACM-Reference-Format.bst
+Reallocated singl_function (elt_size=4) to 100 items from 50.
+Reallocated singl_function (elt_size=4) to 100 items from 50.
+Reallocated wiz_functions (elt_size=4) to 6000 items from 3000.
+Database file #1: references.bib
+Reallocated singl_function (elt_size=4) to 100 items from 50.
+Reallocated glb_str_ptr (elt_size=4) to 20 items from 10.
+Reallocated global_strs (elt_size=200001) to 20 items from 10.
+Reallocated glb_str_end (elt_size=4) to 20 items from 10.
+Reallocated singl_function (elt_size=4) to 100 items from 50.
+Warning--page numbers missing in both pages and numpages fields in bahr2022modalfrp
+Warning--empty publisher in esterel1985
+Warning--empty address in esterel1985
+Warning--page numbers missing in both pages and numpages fields in esterel1985
+Warning--empty publisher in berry2007scade
+Warning--empty address in berry2007scade
+Warning--empty publisher in cheng2017reactivestreams
+Warning--empty address in cheng2017reactivestreams
+Warning--empty publisher in danvyfilinski1990
+Warning--empty address in danvyfilinski1990
+Warning--empty publisher in davis2019reactivestreams
+Warning--empty address in davis2019reactivestreams
+Warning--empty publisher in bahr2025gui
+Warning--empty address in bahr2025gui
+Warning--empty publisher in multicoreocaml2020
+Warning--empty address in multicoreocaml2020
+Warning--empty publisher in frp1997
+Warning--empty address in frp1997
+Warning--empty publisher in filinski1994
+Warning--empty address in filinski1994
+Warning--empty publisher in kahn1974
+Warning--empty address in kahn1974
+Warning--empty publisher in reactiveml2005
+Warning--empty address in reactiveml2005
+Warning--empty publisher in reactiveml2015
+Warning--empty address in reactiveml2015
+Warning--page numbers missing in both pages and numpages fields in reactiveml2015
+Warning--page numbers missing in both pages and numpages fields in mendlerpouzet2025psm
+Warning--empty publisher in perez2016frp
+Warning--empty address in perez2016frp
+Warning--empty publisher in plotkinpretnar2009
+Warning--empty address in plotkinpretnar2009
+Warning--empty publisher in schneider2017quartz
+Warning--empty address in schneider2017quartz
+Warning--empty publisher in thies2002streamit
+Warning--empty address in thies2002streamit
+You've used 30 entries,
+            5981 wiz_defined-function locations,
+            1674 strings with 23303 characters,
+and the built_in function-call counts, 33902 in all, are:
+= -- 4412
+> -- 874
+< -- 0
++ -- 285
+- -- 337
+* -- 2162
+:= -- 3156
+add.period$ -- 150
+call.type$ -- 30
+change.case$ -- 186
+chr.to.int$ -- 74
+cite$ -- 66
+duplicate$ -- 3127
+empty$ -- 2178
+format.name$ -- 409
+if$ -- 8296
+int.to.chr$ -- 2
+int.to.str$ -- 1
+missing$ -- 117
+newline$ -- 359
+num.names$ -- 210
+pop$ -- 1183
+preamble$ -- 1
+purify$ -- 426
+quote$ -- 0
+skip$ -- 1138
+stack$ -- 0
+substring$ -- 2747
+swap$ -- 332
+text.length$ -- 35
+text.prefix$ -- 0
+top$ -- 0
+type$ -- 643
+warning$ -- 36
+while$ -- 250
+width$ -- 0
+write$ -- 680
+(There were 36 warnings)

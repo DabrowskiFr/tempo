@@ -1,0 +1,30 @@
+\section{Limitations and Trade-offs}
+\tempo{} is designed as a lightweight library-level runtime. This choice comes
+with several limitations that define the current scope:
+\begin{itemize}
+\item \textbf{No static guarantees.} Determinism and correct use of primitives
+  (e.g., single emission on event signals) are enforced at runtime rather than
+  by a type system or compiler checks.
+\item \textbf{Runtime errors for misuse.} Multiple emissions on an event signal
+  raise an exception; misuse must be caught by tests or careful discipline.
+\item \textbf{Effects require OCaml 5.3.} The approach relies on algebraic
+  effects and deep handlers, which are not available in earlier versions.
+\item \textbf{Library-level scheduling only.} \tempo{} does not integrate with a
+  language-level optimizer, so certain static analyses or compile-time
+  optimizations (as in ReactiveML) are unavailable.
+\item \textbf{Low-level API risks.} The \texttt{Tempo.Low\_level} module exposes
+  primitives that can break high-level invariants if used incorrectly.
+\item \textbf{Determinism vs evaluation order.} Reference-based communication
+  can make behavior depend on evaluation order within an instant, which is not
+  fixed by the semantics; mitigating this requires static analyses (see
+  Section~\ref{sec:future-work}).
+\item \textbf{Purity assumptions.} Aggregate signals assume order-insensitive
+  combine functions; if combine is not associative/commutative, aggregate
+  results may depend on intra-instant scheduling.
+\item \textbf{Logical parallelism only.} Concurrency is logical and single-core;
+  enabling physical parallelism would require additional determinism controls
+  (see Section~\ref{sec:future-work}).
+\item \textbf{Non-guaranteed behaviors.} Programs relying on shared mutable
+  state across parallel tasks can observe different results even with identical
+  inputs, because the intra-instant order is unspecified.
+\end{itemize}

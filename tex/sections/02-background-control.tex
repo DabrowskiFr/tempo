@@ -1,0 +1,114 @@
+\section{Boussinot's Reactive Control Model}
+\label{sec:boussinot-control}
+Boussinot's reactive control model organizes concurrency around logical
+instants. Execution proceeds as a sequence of reaction cycles: within an
+instant, all runnable activities execute until they suspend or the system
+quiesces, and only after that quiescence can absence be observed. This notion
+of instant provides a global time base that makes reactions comparable and
+deterministic at instant boundaries \cite{fairthreads2003}.
+
+\paragraph{Signals (unvalued)}
+To simplify the presentation, we consider unvalued signals. A signal is either
+present or absent for the entire duration of an instant. When a signal is
+emitted, it becomes present for all components; when it is not emitted, it
+remains absent for all components. The effective order of emissions within the
+instant must not affect the observable behavior: presence is a global property
+for the instant, not a per-thread event. This makes synchronization explicit
+and avoids order-sensitive communication.
+
+\paragraph{Suspension}
+Threads are cooperative: they execute until they reach a suspension point and
+then yield control. Suspension can be explicit (e.g., waiting for a signal or
+for the next instant). The key property is that suspension preserves the
+instant structure: a suspended thread resumes only at a well-defined instant
+boundary or when a relevant signal becomes present.
+
+\paragraph{Algorithmic view (abstract)}
+We use a small algorithmic notation that mirrors Boussinot's control vocabulary.
+Behaviors (threads) are composed from a core set of control operators. The
+notation hides values when they are not essential to control and uses abstract
+behaviors inside control structures:
+\begin{lstlisting}[style=tempo]
+(* Abstract control language; B is an abstract behavior. *)
+B ::= skip
+    | emit s          (* mark signal s present in current instant *)
+    | await s         (* resume at next instant where s is present *)
+    | pause           (* resume at the next instant *)
+    | B1; B2          (* sequence *)
+    | parallel [B1; ...; Bn]
+    | when s do B     (* guard: block until s is present *)
+    | watch s do B    (* weak preemption: stop B after this instant if s emits *)
+\end{lstlisting}
+
+The constructs are interpreted at instant boundaries. \texttt{emit s} makes
+\texttt{s} present for the remainder of the instant. \texttt{await s} suspends
+until the next instant where \texttt{s} is present, while \texttt{pause} always
+advances to the next instant. In \texttt{when s do B}, the guard is a blocking
+condition: if \texttt{s} is absent, the entire behavior suspends and can only
+resume at a future instant where \texttt{s} is present. In \texttt{watch s do B},
+the body \texttt{B} runs normally in the current instant, but if \texttt{s} is
+emitted during that instant, \texttt{B} is not allowed to continue into the next
+instant (weak preemption).
+
+This abstract view lets us express control patterns without committing to a
+concrete evaluation order. For example, \texttt{when s do \{B1; B2\}} denotes an
+entire guarded behavior, and \texttt{watch s do \{parallel [B1; B2]\}} denotes a
+preemptible concurrent block.
+
+\paragraph{Micro-examples (abstract)}
+\begin{lstlisting}[style=tempo]
+(* Suspension across instants *)
+emit s; pause; await s
+
+(* Guarded behavior: runs only if s is present *)
+when s do (emit out)
+
+(* Weak preemption: body stops after instant if k is emitted *)
+watch k do (emit tick; pause; emit tick)
+
+(* Disjunctive enabling via parallel guards *)
+parallel [
+  (when g1 do B);
+  (when g2 do B)
+]
+\end{lstlisting}
+
+\paragraph{Preemption and Esterel}
+Control languages such as Esterel rely on preemption to enforce control
+structure. In Boussinot's setting, preemption is \emph{weak}: if a preempting
+signal is emitted in instant $t$, a preempted computation may complete its
+current instant but must not continue into $t{+}1$. The alternative would be
+\emph{strong} preemption, where a computation is stopped immediately within
+the same instant. Weak preemption is the appropriate choice here because the
+model treats the instant as an atomic reaction: all threads share the same
+present/absent view for the whole instant, and mid-instant interruption would
+reintroduce order dependence and break determinism \cite{esterel1992,fairthreads2003}.
+
+This model yields a control-centric view of concurrency: threads cooperate,
+rendezvous on signal presence, and advance in lockstep from one instant to the
+next. \tempo{} adopts this discipline as the semantic baseline for its runtime.
+
+\paragraph{From FairThreads to ReactiveML (abstract view)}
+ReactiveML lifts this control model into a higher-order ML setting while
+preserving the delayed-absence discipline. It exposes a small set of reactive
+operators---\texttt{signal}, \texttt{emit}, \texttt{await}, \texttt{pause},
+\texttt{when}, and \texttt{watch}---that directly encode the instant-based
+control structure. These constructs compile to a runtime that enforces the
+instant discipline and yields deterministic behavior at instant boundaries,
+while allowing higher-order composition over reactive processes
+\cite{reactiveml2005}.
+
+At the same level of abstraction, this places ReactiveML in the control-flow
+lineage (Esterel/FairThreads), in contrast to dataflow approaches such as FRP
+that emphasize time-varying values and stream composition \cite{frp1997}.
+Recent FRP work has refined operational guarantees such as causality and space
+usage (e.g., \cite{perez2016frp,bahr2019ratt,bahr2022modalfrp,bahr2023async}),
+but these advances are orthogonal to the control-centric lineage considered
+here.
+
+ReactiveML also benefits from language-level integration: its compiler can
+enforce discipline constraints and optimize the scheduling structure
+statically. \tempo{} chooses a different point in the design space by reusing
+OCaml 5.3 algebraic effects to recover similar control constructs as a
+library. This enables straightforward embedding in existing OCaml codebases
+while leaving stronger static guarantees to future work.

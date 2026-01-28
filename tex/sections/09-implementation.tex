@@ -1,0 +1,756 @@
+\section{Implementation with Algebraic Effects (OCaml 5.3)}
+This section can be read independently; it connects the public API to the
+runtime mechanisms and effect handlers.
+\tempo{} implements its synchronous model as a handler-driven runtime. The design
+keeps the semantics explicit in library code while using OCaml 5.3 algebraic
+effects to capture and schedule continuations. This section focuses on how the
+effects-based implementation realizes the \tempo{} API.
+
+\paragraph{Implementation map}
+For readers skimming the code, the implementation can be read in three passes:
+(1) the effect declarations in \texttt{lib/tempo\_types.ml}; (2) the scheduler
+loop and task queues in \texttt{lib/tempo.ml}; (3) the handlers for each effect
+in the same file. The most important invariant to keep in mind is that all
+continuations are resumed by enqueueing tasks, never by direct calls, which
+preserves the instant discipline.
+
+\paragraph{Scheduler state and task queues}
+The runtime maintains three task collections: a FIFO queue of tasks runnable
+in the current instant, a list of tasks scheduled for the next instant, and a
+list of tasks blocked on unsatisfied guards. Each task carries its guards and
+preemption tokens, and tasks are grouped into logical threads so that
+\texttt{join} can synchronize on thread completion. A registry of signals
+tracks presence, current value, and waiting continuations.
+
+The scheduler state also stores debug counters (signal ids, task ids, step and
+instant counters) and a per-thread bookkeeping table. Each thread state keeps
+an active task count and a list of waiters to resume when the thread completes.
+This enables \texttt{join} to synchronize without global locks or OS threads.
+
+The scheduler is single-threaded and deterministic: all decisions are made in
+one runtime loop. This makes it easier to reason about the ordering of effects
+within an instant, but it also means that the implementation must explicitly
+track every deferred continuation to avoid hidden control flow.
+
+Tasks move between queues as follows: when a task performs an effect that
+defers it (e.g., \texttt{await} or \texttt{pause}), its continuation is wrapped
+as a new task and enqueued in \texttt{next\_instant}. When a task is blocked by
+guards, it is placed in the \texttt{blocked} list and also registered in the
+missing signals' \texttt{guard\_waiters}. At instant end, all blocked tasks are
+moved to \texttt{next\_instant}, preserving the rule that absent guards only
+become observable in the next instant.
+
+The scheduler also maintains a clear quiescence condition: an instant ends
+only when the current queue is empty. This ensures that all reactions to
+present signals have been taken before finalization, aligning with the
+delayed-absence semantics.
+
+\paragraph{Task lifecycle and bookkeeping}
+Creating a task registers it under a thread id and increments the active count.
+When a task finishes, the active count is decremented; if it reaches zero, any
+waiters are resumed. Tasks carry a \emph{queued} flag to avoid double enqueue,
+a \emph{blocked} flag to control guard rescheduling, and a list of kill tokens
+that determine whether the task is still alive. This lifecycle is essential to
+the deterministic semantics because it ensures tasks are resumed only at
+well-defined instant boundaries.
+
+\paragraph{Threads, \texttt{fork}, and \texttt{join}}
+A \texttt{fork} creates a new logical thread with its own task counter. The
+parent task continues immediately, while the child task is scheduled in the
+current instant. \texttt{join} captures the caller's continuation and registers
+it in the target thread's waiter list. When the thread's active counter reaches
+zero, all join waiters are resumed in the next instant. This design allows
+structured concurrency without OS threads, while still making completion
+observable at instant boundaries.
+
+\begin{lstlisting}[style=tempo]
+(* Pseudo-code for join handling *)
+on Join thread_id:
+  if thread completed then
+    enqueue_next (continue k ())
+  else
+    add waiter (fun () -> enqueue_next (continue k ()))
+\end{lstlisting}
+
+\paragraph{Invariants}
+The scheduler maintains several invariants that are critical for correct
+behavior:
+\begin{itemize}
+\item \textbf{No direct resumption}: every continuation becomes a task and is
+  enqueued through the scheduler queues.
+\item \textbf{No re-entrancy}: a task is never scheduled while it is already
+  running (\texttt{queued} flag).
+\item \textbf{Guard discipline}: a blocked task appears in guard\_waiters of
+  every missing guard and nowhere else.
+\item \textbf{Kill discipline}: a task is scheduled only if all its kill tokens
+  are alive.
+\end{itemize}
+Most of the implementation complexity exists to preserve these invariants in
+the presence of nested guards, nested preemption, and parallel composition.
+
+\paragraph{Failure modes and debug hooks}
+Several runtime checks enforce the synchronous discipline:
+\begin{itemize}
+\item \textbf{Multiple emits on event signals}: a second emission in the same
+  instant raises an exception because the event semantics require a single
+  value per instant.
+\item \textbf{Present-without-value}: if a signal is marked present but has no
+  stored value, the runtime fails fast to avoid undefined behavior.
+\item \textbf{Dead kill tokens}: tasks protected by aborted kill tokens are
+  discarded silently; this is intentional and implements weak preemption.
+\end{itemize}
+Debug counters (task ids, signal ids, instant/step counters) and optional logs
+make it possible to correlate observable outputs with internal queue states.
+These hooks are crucial when diagnosing unexpected blocking or when confirming
+that a program respects the instant discipline.
+
+\paragraph{Core runtime types}
+The implementation centers on a small set of runtime records. The following
+summary aligns with the concrete types in \texttt{lib/tempo\_types.ml} and
+\texttt{lib/tempo.ml}.
+\begin{table}[h]
+\centering
+\begin{tabularx}{\linewidth}{lY}
+\hline
+Type & Role and fields (informal) \\ \hline
+\texttt{task} & \texttt{t\_id}, \texttt{thread}, \texttt{guards}, \texttt{kills},
+\texttt{run}, plus \texttt{queued}/\texttt{blocked} flags. \\
+\texttt{signal\_core} & \texttt{s\_id}, \texttt{present}, \texttt{value},
+\texttt{awaiters}, \texttt{guard\_waiters}, and \texttt{kind} (event or
+aggregate with \texttt{combine}/\texttt{initial}). \\
+\texttt{thread\_state} & \texttt{active}, \texttt{completed}, \texttt{waiters}. \\
+\texttt{scheduler\_state} & \texttt{current}, \texttt{next\_instant},
+\texttt{blocked}, \texttt{signals}, \texttt{thread\_counter}, \texttt{threads},
+and \texttt{debug} counters. \\ \hline
+\end{tabularx}
+\caption{Key runtime structures used by the scheduler.}
+\end{table}
+
+\paragraph{Declared effects}
+The reactive operations are exposed as algebraic effects in
+\texttt{lib/tempo\_types.ml}. The code below mirrors the actual declaration:
+\begin{lstlisting}[style=tempo]
+type _ Effect.t +=
+  | New_signal : unit -> ('a, 'a, event) signal_core Effect.t
+  | New_signal_agg :
+      'agg * ('agg -> 'emit -> 'agg)
+      -> ('emit, 'agg, aggregate) signal_core Effect.t
+  | Emit : ('emit, 'agg, 'mode) signal_core * 'emit -> unit Effect.t
+  | Await : ('emit, 'agg, 'mode) signal_core -> 'agg Effect.t
+  | Await_immediate : ('a, 'a, event) signal_core -> 'a Effect.t
+  | Pause : unit Effect.t
+  | Fork : (unit -> unit) -> thread Effect.t
+  | Join : thread -> unit Effect.t
+  | With_guard :
+      ('emit, 'agg, 'mode) signal_core * (unit -> unit) -> unit Effect.t
+  | With_kill : kill * (unit -> unit) -> unit Effect.t
+\end{lstlisting}
+Each effect corresponds to a single scheduler action: \texttt{New\_signal}
+allocates a fresh signal; \texttt{Emit} publishes a value and wakes waiters;
+\texttt{Await}/\texttt{Await\_immediate} suspend and resume continuations;
+\texttt{Pause} shifts execution to the next instant; \texttt{Fork}/\texttt{Join}
+manage logical threads; and \texttt{With\_guard}/\texttt{With\_kill} implement
+guarding and weak preemption.
+
+\paragraph{From effect to scheduler (worked example)}
+Consider \texttt{Await} as implemented in \texttt{lib/tempo.ml}. When a task
+performs \texttt{Await s}, the handler captures the continuation and registers
+it in \texttt{s.awaiters}. If \texttt{s} is already present and is an event
+signal, the continuation is scheduled for the next instant; otherwise it is
+stored as a waiter and resumed when \texttt{s} becomes present. The critical
+behavior is that resumption is \emph{always} scheduled through the scheduler
+queue, never executed directly in the current stack, which preserves the
+instant boundary discipline.
+
+In the excerpt below, the helper \texttt{mk\_task} wraps a continuation into a
+runnable task. \texttt{enqueue\_next} schedules it for the next instant, and
+\texttt{continue k v} resumes the captured continuation with value \texttt{v}.
+
+\begin{lstlisting}[style=tempo]
+(* lib/tempo.ml: effect handling for Await *)
+| effect (Await s), k ->
+    let enqueue_resume v =
+      let t' = mk_task st t.thread t.guards t.kills
+        (fun () -> continue k v) in
+      enqueue_next st t'
+    in
+    let register_waiter () =
+      let resume v =
+        let t' = mk_task st t.thread t.guards t.kills
+          (fun () -> continue k v) in
+        enqueue_next st t'
+      in
+      s.awaiters <- resume :: s.awaiters
+    in
+    if s.present then
+      match s.kind with
+      | Event_signal ->
+          (match s.value with
+           | Some v -> enqueue_resume v
+           | None -> failwith "present but no value")
+      | Aggregate_signal _ ->
+          register_waiter ()
+    else
+      register_waiter ()
+\end{lstlisting}
+
+In terms of observable behavior, this means that an \texttt{await} never
+resumes in the current instant; the continuation is always deferred to the
+next instant, ensuring that presence and absence are observed only at instant
+boundaries. This pattern is representative of how effects encode the scheduler
+policy in user space.
+
+\begin{table}[h]
+\centering
+\begin{tabularx}{\linewidth}{lY}
+\hline
+Effect & Scheduler action and instant semantics \\ \hline
+\texttt{New\_signal} & Allocate signal state in the current instant. \\
+\texttt{Emit} & Mark present and wake awaiters (possibly now). \\
+\texttt{Await} & Register continuation; resume next instant. \\
+\texttt{Await\_immediate} & Resume now if present; otherwise register waiter. \\
+\texttt{Pause} & Defer continuation to the next instant. \\
+\texttt{Fork} & Spawn child task in current instant. \\
+\texttt{Join} & Suspend until thread completes, then resume. \\
+\texttt{With\_guard} & Attach guard set; block if guards absent. \\
+\texttt{With\_kill} & Register cleanup; abort at instant end on kill. \\ \hline
+\end{tabularx}
+\caption{Effect-to-scheduler mapping.}
+\end{table}
+
+\paragraph{Instant loop and signal finalization}
+Execution proceeds by instants. During an instant, the scheduler repeatedly
+dequeues a runnable task, checks whether its guards are satisfied, and either
+runs it or moves it to the blocked list. At the end of the instant, the
+runtime finalizes all signals: event and aggregate signals are reset to
+absent, guard waiters are cleared, and aggregate-signal awaiters are resumed
+with the accumulated value. Blocked tasks are moved to the next-instant list,
+and the next instant begins with the tasks that remain alive.
+
+More precisely, each step records timing metrics, logs queue snapshots, and
+updates counters for reproducibility. When the runnable queue becomes empty,
+the instant ends. All blocked tasks are re-queued for the next instant, which
+implements the delayed-absence discipline: a guard that was absent remains
+absent for the entire instant, and the task can only retry in the next one.
+
+Re-queuing does not lose guard information: the blocked task still carries its
+guard list, so when it is dequeued in the next instant it is checked again. If
+some guards are still absent, it is re-registered in the corresponding
+\texttt{guard\_waiters} lists. This is why clearing \texttt{guard\_waiters} at
+instant end is safe: the lists are reconstructed as tasks are revisited.
+
+\paragraph{Queue discipline and fairness}
+The current queue is FIFO, which yields a simple notion of fairness within an
+instant: tasks are resumed in the order they are enqueued. This ordering is an
+implementation choice rather than a semantic guarantee, and observable results
+should not depend on it. The ordering is nevertheless useful for debugging and
+reproducible traces, and it aligns with the cooperative scheduling model of
+FairThreads.
+
+To avoid starvation across instants, any task that remains blocked is
+reconsidered in the next instant. This provides a coarse-grained fairness
+property: if a guard becomes present in some future instant, the corresponding
+task will be eligible to run at the start of that instant.
+
+\paragraph{Instant loop pseudo-code}
+\begin{lstlisting}[style=tempo]
+while current_queue not empty do
+  t <- pop current_queue
+  if not kills_alive t then discard t
+  else if guard_ok t.guards then run t
+  else
+    block t on missing_guards
+    register t in guard_waiters of each missing guard
+end
+finalize_signals ()
+move blocked tasks to next_instant
+swap current_queue and next_instant
+\end{lstlisting}
+This sketch omits bookkeeping details (thread counters, debug logs) but
+captures the control structure of the scheduler.
+
+The ordering above is deliberate. Kill checks precede guard checks so that a
+preempted task is never allowed to run or block again. Guard checks precede
+execution to preserve the semantics that guards are blocking conditions, not
+filters applied after a step. If these checks were reversed, a task might run
+in an instant where its guard is absent or continue after being preempted,
+which would violate the intended weak-preemption semantics.
+
+\begin{figure}[t]
+\centering
+\resizebox{0.80\columnwidth}{!}{%
+\footnotesize
+\begin{tikzpicture}[
+  node distance=10mm,
+  box/.style=tempo,
+  draw,
+  rounded corners,
+  align=center,
+  minimum width=30mm,
+  minimum height=8mm,
+  decision/.style=tempo,
+  draw,
+  align=center,
+  aspect=2,
+  inner sep=1pt,
+  arrow/.style=tempo
+]
+\node[box] (start) {Start instant};
+\node[box, below=of start] (dequeue) {Dequeue task};
+\node[decision, below=of dequeue] (guards) {Guards\\satisfied?};
+\node[box, left=of guards] (block) {Block task\\on guards};
+\node[box, right=of guards] (handle) {Handle task\\effects};
+\node[decision, below=of guards] (empty) {Queue\\empty?};
+\node[box, below=of empty] (finalize) {Finalize signals\\and move blocked};
+\node[box, below=of finalize] (next) {Next instant};
+
+\draw[arrow] (start) -- (dequeue);
+\draw[arrow] (dequeue) -- (guards);
+\draw[arrow] (guards) -- node[above]{no} (block);
+\draw[arrow] (guards) -- node[above]{yes} (handle);
+\draw[arrow] (block) |- (empty);
+\draw[arrow] (handle) |- (empty);
+\draw[arrow] (empty) -- node[right]{yes} (finalize);
+\draw[arrow] (empty) -- ++(20mm,0mm) node[right]{no} |- (dequeue);
+\draw[arrow] (finalize) -- (next);
+\end{tikzpicture}%
+}
+\caption{High-level flowchart of the instant-based scheduler.}
+\end{figure}
+
+\paragraph{Execution trace (guard + watch)}
+Consider the running example from Section~\ref{ex:guard-watch}. In instant $t$,
+one task is guarded by signal \texttt{g}, and one is wrapped in \texttt{watch s}.
+At the start of the instant, both tasks are in the current queue. The guarded
+task is blocked because \texttt{g} is absent and is registered in
+\texttt{g.guard\_waiters}. The watched task runs; if it emits \texttt{s} during
+$t$, the guardian aborts the kill token and the watched task is prevented from
+continuing into $t{+}1$. At instant end, guard waiters are cleared, blocked
+tasks are moved to the next-instant list, and the system advances. This trace
+illustrates how guard blocking and weak preemption interact with the instant
+boundary discipline.
+
+\begin{lstlisting}[style=tempo]
+let g = new_signal () in
+let s = new_signal () in
+let guarded = (fun () -> when_ g (fun () -> emit s ())) in
+let watched = (fun () -> watch s (fun () -> pause (); emit s ())) in
+parallel [guarded; watched]
+\end{lstlisting}
+The trace tables below show the corresponding queue, signal, and observable
+states across instants.
+
+\begin{table}[h]
+\centering
+\begin{tabularx}{\linewidth}{lY}
+\hline
+Instant & Queue/blocked/signals snapshot \\ \hline
+$t$ start & Current: \texttt{guarded}, \texttt{watched}; blocked: $\varnothing$;
+signals: $g=\bot$, $s=\bot$. \\
+$t$ mid & \texttt{guarded} blocked on $g$; \texttt{watched} runs and emits $s=()$;
+kill token marked. \\
+$t$ end & Guard waiters cleared; blocked $o$ next instant; $s$ observed
+present at boundary, then reset; \texttt{watched} will not continue into
+$t{+}1$. \\ \hline
+\end{tabularx}
+\caption{Concrete execution trace for guard + watch (example above).}
+\end{table}
+
+\begin{table}[h]
+\centering
+\begin{tabularx}{\linewidth}{lY}
+\hline
+Instant & Observable signals and outputs \\ \hline
+$t$ & $s=()$ becomes present due to \texttt{watched}; no output emitted. \\
+$t{+}1$ & \texttt{guarded} remains blocked if $g=\bot$; no output emitted. \\
+\hline
+\end{tabularx}
+\caption{Two-instant observable trace for the example program.}
+\end{table}
+
+\paragraph{Signal operations}
+Signal creation effects allocate runtime state and register signals in the
+global registry. \texttt{Emit} marks a signal present and stores its value.
+For event signals, multiple emissions in the same instant are rejected, while
+aggregate signals fold successive emissions into an accumulator. Awaiting a
+signal registers a continuation: \texttt{await} always resumes at the next
+instant, while \texttt{await\_immediate} can resume in the current instant when
+the event signal is already present. This distinction matches the delayed
+absence discipline while still allowing immediate reactions when safe.
+Figure~\ref{fig:signal-state} summarizes the signal state evolution within a
+single instant.
+
+Event signals enforce a single-emission rule. The implementation checks
+\texttt{s.present} and raises an exception on a second emission in the same
+instant. This runtime check enforces the synchronous discipline in the absence
+of static typing rules.
+
+Signal waiters are stored as callbacks (continuations wrapped as functions).
+For event signals, each emission registers resumption through the scheduler;
+\texttt{await} resumes in the next instant, while \texttt{await\_immediate} may
+resume in the current instant if the signal is already present. For aggregate
+signals, emissions only update the accumulator; awaiters are resumed once at
+instant end with the aggregated value. This makes the point of observation
+explicit and keeps the aggregation order-insensitive.
+
+Aggregate signals are delivered only once per instant. Emissions update the
+accumulator, but awaiters are resumed at instant end with the accumulated
+value. This preserves determinism because the order of emissions within the
+instant does not affect the observable schedule, only the aggregated result.
+If the combine function is not associative/commutative, the aggregate value may
+still depend on intra-instant evaluation order, which is intentionally left
+unspecified; this is why the API recommends pure, order-insensitive combines.
+
+The finalization step can be summarized as follows:
+\begin{lstlisting}[style=tempo]
+for each signal s in registry do
+  if s is aggregate then
+    resume all awaiters with s.value
+  clear s.awaiters and s.guard_waiters
+  reset s.present and s.value
+\end{lstlisting}
+In the actual implementation, event-signal awaiters have already been resumed
+on emission, whereas aggregate awaiters are resumed in this finalization phase.
+
+\begin{figure}[t]
+\centering
+\resizebox{0.92\columnwidth}{!}{%
+\begin{tikzpicture}[
+  node distance=10mm,
+  box/.style=tempo,
+  draw,
+  rounded corners,
+  align=center,
+  minimum width=36mm,
+  minimum height=8mm,
+  arrow/.style=tempo
+]
+\node[box] (start) {Start instant:\\present=false, value=None};
+\node[box, below=of start] (emit) {Emissions:\\present=true, value updated};
+\node[box, below=of emit] (awaiters) {Awaiters:\\event resume now\\aggregate waits};
+\node[box, below=of awaiters] (finalize) {End instant:\\deliver aggregate,\\clear guard\_waiters};
+\node[box, below=of finalize] (reset) {Reset state:\\present=false, value=None};
+
+\draw[arrow] (start) -- (emit);
+\draw[arrow] (emit) -- (awaiters);
+\draw[arrow] (awaiters) -- (finalize);
+\draw[arrow] (finalize) -- (reset);
+\end{tikzpicture}%
+}
+\caption{Signal state evolution within an instant.}
+\label{fig:signal-state}
+\end{figure}
+
+\paragraph{Guards and blocking}
+Guarded execution is implemented by attaching a list of guard signals to each
+task. If a guard is missing, the task is blocked and registered in the guard
+waiter lists of the missing signals. When a signal is emitted, its guard
+waiters are rechecked: tasks whose guards are now all present are moved back to
+the runnable queue, otherwise they remain blocked on the remaining missing
+guards. This implements the disjunctive behavior of nested guards while
+preserving determinism.
+
+Guard checking is centralized: \texttt{guard\_ok} verifies all guards are
+present, while \texttt{missing\_guards} returns the absent subset. This keeps
+guard logic explicit and ensures the scheduler, rather than user code, controls
+when a blocked task can resume.
+
+To avoid repeated scans, each signal maintains its own \texttt{guard\_waiters}
+list. When a signal becomes present, only tasks that were blocked on that
+signal are reconsidered. Tasks may remain blocked if other guards are still
+absent, and they are re-registered on the remaining missing guards. This local
+indexing keeps guard rescheduling proportional to the number of blocked tasks
+that are directly affected by the emission.
+
+\paragraph{Guard disjunction by nesting}
+Nested \texttt{when\_} expressions behave as a conjunction at the level of
+guard satisfaction: a task blocked on multiple guards remains blocked until
+\emph{all} guards are present in the same instant. If a program wants a logical
+disjunction (guard $g_1$ \emph{or} $g_2$), it must use parallel guarded
+branches, which creates distinct tasks each blocked on a single guard. This
+mechanism follows directly from the guard list representation and the
+centralized \texttt{guard\_ok} predicate.
+
+\paragraph{Effect \texttt{With\_guard} and \texttt{when\_}}
+The \texttt{when\_} combinator is implemented using the \texttt{With\_guard}
+effect. Performing \texttt{With\_guard (s, body)} creates a new task whose
+guard list is extended with \texttt{s}. If \texttt{s} is absent, the task is
+blocked and registered in \texttt{s.guard\_waiters}. Once \texttt{s} becomes
+present, the scheduler rechecks the guard list and enqueues the task in the
+current instant. This means that \texttt{when\_} does not execute \texttt{body}
+until the guard is satisfied, and the scheduling decision remains centralized.
+In the excerpt below, \texttt{Any s} wraps a typed signal into an existential
+for the guard list, and \texttt{enqueue\_now} schedules the guarded task in the
+current instant.
+\begin{lstlisting}[style=tempo]
+(* lib/tempo.ml: effect handling for With_guard *)
+| effect (With_guard (s, body)), k ->
+    let t' =
+      mk_task st t.thread (Any s :: t.guards) t.kills
+        (fun () ->
+          body ();
+          enqueue_now st (mk_task st t.thread t.guards t.kills
+            (fun () -> continue k ())))
+    in
+    enqueue_now st t'
+\end{lstlisting}
+
+\paragraph{Guard resumption trace}
+Consider a task guarded by $g_1$ and $g_2$. At instant $t$, $g_1$ is present
+but $g_2$ is absent. The task is blocked and registered in $g_2.guard\_waiters$
+only; it is not re-checked until $g_2$ becomes present. When $g_2$ is emitted
+in instant $t{+}1$, the scheduler revisits the task, finds all guards present,
+and enqueues it in the current queue. This preserves the intended "all guards
+in the same instant" semantics.
+
+\paragraph{Effect \texttt{With\_kill} and \texttt{watch}}
+Weak preemption relies on the \texttt{With\_kill} effect. A kill token stores a
+cleanup continuation that is invoked when the token is aborted. The \texttt{watch}
+combinator creates a shared kill token for the protected body and a guardian
+task that waits on the watched signal. When the signal is emitted, the guardian
+aborts the shared token, which triggers the cleanup and prevents further
+resumption of the protected task.
+
+Concretely, \texttt{watch} runs the body under \texttt{With\_kill} and installs
+a cleanup continuation that schedules the parent continuation at the appropriate
+instant boundary. The scheduler checks \texttt{kills\_alive} before enqueuing a
+task, so any task protected by an aborted kill token is discarded. This yields
+weak preemption: the body can finish the current instant, but it will not
+continue in subsequent instants once the watched signal is present.
+In the excerpt below, \texttt{continue\_now} resumes the parent continuation in
+the current instant, while \texttt{continue\_later} defers it to the next
+instant. The cleanup stored in \texttt{kk.cleanup} chooses the safe resumption
+point once the kill token is aborted.
+\begin{lstlisting}[style=tempo]
+(* lib/tempo.ml: effect handling for With_kill *)
+| effect (With_kill (kk, body)), k ->
+    let continue_now () =
+      kk.cleanup <- None;
+      enqueue_now st (mk_task st t.thread t.guards t.kills
+        (fun () -> continue k ()))
+    and continue_later () =
+      kk.cleanup <- None;
+      enqueue_next st (mk_task st t.thread t.guards t.kills
+        (fun () -> continue k ()))
+    in
+    kk.cleanup <- Some continue_later;
+    let runner () =
+      body ();
+      continue_now ()
+    in
+    let t' = mk_task st t.thread t.guards (kk :: t.kills) runner in
+    enqueue_now st t'
+\end{lstlisting}
+
+\paragraph{Worked walkthrough: \texttt{watch}}
+Consider a body \texttt{B} under \texttt{watch s}. At instant $t$, the guardian
+awaits \texttt{s} while \texttt{B} runs. If \texttt{s} is emitted during $t$,
+the guardian aborts the shared kill token and installs cleanup to prevent
+\texttt{B} from continuing at $t{+}1$. If \texttt{s} is not emitted, \texttt{B}
+continues normally in the next instant. This aligns with weak preemption: the
+body can complete the current instant but is cut off before the next one.
+
+\paragraph{Weak preemption with kill tokens}
+Weak preemption is modeled through kill tokens. A \texttt{watch} spawns a
+guardian that waits on the watched signal and aborts the protected computation
+at the end of the instant in which the signal is emitted. Internally, the
+runtime stores cleanup continuations for kill tokens so that aborting a token
+can schedule the appropriate continuation either immediately or in the next
+instant. This approach encodes preemption without violating the single-instant
+deterministic semantics.
+
+Kill tokens also ensure that tasks are not resumed after preemption. The
+scheduler checks that all kill tokens are alive before enqueuing a task; if any
+token is dead, the task is discarded and the thread bookkeeping is updated.
+Because preemption is weak, application code sometimes adds an explicit guard
+(e.g., a \texttt{handled} signal) to prevent simultaneous emissions in the same
+instant; this pattern is illustrated in the usage examples.
+
+\paragraph{Kill tokens and nested \texttt{watch}}
+Nested \texttt{watch} constructs install multiple kill tokens. The scheduler
+checks that \emph{all} kill tokens are alive before running a task. This means
+any inner \texttt{watch} that aborts its token is sufficient to prevent the
+task from continuing, which realizes the intended disjunction of stopping
+conditions. Kill tokens do not cancel the current instant; they only prevent
+the continuation from being enqueued after the instant boundary, which
+preserves weak preemption.
+
+\paragraph{Kill cleanup timing}
+The cleanup stored in a kill token is intentionally deferred with respect to
+observable behavior: if the watched signal is emitted in instant $t$, the
+protected computation can still finish its current instant but will not be
+resumed in $t{+}1$. Internally, the handler may schedule the cleanup either
+immediately or for the next instant, but the user-visible effect is always
+weak preemption at the instant boundary.
+
+\paragraph{Host I/O hooks}
+The entry point \texttt{execute} creates dedicated input and output signals.
+Before each step, host input can emit on the input signal; after the step, the
+output signal is checked and delivered to the host. This keeps external I/O
+separate from synchronous reactions while preserving the instant structure.
+
+Internally, \texttt{execute} installs a handler for all effects and runs a
+driver loop that alternates between (1) injecting host input for the instant,
+(2) running the scheduler until quiescence, and (3) collecting the output
+signal. This design keeps the host side free of continuation manipulation: the
+host only sees a stream of inputs and outputs at instant boundaries, which is
+consistent with the synchronous model.
+
+\begin{lstlisting}[style=tempo]
+loop:
+  call input_hook to emit on input signal
+  run scheduler until current queue is empty
+  read output signal at instant end
+\end{lstlisting}
+Outputs are therefore observed only at instant boundaries, which matches the
+delayed-absence discipline and prevents mid-instant I/O from leaking
+implementation order.
+
+For readability, helper functions used in the excerpts are summarized below
+(see Section~\ref{sec:helper-glossary}).
+
+\paragraph{Runtime helper glossary}\label{sec:helper-glossary}
+\begin{itemize}
+\item \texttt{mk\_task}: wrap a continuation into a runnable task record.
+\item \texttt{enqueue\_now}: schedule a task in the current instant queue.
+\item \texttt{enqueue\_next}: schedule a task for the next instant.
+\item \texttt{continue}: resume a captured continuation with a value.
+\item \texttt{Any}: existential wrapper to store signals in guard lists.
+\item \texttt{kills\_alive}: check that all kill tokens of a task are alive.
+\end{itemize}
+
+\subsection{Algebraic Effects in Detail}
+	\tempo{} encodes the reactive primitives as algebraic effects and interprets them
+with a deep handler. Each effect represents a semantic action (e.g., emit,
+await, pause), and the handler decides whether to resume the continuation now
+or to re-schedule it for a later instant. This design makes the control flow
+explicit and keeps the scheduler in user space rather than in a custom runtime.
+
+Effect capture preserves the current continuation, which is then wrapped into a
+task structure. For example, \texttt{await} captures the continuation, stores a
+resume function in the signal's waiter list, and ensures that the continuation
+is resumed at the beginning of the next instant. \texttt{await\_immediate}
+selects between immediate resumption (if the signal is already present) and
+registration as a waiter (if it is not). Similarly, \texttt{pause} captures the
+continuation and places it in the next-instant list.
+
+Signal creation effects allocate fresh signal records and return them to the
+continuation. \texttt{Emit} updates signal state and resumes any registered
+awaiters, potentially in the current instant. Guard effects update the task's
+guard set and may block the task if the guards are not satisfied. Preemption
+effects (\texttt{With\_kill}) store cleanup continuations that are invoked when
+the kill token is aborted, ensuring that termination is coordinated with the
+instant boundary.
+
+This effect-based organization provides a clear separation between the
+operational model (captured by the handler) and the user-facing API (exposed as
+effectful functions). It also enables experimentation with scheduling
+strategies without changing the OCaml runtime or the language semantics.
+
+\paragraph{Handler pseudo-code}
+\begin{lstlisting}[style=tempo]
+handle task =
+  match task() with
+  | effect (Emit (s, v)) k ->
+      mark_present s v;
+      resume_awaiters s;
+      enqueue_now (continue k ())
+  | effect (Await s) k ->
+      register_waiter s (fun v -> enqueue_next (continue k v))
+  | effect (Await_immediate s) k ->
+      if present s then enqueue_now (continue k (value s))
+      else register_waiter s (fun v -> enqueue_now (continue k v))
+  | effect Pause k ->
+      enqueue_next (continue k ())
+  | effect (With_guard (s, body)) k ->
+      update_guards s;
+      enqueue_now (fun () -> body (); continue k ())
+  | effect (With_kill (kk, body)) k ->
+      install_cleanup kk (fun () -> enqueue_next (continue k ()));
+      enqueue_now (fun () -> body (); continue k ())
+  | effect (Fork f) k ->
+      enqueue_now f; enqueue_now (continue k ())
+  | effect (Join t) k ->
+      add_join_waiter t (fun () -> enqueue_now (continue k ()))
+\end{lstlisting}
+
+\subsection{Detailed Effect Traces}
+This subsection provides step-by-step traces for key primitives. The goal is
+to make explicit where continuations are stored and how they move across
+queues.
+
+\paragraph{Trace: \texttt{await\_immediate}}
+Suppose \texttt{s} is an event signal. If \texttt{s} is already present, the
+continuation is resumed in the current instant via \texttt{enqueue\_now};
+otherwise it is registered in \texttt{s.awaiters} for resumption at the next
+instant. The behavior is summarized below.
+\begin{table}[h]
+\centering
+\begin{tabularx}{\linewidth}{lY}
+\hline
+Case & Scheduler action \\ \hline
+\texttt{s.present=true} & Enqueue continuation now; current instant resumes. \\
+\texttt{s.present=false} & Store waiter; resume at next instant. \\ \hline
+\end{tabularx}
+\caption{Scheduler actions for \texttt{await\_immediate}.}
+\end{table}
+
+\paragraph{Trace: \texttt{pause}}
+\texttt{pause} captures the current continuation and enqueues it for the next
+instant. The task does not run again in the current instant, which is the
+primary mechanism for separating instants in user code.
+
+\paragraph{Trace: \texttt{parallel}}
+\texttt{parallel} spawns multiple tasks in the current instant and waits for
+their completion. It relies on \texttt{fork} under the hood: each branch is a
+child task, and the parent waits until the child thread's active count reaches
+zero. The effect-level view is therefore:
+\begin{enumerate}
+\item Spawn a child task for each branch.
+\item Continue parent task to a \texttt{join}-like waiting point.
+\item Resume parent once all branches terminate.
+\end{enumerate}
+
+\paragraph{Trace: \texttt{watch}}
+The following sketch shows the lifecycle of a watched task.
+\begin{table}[h]
+\centering
+\begin{tabularx}{\linewidth}{lY}
+\hline
+Step & Scheduler action \\ \hline
+Start $t$ & Spawn guardian awaiting $s$; run body task. \\
+$s$ emitted & Guardian aborts kill token; installs cleanup. \\
+End $t$ & Body may complete; continuation not enqueued for $t{+}1$. \\
+$t{+}1$ & Body is discarded if kill token is dead. \\ \hline
+\end{tabularx}
+\caption{Execution trace for \texttt{watch}.}
+\end{table}
+
+\paragraph{Trace: \texttt{when\_}}
+The guard handler creates a task with an extended guard list. If the guard is
+absent, the task is blocked; if the guard is present, the task is enqueued
+immediately. The observable result is that \texttt{body} only begins in an
+instant where the guard is present.
+
+\subsection{Code Map: from API to Runtime}
+The table below provides a roadmap from surface-level functions to the runtime
+mechanisms that implement them. This can be used as a guide when reading the
+source.
+\begin{table}[h]
+\centering
+\begin{tabularx}{\linewidth}{lY}
+\hline
+API function & Runtime mechanism \\ \hline
+\texttt{new\_signal} & \texttt{New\_signal} effect, allocates signal\_core. \\
+\texttt{new\_signal\_agg} & \texttt{New\_signal\_agg} effect, sets combine/init. \\
+\texttt{emit} & \texttt{Emit} effect, updates signal and wakes waiters. \\
+\texttt{await} & \texttt{Await} effect, registers waiter for next instant. \\
+\texttt{await\_immediate} & \texttt{Await\_immediate} effect, immediate or next. \\
+\texttt{pause} & \texttt{Pause} effect, enqueue for next instant. \\
+\texttt{when\_} & \texttt{With\_guard} effect, extend guard list. \\
+\texttt{watch} & \texttt{With\_kill} effect, install kill token/cleanup. \\
+\texttt{parallel} & \texttt{fork}/\texttt{join}, thread counters. \\
+\texttt{execute} & Scheduler loop + host I/O hooks. \\ \hline
+\end{tabularx}
+\caption{Mapping from API to runtime mechanisms.}
+\end{table}

@@ -1,0 +1,80 @@
+\documentclass[sigconf]{acmart}
+
+% acmart defaults to the ACM Reference Format and includes required metadata.
+% Adjust options (e.g., manuscript, review) as needed.
+\usepackage{tabularx}
+\usepackage{array}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric,arrows.meta,positioning}
+\usepackage{listings}
+\usepackage{xcolor}
+\input{definitions}
+
+\definecolor{tempoBlue}{RGB}{34,54,120}
+\definecolor{tempoGray}{RGB}{245,245,245}
+\definecolor{tempoGreen}{RGB}{0,96,64}
+\definecolor{tempoRed}{RGB}{160,32,32}
+
+\tikzset{tempo/.style={}}
+
+\lstdefinestyle{tempo}{
+  language=[Objective]Caml,
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{tempoBlue}\bfseries,
+  commentstyle=\color{tempoGreen},
+  stringstyle=\color{tempoRed},
+  backgroundcolor=\color{tempoGray},
+  frame=single,
+  framerule=0pt,
+  rulecolor=\color{tempoGray},
+  linewidth=\columnwidth,
+  xleftmargin=0pt,
+  xrightmargin=0pt,
+  framexleftmargin=1mm,
+  framexrightmargin=1mm,
+  framesep=2mm,
+  aboveskip=10pt,
+  belowskip=8pt,
+  breaklines=true,
+  showstringspaces=false,
+  columns=fullflexible
+}
+
+\title{\tempo{}: Effect-Based Synchronous Reactive Control in OCaml}
+
+\author{Fr\'ed\'eric Dabrowski}
+\affiliation{%
+  \institution{Univ. Orl\'eans, INSA Centre Val de Loire, LIFO EA 4022}
+  \city{Orl\'eans}
+  \country{France}
+}
+\email{frederic.dabrowski@univ-orleans.fr}
+
+\begin{document}
+
+\begin{abstract}
+\input{sections/00-abstract}
+\end{abstract}
+
+\keywords{tempo, ocaml, synchronous, reactive control, algebraic effects}
+
+\maketitle
+
+\input{sections/01-introduction}
+\input{sections/02-background-control}
+\input{sections/04-core-constructs}
+\input{sections/06-tempo-overview}
+\input{sections/07-api}
+\input{sections/08-usage}
+\input{sections/05-effects-background}
+\input{sections/09-implementation}
+\input{sections/10-performance}
+\input{sections/11-limitations}
+\input{sections/12-related-work}
+\input{sections/13-conclusion}
+
+\bibliographystyle{ACM-Reference-Format}
+\bibliography{references}
+
+\end{document}

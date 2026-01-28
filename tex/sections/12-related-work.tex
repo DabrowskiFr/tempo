@@ -1,0 +1,79 @@
+\section{Related Work}
+\tempo{} is rooted in the reactive control lineage: Esterel, FairThreads, and
+ReactiveML. It inherits Boussinot's delayed-absence discipline
+\cite{esterel1992,fairthreads2003,reactiveml2005}. Relative to Esterel, \tempo{}
+does not impose a static compilation discipline; instead it targets dynamic
+behavior and library-level composition. Relative to FairThreads, \tempo{} provides
+a typed OCaml API with higher-order combinators and valued signals.
+
+Other synchronous languages in the same family include Lustre and Signal, which
+take dataflow-oriented approaches to synchronous programming, and the broader
+survey literature that situates these languages in a shared semantic landscape
+\cite{lustre1991,signal1987,benveniste2003}. \tempo{} aligns with this lineage but
+focuses on control primitives realized at library level rather than a dedicated
+compiler.
+
+Industrial synchronous formalisms have also shaped this landscape. Statecharts
+provide a widely adopted visual model for reactive control
+\cite{harel1987statecharts}, and SCADE offers a synchronous design and
+validation environment for safety-critical embedded control software
+\cite{berry2007scade}. These systems emphasize predictable control behavior and
+tooling, whereas \tempo{} targets a lightweight, library-level embedding.
+
+Closely related academic languages include Lucid Synchrone and Quartz, which
+extend synchronous ideas with functional or model-based design perspectives
+\cite{caspihamonpouzet2008lucid,schneider2017quartz}. These reinforce the
+continuity between \tempo{} and earlier synchronous language research.
+
+ReactiveML is the closest antecedent: it integrates reactive constructs into a
+language extension with dedicated syntax and compilation support. \tempo{}, by
+contrast, is a pure library that relies on OCaml 5.3 algebraic effects to
+implement the same control primitives without modifying the compiler or the
+runtime. This makes \tempo{} easier to integrate into existing OCaml codebases and
+enables experimentation with scheduling policies in user space, at the cost of
+foregoing some static analyses and language-level guarantees provided by
+ReactiveML.
+
+In contrast with FRP \cite{frp1997}, \tempo{} emphasizes control and instant-based
+determinism rather than continuous dataflow. The library focuses on explicit
+signals, guards, and preemption, aligning with synchronous reactive semantics
+instead of stream processing abstractions.
+
+Stream-processing languages such as Lucid and StreamIt
+\cite{ashcroft1977lucid,thies2002streamit} emphasize dataflow pipelines rather
+than control-centric instants. They provide a useful contrast to \tempo{}: the
+dataflow style is oriented toward throughput and steady-state streaming, while
+\tempo{} targets explicit control reactions at discrete instants.
+
+Recent FRP systems have introduced stronger operational guarantees. The
+modal FRP line of work uses modal types to enforce causality and prevent space
+leaks, including Simply RaTT and its extensions
+\cite{bahr2019ratt,bahr2022modalfrp,bahr2023async}. These systems target
+dataflow FRP rather than control-oriented primitives, but they offer insights
+into static enforcement mechanisms that could complement \tempo{}'s current
+runtime checks.
+Recent applications of modal FRP include GUI programming with modal types,
+which demonstrates the practicality of these systems in reactive user
+interfaces \cite{bahr2025gui}.
+
+Industrial reactive-streams frameworks (e.g., RxJava, Akka Streams) emphasize
+asynchronous stream processing and backpressure rather than synchronous
+instants. While their semantics differ from \tempo{}'s model, they represent a
+separate lineage of reactive programming practice and are surveyed in the
+reactive-streams literature \cite{cheng2017reactivestreams,davis2019reactivestreams}.
+
+\tempo{} also builds on the recent availability of algebraic effects and handlers
+in OCaml \cite{multicoreocaml2020}. At a semantic level, effects provide a
+structured interface to delimited continuations
+\cite{danvyfilinski1990,filinski1994,plotkinpretnar2009}, which has long been
+recognized as a natural foundation for user-level schedulers and cooperative
+threads. Systems such as Eff demonstrated the practicality of effect handlers
+as a runtime control mechanism \cite{eff2013}, and \tempo{} leverages the same
+mechanism for synchronous control, rather than for general-purpose effects.
+
+Compared with effect-based concurrency libraries, \tempo{}'s distinctive
+contribution is its \emph{instant} discipline: continuations are not resumed
+arbitrarily, but at well-defined boundaries that expose synchronous semantics.
+This positions \tempo{} between language-level synchronous systems (Esterel,
+ReactiveML) and general-purpose effect-based schedulers, offering a library
+path to control-oriented reactive programming.

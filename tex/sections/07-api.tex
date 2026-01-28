@@ -1,0 +1,137 @@
+\section{Public API}
+\tempo{} exposes a small API centered on signals, instants, and control
+combinators. The API can be grouped into three layers: signal creation and
+manipulation, control flow within instants, and execution of a complete
+reactive program.
+
+\paragraph{Signal types}
+\tempo{} uses two signal families:
+\begin{itemize}
+\item \texttt{'a signal}: event signal carrying values of type \texttt{'a}.
+  At most one emission is allowed per instant.
+\item \texttt{('emit, 'agg) agg\_signal}: aggregate signal that can receive
+  multiple emissions of type \texttt{'emit} per instant, folded into a value
+  of type \texttt{'agg} using a user-provided combine function.
+\end{itemize}
+
+\paragraph{Informal type signatures}\mbox{}\\
+\begin{itemize}
+\item \texttt{new\_signal : unit -> 'a signal}
+\item \texttt{new\_signal\_agg : initial:'agg -> combine:('agg -> 'emit -> 'agg) -> ('emit, 'agg) agg\_signal}
+\item \texttt{emit : 'a signal -> 'a -> unit}
+\item \texttt{await : 'a signal -> 'a}
+\item \texttt{await\_immediate : 'a signal -> 'a}
+\item \texttt{pause : unit -> unit}
+\item \texttt{when\_ : 'a signal -> (unit -> unit) -> unit}
+\item \texttt{watch : 'a signal -> (unit -> unit) -> unit}
+\item \texttt{parallel : (unit -> unit) list -> unit}
+\item \texttt{fork : (unit -> unit) -> thread}
+\item \texttt{join : thread -> unit}
+\item \texttt{execute : ('a signal -> 'b signal -> unit) -> unit}
+\end{itemize}
+These signatures are indicative; see \texttt{Tempo} for precise types.
+
+\paragraph{Signal creation and communication}\mbox{}\\
+\begin{itemize}
+\item \texttt{new\_signal ()} creates an event signal.
+\item \texttt{new\_signal\_agg extasciitilde initial extasciitilde combine}
+  creates an aggregate signal with an initial accumulator and a combine
+  function.
+\item \texttt{emit signal value} marks a signal present in the current instant
+  and delivers \texttt{value}.
+\item \texttt{await signal} suspends the current task until the signal becomes
+  present, resuming at the beginning of the next instant with the signal
+  value.
+\item \texttt{await\_immediate signal} resumes in the same instant if the signal
+  is already present. To preserve determinism, it is restricted to event
+  signals.
+\end{itemize}
+\begin{lstlisting}[style=tempo]
+let s = new_signal ()
+emit s 1
+let v = await s
+\end{lstlisting}
+
+Aggregate signals support accumulation across multiple emissions in the same
+instant:
+\begin{lstlisting}[style=tempo]
+let s = new_signal_agg
+  ~initial:0
+  ~combine:(fun acc x -> acc + x)
+emit s 1;
+emit s 2;
+let sum = await s
+\end{lstlisting}
+Contract. The combine function should be pure and ideally associative and
+commutative; otherwise the aggregate result may depend on the intra-instant
+evaluation order, which is not specified by the semantics. If no emission
+occurs during an instant, the value delivered is the initial accumulator.
+
+\paragraph{Control flow and concurrency}\mbox{}\\
+\begin{itemize}
+\item \texttt{pause ()} suspends the current task until the next instant.
+\item \texttt{parallel [p1; \dots; pn]} executes a list of behaviors
+  synchronously within the same instant.
+\item \texttt{when\_ guard body} executes \texttt{body} only if \texttt{guard} is
+  present; otherwise the task is blocked until the guard becomes present.
+\item \texttt{watch signal body} executes \texttt{body} and terminates it at the
+  end of the instant in which \texttt{signal} is emitted (weak preemption).
+\item \texttt{fork} and \texttt{join} create and synchronize logical threads.
+\end{itemize}
+\begin{lstlisting}[style=tempo]
+parallel [
+  (fun () -> emit s 1);
+  (fun () -> pause (); emit s 2)
+]
+watch s (fun () ->
+  when_ s (fun () -> emit s 3))
+\end{lstlisting}
+
+Usage notes:
+\begin{itemize}
+\item Event signals enforce single emission per instant; aggregate signals are
+  designed for multi-producer scenarios.
+\item \texttt{await} always resumes in the next instant, while
+  \texttt{await\_immediate} can resume in the current instant if the signal is
+  already present.
+\item \texttt{parallel} defines a logical concurrency scope; \texttt{fork} and
+  \texttt{join} are useful when a thread handle is needed.
+\end{itemize}
+
+\paragraph{Execution entry point}\mbox{}\\
+\texttt{execute} runs a program over instants. It accepts optional
+\texttt{input} and \texttt{output} hooks to interact with the environment by
+injecting values into an input signal and observing an output signal at each
+step. Inputs are injected at the beginning of each instant; outputs are
+observed at the end of the instant after the scheduler reaches quiescence. The
+program is expressed as a function that receives these two signals and defines
+the reactive behavior.
+\begin{lstlisting}[style=tempo]
+execute (fun input output ->
+  let v = await input in
+  emit output v)
+\end{lstlisting}
+
+\paragraph{Low-level API}
+The \texttt{Tempo.Low\_level} module exposes explicit termination and
+thread-control primitives. It is intended for advanced uses, such as building
+custom control operators that are not directly provided by the high-level API.
+
+\paragraph{Summary table}
+\begin{table}[h]
+\centering
+\begin{tabularx}{\linewidth}{lY}
+\hline
+Item & Role and constraints \\ \hline
+\texttt{'a signal} & Event signal; at most one emission per instant. \\
+\texttt{('e,'a) agg\_signal} & Aggregate signal; combine multiple emissions. \\
+\texttt{emit} & Mark present; event signals accept a single emit per instant. \\
+\texttt{await} & Suspend to next instant; resumes with signal value. \\
+\texttt{await\_immediate} & Same-instant await; event signals only. \\
+\texttt{pause} & Suspend until next instant. \\
+\texttt{when\_} & Guarded execution; blocks until guard is present. \\
+\texttt{watch} & Weak preemption; stops at end of emitting instant. \\
+\texttt{execute} & Run program; host hooks optional. \\ \hline
+\end{tabularx}
+\caption{API summary with roles and constraints.}
+\end{table}
