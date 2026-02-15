@@ -1,6 +1,6 @@
 [consumer] waiting for batch #0
 [producer] emit "alpha", "beta", "gamma"
+[producer] emit "delta" puis "epsilon"
 [consumer] received batch #0 = [gamma; beta; alpha]
 [consumer] waiting for batch #1
-[producer] emit "delta" puis "epsilon"
 [consumer] received batch #1 = [epsilon; delta]
