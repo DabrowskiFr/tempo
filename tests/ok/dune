@@ -5,6 +5,11 @@
   emit_agg_collect
   emit_agg_sum
   emit_event_wakes_awaiters
+  app_api
+  execute_timeline
+  dynamic_api
+  error_bus_api
+  frp_api
   emit_once_await_immediate
   emit_once_await_many
   emit_once_await_one
@@ -28,5 +33,9 @@
   when_same_instant
   when_tick_tock
   with_kill_abort
+  state_api
+  sf_api
+  timeline_json_api
+  tooling_api
   with_kill_inherit)
  (libraries tempo))

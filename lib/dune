@@ -10,3 +10,9 @@
   tempo_engine
   tempo)
  (libraries logs mtime mtime.clock))
+
+(library
+ (name tempo_game)
+ (public_name tempo.game)
+ (modules tempo_game)
+ (libraries tempo))

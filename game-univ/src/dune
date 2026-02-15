@@ -31,3 +31,8 @@
  (name headless_runner)
  (modules headless_runner)
  (libraries game_univ_core tempo))
+
+(executable
+ (name frp_mini_game)
+ (modules frp_mini_game)
+ (libraries tempo raylib))
