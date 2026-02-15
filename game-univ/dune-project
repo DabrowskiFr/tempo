@@ -1,0 +1,13 @@
+(lang dune 3.19)
+(name cheat_detector_game)
+(generate_opam_files true)
+
+(package
+ (name cheat_detector_game)
+ (synopsis "Cheat detector game with Tempo + Raylib")
+ (description "2D game where a professor spots cheating students using Tempo synchronous logic and Raylib rendering")
+ (depends
+  (ocaml (>= 5.3.0))
+  dune
+  tempo
+  raylib))

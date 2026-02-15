@@ -1,0 +1,33 @@
+(include_subdirs unqualified)
+
+(library
+ (name game_univ_core)
+ (wrapped false)
+ (modules
+  types
+  game
+  bus
+  game_io
+  time_helpers
+  tempo_runtime
+  headless_adapter
+  professor
+  student
+  movement
+  suspicion
+  flag_counter
+  question
+  action_feedback
+  render)
+ (libraries tempo))
+
+(executable
+ (name main)
+ (public_name cheat_detector_game)
+ (modules main raylib_adapter raylib_platform)
+ (libraries game_univ_core tempo raylib))
+
+(executable
+ (name headless_runner)
+ (modules headless_runner)
+ (libraries game_univ_core tempo))
