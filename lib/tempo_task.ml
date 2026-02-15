@@ -21,15 +21,13 @@ open Tempo_types
 let kills_alive kills = List.for_all (fun k -> !(k.alive)) kills
 
 let enqueue_now st t =
-  if (not t.queued && kills_alive t.kills) then begin
+  if (not t.queued) && kills_alive t.kills then (
     t.queued <- true;
     t.blocked <- false;
-    Queue.add t st.current
-  end
+    Queue.add t st.current)
 
 let enqueue_next st t =
-  if (kills_alive t.kills) then
-  st.next_instant <- t :: st.next_instant
+  if kills_alive t.kills then st.next_instant <- t :: st.next_instant
 
 let create_task st thread guards kills run =
   let state = Tempo_thread.ensure st.threads thread in
@@ -41,28 +39,30 @@ let create_task st thread guards kills run =
 
 let spawn_now st thread guards kills run =
   let t = create_task st thread guards kills run in
-  enqueue_now st t; t
+  enqueue_now st t;
+  t
 
 let spawn_next st thread guards kills run =
   let t = create_task st thread guards kills run in
-  enqueue_next st t; t
+  enqueue_next st t;
+  t
 
 let block_on_guards st t =
   assert (kills_alive t.kills);
-  if not t.blocked then begin
+  if not t.blocked then (
     t.blocked <- true;
-    st.blocked <- t :: st.blocked
-  end;
+    st.blocked <- t :: st.blocked);
   let missing_guards guards =
     List.filter (fun (Any s) -> not s.present) guards
   in
   let miss = missing_guards t.guards in
-  List.iter (fun (Tempo_types.Any s) -> s.guard_waiters <- t :: s.guard_waiters) miss
+  List.iter
+    (fun (Tempo_types.Any s) -> s.guard_waiters <- t :: s.guard_waiters)
+    miss
 
 let wake_guard_waiters st s =
   let guard_ok guards = List.for_all (fun (Any g) -> g.present) guards in
   List.iter
-    (fun t ->
-      if guard_ok t.guards && kills_alive t.kills then enqueue_now st t)
+    (fun t -> if guard_ok t.guards && kills_alive t.kills then enqueue_now st t)
     s.guard_waiters;
   s.guard_waiters <- []

@@ -1,22 +1,6 @@
 open Tempo
 open Graphics
 
-(* -- additional functions *)
-
-(* Toggle between two behaviors each time [toggle] is emitted.
-   Starts immediately with [proc_a], then switches on every toggle. *)
-let alternate (toggle : unit signal) (proc_a : unit -> unit) (proc_b : unit -> unit) =
-  let rec loop use_a =
-    let proc = if use_a then proc_a else proc_b in
-    let _ = fork (fun () -> watch toggle proc) in
-    await toggle;
-    loop (not use_a)
-  in
-  loop true
-
-let rec loop p () = p (); pause (); loop p ()
-let rec idle () = pause (); idle ()
-
 (* -- Balls physics*)
 
 type state = { x : int; y : int; vx : int; vy : int; color : Graphics.color }
@@ -29,8 +13,7 @@ let bounce pos vel max_coord =
   let next = pos + vel in
   if next < radius then (radius + (radius - next), -vel)
   else if next > max_coord - radius then
-    ( (max_coord - radius) - (next - (max_coord - radius))
-    , -vel )
+    (max_coord - radius - (next - (max_coord - radius)), -vel)
   else (next, vel)
 
 let step ({ x; y; vx; vy; _ } as s) =
@@ -40,9 +23,7 @@ let step ({ x; y; vx; vy; _ } as s) =
 
 (* -- Input/Output *)
 
-let input () = 
-  if key_pressed () then 
-      Some (read_key ()) else None
+let input () = if key_pressed () then Some (read_key ()) else None
 
 let output states =
   set_color white;
@@ -62,20 +43,16 @@ let drive_ball stop ctrl initial_state frame_sig () =
       let state = ref initial_state in
       let move = loop (fun () -> state := step !state) in
       let emit_loop = loop (fun () -> emit frame_sig !state) in
-      parallel [ 
-        (fun () -> alternate ctrl move idle); 
-        emit_loop ]
-  )
+      parallel [ (fun () -> alternate ctrl move idle); emit_loop ])
 
 let rec handle_input input_signal stop ctrl1 ctrl2 () =
   let c = await input_signal in
   if Char.equal c 'q' then emit stop ()
-  else begin
+  else (
     if Char.equal c 'p' then emit ctrl1 ();
     if Char.equal c 'o' then emit ctrl2 ();
     pause ();
-    handle_input input_signal stop ctrl1 ctrl2 ()
-  end
+    handle_input input_signal stop ctrl1 ctrl2 ())
 
 let render_loop stop output_signal frame_sig _init1 _init2 () =
   watch stop (fun () ->
@@ -90,30 +67,31 @@ let render_loop stop output_signal frame_sig _init1 _init2 () =
 (** -- Scenario *)
 
 let scenario input_signal output_signal =
-  let rec idle () = pause (); idle () in
+  let rec idle () =
+    pause ();
+    idle ()
+  in
   let stop = new_signal () in
   let ctrl1 = new_signal () in
   let ctrl2 = new_signal () in
-  let frame_sig =
-    new_signal_agg ~initial:[] ~combine:(fun acc s -> s :: acc)
-  in
+  let frame_sig = new_signal_agg ~initial:[] ~combine:(fun acc s -> s :: acc) in
   let init1 = { x = 100; y = 100; vx = 3; vy = 2; color = blue } in
   let init2 = { x = 400; y = 300; vx = -2; vy = 3; color = red } in
-  watch stop (fun () -> 
+  watch stop (fun () ->
       parallel
-        [ 
-          idle; (* to keep the program alive waiting for inputs*)
+        [
+          idle
+        ; (* to keep the program alive waiting for inputs*)
           handle_input input_signal stop ctrl1 ctrl2
         ; drive_ball stop ctrl1 init1 frame_sig
         ; drive_ball stop ctrl2 init2 frame_sig
         ; render_loop stop output_signal frame_sig init1 init2
         ])
-        
 
 (** -- Execution *)
 
 let () =
-    open_graph (Printf.sprintf " %dx%d" width height);
-    set_window_title "Tempo ball bounce";
-    auto_synchronize false;
-    execute ~input ~output scenario
+  open_graph (Printf.sprintf " %dx%d" width height);
+  set_window_title "Tempo ball bounce";
+  auto_synchronize false;
+  execute ~input ~output scenario

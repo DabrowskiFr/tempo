@@ -3,5 +3,5 @@
 [body] cycle 1
 [driver] emit trigger
 [body] cycle 2
-[driver] end
 [body] end (killed)
+[driver] end
