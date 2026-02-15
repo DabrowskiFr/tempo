@@ -13,7 +13,7 @@ Jeu 2D OCaml où le joueur incarne un professeur qui détecte les étudiants qui
 ```bash
 opam install dune raylib
 opam pin add tempo /Users/fredericdabrowski/Repos/tempo
-cd /Users/fredericdabrowski/Repos/tempo/game-univ
+cd /Users/fredericdabrowski/Repos/tempo/applications/games/game-univ
 dune build
 dune exec cheat_detector_game
 ```

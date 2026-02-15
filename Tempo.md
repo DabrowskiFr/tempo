@@ -194,4 +194,15 @@ Bonnes pratiques:
 - Implémentation: `lib/tempo.ml`
 - Module game re-export: `lib/tempo_game.mli`, `lib/tempo_game.ml`
 - Tests: `tests/ok`
-- Exemple jeu utilisant Tempo: `game-univ/`
+- Exemple jeu utilisant Tempo: `applications/games/game-univ/`
+
+## 16. Lancer les jeux depuis la racine (sans `cd`, sans `.exe`)
+Depuis `/Users/fredericdabrowski/Repos/tempo`:
+
+```bash
+dune exec ./applications/games/boids-raylib/run
+dune exec ./applications/games/ca-continuous-raylib/run
+dune exec ./applications/games/snake-raylib/run
+dune exec ./applications/games/solar-system-raylib/run
+dune exec ./applications/games/game-univ/run
+```
