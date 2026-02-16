@@ -9,35 +9,27 @@ type signal_name =
   | Sig_a
   | Sig_b
 
-type block =
-  | Emit of signal_name
-  | Await of signal_name
-  | Await_imm of signal_name
-  | Pause_block
-  | When_emit of signal_name * signal_name
-  | Watch_await_emit of signal_name * signal_name * signal_name
-  | Parallel_emit of signal_name * signal_name
+type block_kind =
+  | K_emit
+  | K_await
+  | K_await_imm
+  | K_pause
+  | K_when
+  | K_watch
+  | K_parallel
 
-let signal_name_to_string = function
-  | Sig_a -> "A"
-  | Sig_b -> "B"
+type block = {
+  id : int;
+  mutable kind : block_kind;
+  mutable s1 : signal_name;
+  mutable body1 : block list;
+  mutable body2 : block list;
+}
 
-let block_label = function
-  | Emit s -> Printf.sprintf "emit %s" (signal_name_to_string s)
-  | Await s -> Printf.sprintf "await %s" (signal_name_to_string s)
-  | Await_imm s -> Printf.sprintf "await_immediate %s" (signal_name_to_string s)
-  | Pause_block -> "pause"
-  | When_emit (g, t) ->
-      Printf.sprintf "when %s -> emit %s" (signal_name_to_string g) (signal_name_to_string t)
-  | Watch_await_emit (w, a, t) ->
-      Printf.sprintf "watch %s { await %s; emit %s }"
-        (signal_name_to_string w)
-        (signal_name_to_string a)
-        (signal_name_to_string t)
-  | Parallel_emit (a, b) ->
-      Printf.sprintf "parallel { emit %s || emit %s }"
-        (signal_name_to_string a)
-        (signal_name_to_string b)
+type insert_target =
+  | Into_main
+  | Into_body1
+  | Into_body2
 
 type timeline_row = {
   instant : int;
@@ -45,15 +37,166 @@ type timeline_row = {
   output : string option;
 }
 
+type row = {
+  id : int;
+  depth : int;
+  text : string;
+}
+
+let signal_name_to_string = function
+  | Sig_a -> "A"
+  | Sig_b -> "B"
+
 let ext_input_to_string = function
   | None -> "-"
   | Some In_a -> "A"
   | Some In_b -> "B"
 
+let cycle_signal = function
+  | Sig_a -> Sig_b
+  | Sig_b -> Sig_a
+
 let cycle_input = function
   | None -> Some In_a
   | Some In_a -> Some In_b
   | Some In_b -> None
+
+let kind_to_string = function
+  | K_emit -> "emit"
+  | K_await -> "await"
+  | K_await_imm -> "await_immediate"
+  | K_pause -> "pause"
+  | K_when -> "when"
+  | K_watch -> "watch"
+  | K_parallel -> "parallel"
+
+let cycle_kind = function
+  | K_emit -> K_await
+  | K_await -> K_await_imm
+  | K_await_imm -> K_pause
+  | K_pause -> K_when
+  | K_when -> K_watch
+  | K_watch -> K_parallel
+  | K_parallel -> K_emit
+
+let has_body1 = function
+  | K_when | K_watch | K_parallel -> true
+  | _ -> false
+
+let has_body2 = function
+  | K_parallel -> true
+  | _ -> false
+
+let block_label b =
+  match b.kind with
+  | K_emit -> Printf.sprintf "emit %s" (signal_name_to_string b.s1)
+  | K_await -> Printf.sprintf "await %s" (signal_name_to_string b.s1)
+  | K_await_imm -> Printf.sprintf "await_immediate %s" (signal_name_to_string b.s1)
+  | K_pause -> "pause"
+  | K_when ->
+      Printf.sprintf "when %s do body1[%d]"
+        (signal_name_to_string b.s1)
+        (List.length b.body1)
+  | K_watch ->
+      Printf.sprintf "watch %s do body1[%d]"
+        (signal_name_to_string b.s1)
+        (List.length b.body1)
+  | K_parallel ->
+      Printf.sprintf "parallel body1[%d] || body2[%d]"
+        (List.length b.body1)
+        (List.length b.body2)
+
+let point_in_rect x y rx ry rw rh =
+  x >= rx && x <= rx + rw && y >= ry && y <= ry + rh
+
+let draw_button x y w h label active =
+  let rect = Rectangle.create (float_of_int x) (float_of_int y) (float_of_int w) (float_of_int h) in
+  let bg = if active then Color.create 65 150 210 255 else Color.create 38 62 88 255 in
+  draw_rectangle_rec rect bg;
+  draw_rectangle_lines_ex rect 2.0 (Color.create 195 220 245 255);
+  draw_text label (x + 10) (y + 9) 18 Color.raywhite
+
+let next_id =
+  let r = ref 0 in
+  fun () ->
+    incr r;
+    !r
+
+let mk_block kind s1 =
+  { id = next_id (); kind; s1; body1 = []; body2 = [] }
+
+let sample_program () =
+  let b1 = mk_block K_emit Sig_a in
+  let b2 = mk_block K_pause Sig_a in
+  let b3 = mk_block K_when Sig_b in
+  b3.body1 <- [ mk_block K_emit Sig_a ];
+  let b4 = mk_block K_parallel Sig_a in
+  b4.body1 <- [ mk_block K_emit Sig_a ];
+  b4.body2 <- [ mk_block K_emit Sig_b; mk_block K_await Sig_a ];
+  [ b1; b2; b3; b4 ]
+
+let rec find_by_id_in_list (target_id : int) (blocks : block list) : block option =
+  match blocks with
+  | [] -> None
+  | (b : block) :: rest ->
+      if b.id = target_id then Some b
+      else
+        match find_by_id_in_list target_id b.body1 with
+        | Some _ as r -> r
+        | None -> (
+            match find_by_id_in_list target_id b.body2 with
+            | Some _ as r -> r
+            | None -> find_by_id_in_list target_id rest)
+
+let rec remove_by_id_from_list (target_id : int) (blocks : block list) : block list * bool =
+  let rec loop (acc : block list) (remaining : block list) =
+    match remaining with
+    | [] -> (List.rev acc, false)
+    | (b : block) :: rest ->
+        if b.id = target_id then (List.rev_append acc rest, true)
+        else
+          let body1', removed1 = remove_by_id_from_list target_id b.body1 in
+          b.body1 <- body1';
+          if removed1 then (List.rev_append (b :: acc) rest, true)
+          else
+            let body2', removed2 = remove_by_id_from_list target_id b.body2 in
+            b.body2 <- body2';
+            if removed2 then (List.rev_append (b :: acc) rest, true)
+            else loop (b :: acc) rest
+  in
+  loop [] blocks
+
+let append_block ~target ~selected_id ~program block =
+  match target with
+  | Into_main -> program @ [ block ]
+  | Into_body1 -> (
+      match selected_id with
+      | None -> program @ [ block ]
+      | Some sid -> (
+          match find_by_id_in_list sid program with
+          | Some b when has_body1 b.kind ->
+              b.body1 <- b.body1 @ [ block ];
+              program
+          | _ -> program @ [ block ]))
+  | Into_body2 -> (
+      match selected_id with
+      | None -> program @ [ block ]
+      | Some sid -> (
+          match find_by_id_in_list sid program with
+          | Some b when has_body2 b.kind ->
+              b.body2 <- b.body2 @ [ block ];
+              program
+          | _ -> program @ [ block ]))
+
+let rec flatten_blocks (depth : int) (blocks : block list) : row list =
+  List.concat
+    (List.map
+       (fun (b : block) ->
+         let me = [ { id = b.id; depth; text = block_label b } ] in
+         let c1 = flatten_blocks (depth + 1) b.body1 in
+         let c2 = flatten_blocks (depth + 1) b.body2 in
+         me @ c1 @ c2)
+       blocks)
 
 let signal_of_name sa sb = function
   | Sig_a -> sa
@@ -64,6 +207,13 @@ let simulate ~(blocks : block list) ~(inputs : ext_input option list) ~(instants
     let sa = new_signal () in
     let sb = new_signal () in
     let trace = new_signal_agg ~initial:[] ~combine:(fun acc msg -> msg :: acc) in
+    let emit_once sigv name =
+      if is_present sigv then
+        emit trace (Printf.sprintf "emit %s skipped (already present this instant)" name)
+      else (
+        emit sigv ();
+        emit trace (Printf.sprintf "emit %s" name))
+    in
     let rec input_pump () =
       when_ input (fun () ->
           match await_immediate input with
@@ -75,70 +225,42 @@ let simulate ~(blocks : block list) ~(inputs : ext_input option list) ~(instants
               emit trace "input B");
       pause ();
       input_pump ()
-    in
-    let emit_once sigv name =
-      if is_present sigv then
-        emit trace (Printf.sprintf "emit %s skipped (already present this instant)" name)
-      else (
-        emit sigv ();
-        emit trace (Printf.sprintf "emit %s" name))
-    in
-    let rec eval_block = function
-      | Emit s ->
-          let sigv = signal_of_name sa sb s in
-          emit_once sigv (signal_name_to_string s)
-      | Await s ->
-          let sigv = signal_of_name sa sb s in
+    and eval_block b =
+      match b.kind with
+      | K_emit ->
+          let sigv = signal_of_name sa sb b.s1 in
+          emit_once sigv (signal_name_to_string b.s1)
+      | K_await ->
+          let sigv = signal_of_name sa sb b.s1 in
           let () = await sigv in
-          emit trace (Printf.sprintf "await %s satisfied" (signal_name_to_string s))
-      | Await_imm s ->
-          let sigv = signal_of_name sa sb s in
+          emit trace (Printf.sprintf "await %s satisfied" (signal_name_to_string b.s1))
+      | K_await_imm ->
+          let sigv = signal_of_name sa sb b.s1 in
           let () = await_immediate sigv in
-          emit trace (Printf.sprintf "await_immediate %s satisfied" (signal_name_to_string s))
-      | Pause_block ->
+          emit trace (Printf.sprintf "await_immediate %s satisfied" (signal_name_to_string b.s1))
+      | K_pause ->
           emit trace "pause";
           pause ()
-      | When_emit (guard_s, target_s) ->
-          let guard = signal_of_name sa sb guard_s in
-          let target = signal_of_name sa sb target_s in
+      | K_when ->
+          let guard = signal_of_name sa sb b.s1 in
           when_ guard (fun () ->
-              emit trace
-                (Printf.sprintf "when %s active" (signal_name_to_string guard_s));
-              emit_once target (signal_name_to_string target_s))
-      | Watch_await_emit (watch_s, await_s, target_s) ->
-          let watched = signal_of_name sa sb watch_s in
-          let awaited = signal_of_name sa sb await_s in
-          let target = signal_of_name sa sb target_s in
-          watch watched (fun () ->
-              let () = await awaited in
-              emit trace
-                (Printf.sprintf "watch body passed: %s then emit %s"
-                   (signal_name_to_string await_s)
-                   (signal_name_to_string target_s));
-              emit_once target (signal_name_to_string target_s))
-      | Parallel_emit (left_s, right_s) ->
-          let left_sig = signal_of_name sa sb left_s in
-          let right_sig = signal_of_name sa sb right_s in
-          parallel
-            [ (fun () ->
-                emit trace (Printf.sprintf "parallel-left %s" (signal_name_to_string left_s));
-                emit_once left_sig (signal_name_to_string left_s))
-            ; (fun () ->
-                emit trace (Printf.sprintf "parallel-right %s" (signal_name_to_string right_s));
-                emit_once right_sig (signal_name_to_string right_s))
-            ]
-    and eval_blocks = function
-      | [] -> emit trace "program end"
-      | b :: rest ->
-          eval_block b;
-          eval_blocks rest
-    in
-    let rec flush_trace () =
+              emit trace (Printf.sprintf "when %s active" (signal_name_to_string b.s1));
+              eval_blocks b.body1)
+      | K_watch ->
+          let watched = signal_of_name sa sb b.s1 in
+          watch watched (fun () -> eval_blocks b.body1)
+      | K_parallel ->
+          parallel [ (fun () -> eval_blocks b.body1); (fun () -> eval_blocks b.body2) ]
+    and eval_blocks lst = List.iter eval_block lst
+    and program_once () =
+      eval_blocks blocks;
+      emit trace "program end"
+    and flush_trace () =
       let msgs = await trace in
       emit output (String.concat " | " (List.rev msgs));
       flush_trace ()
     in
-    parallel [ input_pump; (fun () -> eval_blocks blocks); flush_trace ]
+    parallel [ input_pump; program_once; flush_trace ]
   in
   let timeline = execute_timeline ~instants ~inputs run in
   List.map
@@ -160,14 +282,7 @@ let parse_args () =
   (!headless, max 4 !instants)
 
 let run_headless instants =
-  let blocks =
-    [ Emit Sig_a
-    ; Pause_block
-    ; Await Sig_b
-    ; Parallel_emit (Sig_a, Sig_b)
-    ; Watch_await_emit (Sig_b, Sig_a, Sig_b)
-    ]
-  in
+  let program = sample_program () in
   let inputs =
     [ Some In_b
     ; None
@@ -179,7 +294,7 @@ let run_headless instants =
     ; None
     ]
   in
-  let rows = simulate ~blocks ~inputs ~instants in
+  let rows = simulate ~blocks:program ~inputs ~instants in
   List.iter
     (fun r ->
       Printf.printf "t=%02d in=%s out=%s\n"
@@ -188,16 +303,6 @@ let run_headless instants =
         (match r.output with None -> "-" | Some s -> s))
     rows
 
-let point_in_rect x y rx ry rw rh =
-  x >= rx && x <= rx + rw && y >= ry && y <= ry + rh
-
-let draw_button x y w h label active =
-  let rect = Rectangle.create (float_of_int x) (float_of_int y) (float_of_int w) (float_of_int h) in
-  let bg = if active then Color.create 65 150 210 255 else Color.create 38 62 88 255 in
-  draw_rectangle_rec rect bg;
-  draw_rectangle_lines_ex rect 2.0 (Color.create 195 220 245 255);
-  draw_text label (x + 10) (y + 9) 18 Color.raywhite
-
 let () =
   let headless, instants = parse_args () in
   if headless then run_headless instants
@@ -205,24 +310,26 @@ let () =
     init_window 1400 900 "Tempo Core Studio";
     set_target_fps 60;
 
-    let palette : (string * block) list =
-      [ ("emit A", Emit Sig_a)
-      ; ("emit B", Emit Sig_b)
-      ; ("await A", Await Sig_a)
-      ; ("await_immediate A", Await_imm Sig_a)
-      ; ("pause", Pause_block)
-      ; ("when A -> emit B", When_emit (Sig_a, Sig_b))
-      ; ("watch B {await A; emit B}", Watch_await_emit (Sig_b, Sig_a, Sig_b))
-      ; ("parallel {emit A || emit B}", Parallel_emit (Sig_a, Sig_b))
+    let palette : (string * block_kind) list =
+      [ ("emit", K_emit)
+      ; ("await", K_await)
+      ; ("await_immediate", K_await_imm)
+      ; ("pause", K_pause)
+      ; ("when (container)", K_when)
+      ; ("watch (container)", K_watch)
+      ; ("parallel (container)", K_parallel)
       ]
     in
 
-    let script = ref [ Emit Sig_a; Pause_block; Await Sig_b ] in
+    let script = ref (sample_program ()) in
+    let selected_id = ref None in
+    let target = ref Into_main in
     let input_cells = Array.make instants None in
     if instants > 0 then input_cells.(0) <- Some In_b;
     if instants > 2 then input_cells.(2) <- Some In_b;
     if instants > 3 then input_cells.(3) <- Some In_a;
     if instants > 5 then input_cells.(5) <- Some In_b;
+
     let results = ref [] in
     let run_count = ref 0 in
     let status = ref "Ready" in
@@ -253,51 +360,50 @@ let () =
 
       draw_text "Tempo Core Studio" 24 16 36 (Color.create 235 240 255 255);
       draw_text
-        "Scratch-like playground focused on Tempo Core primitives: emit, await, await_immediate, pause, when, watch, parallel"
+        "Hierarchical core playground: blocks with nested bodies (Scratch-like)"
         24 58 18 (Color.create 176 198 224 255);
 
       let palette_x = 24 in
       let palette_y = 100 in
-      let palette_w = 360 in
-      draw_rectangle palette_x palette_y palette_w 760 (Color.create 24 44 69 255);
-      draw_rectangle_lines palette_x palette_y palette_w 760 (Color.create 105 145 187 255);
-      draw_text "Palette (click to append block)" (palette_x + 14) (palette_y + 10) 20 Color.raywhite;
+      draw_rectangle palette_x palette_y 360 760 (Color.create 24 44 69 255);
+      draw_rectangle_lines palette_x palette_y 360 760 (Color.create 105 145 187 255);
+      draw_text "Palette (click to insert)" (palette_x + 14) (palette_y + 10) 20 Color.raywhite;
 
       List.iteri
-        (fun i (label, block) ->
+        (fun i (label, kind) ->
           let y = palette_y + 50 + (i * 54) in
-          let x = palette_x + 12 in
-          let w = 336 in
-          let h = 44 in
-          draw_button x y w h label false;
-          if click && point_in_rect mouse_x mouse_y x y w h then (
-            script := !script @ [ block ];
+          draw_button (palette_x + 12) y 336 44 label false;
+          if click && point_in_rect mouse_x mouse_y (palette_x + 12) y 336 44 then (
+            let b = mk_block kind Sig_a in
+            script := append_block ~target:!target ~selected_id:!selected_id ~program:!script b;
             run_simulation ()))
         palette;
 
       let script_x = 410 in
       let script_y = 100 in
-      let script_w = 620 in
-      draw_rectangle script_x script_y script_w 540 (Color.create 26 47 73 255);
-      draw_rectangle_lines script_x script_y script_w 540 (Color.create 105 145 187 255);
-      draw_text "Program Blocks (Tempo Core sequence)" (script_x + 14) (script_y + 10) 20 Color.raywhite;
+      draw_rectangle script_x script_y 620 540 (Color.create 26 47 73 255);
+      draw_rectangle_lines script_x script_y 620 540 (Color.create 105 145 187 255);
+      draw_text "Program Tree" (script_x + 14) (script_y + 10) 20 Color.raywhite;
 
+      let rows = flatten_blocks 0 !script in
       List.iteri
-        (fun i b ->
-          let y = script_y + 48 + (i * 46) in
-          let row = Rectangle.create (float_of_int (script_x + 12)) (float_of_int y) 590.0 36.0 in
-          draw_rectangle_rec row (Color.create 45 80 120 255);
-          draw_rectangle_lines_ex row 1.5 (Color.create 165 205 240 255);
-          draw_text (Printf.sprintf "%02d" (i + 1)) (script_x + 20) (y + 9) 18 (Color.create 255 220 130 255);
-          draw_text (block_label b) (script_x + 58) (y + 9) 18 Color.raywhite;
-          let rx = script_x + 560 in
-          let rw = 42 in
-          let rh = 36 in
-          draw_button rx y rw rh "X" false;
-          if click && point_in_rect mouse_x mouse_y rx y rw rh then (
-            script := List.filteri (fun j _ -> j <> i) !script;
-            run_simulation ()))
-        !script;
+        (fun i r ->
+          if i < 16 then
+            let y = script_y + 48 + (i * 30) in
+            let selected = Some r.id = !selected_id in
+            let bg = if selected then Color.create 74 116 163 255 else Color.create 45 80 120 255 in
+            let row_rect = Rectangle.create (float_of_int (script_x + 12)) (float_of_int y) 590.0 26.0 in
+            draw_rectangle_rec row_rect bg;
+            draw_rectangle_lines_ex row_rect 1.5 (Color.create 165 205 240 255);
+            draw_text
+              (Printf.sprintf "%s%s" (String.make (r.depth * 2) ' ') r.text)
+              (script_x + 18)
+              (y + 6)
+              16
+              Color.raywhite;
+            if click && point_in_rect mouse_x mouse_y (script_x + 12) y 590 26 then
+              selected_id := Some r.id)
+        rows;
 
       let panel_x = 1050 in
       let panel_y = 100 in
@@ -307,34 +413,60 @@ let () =
       draw_text (Printf.sprintf "Runs: %d" !run_count) (panel_x + 220) (panel_y + 14) 18
         (Color.create 255 220 130 255);
 
-      let bx = panel_x + 16 in
-      let bw = 292 in
-      let run_y = panel_y + 54 in
-      let clear_script_y = panel_y + 112 in
-      let clear_inputs_y = panel_y + 164 in
-      let sample_y = panel_y + 216 in
-      draw_button bx run_y bw 48 "Run Simulation" true;
-      draw_button bx clear_script_y bw 44 "Clear Program" false;
-      draw_button bx clear_inputs_y bw 44 "Clear Inputs" false;
-      draw_button bx sample_y bw 44 "Load Sample Program" false;
+      draw_button (panel_x + 16) (panel_y + 54) 292 46 "Run Simulation" true;
+      draw_button (panel_x + 16) (panel_y + 108) 292 42 "Clear Program" false;
+      draw_button (panel_x + 16) (panel_y + 156) 292 42 "Clear Inputs" false;
+      draw_button (panel_x + 16) (panel_y + 204) 292 42 "Load Sample" false;
 
-      if click && point_in_rect mouse_x mouse_y bx run_y bw 48 then run_simulation ();
-      if click && point_in_rect mouse_x mouse_y bx clear_script_y bw 44 then (
+      if click && point_in_rect mouse_x mouse_y (panel_x + 16) (panel_y + 54) 292 46 then run_simulation ();
+      if click && point_in_rect mouse_x mouse_y (panel_x + 16) (panel_y + 108) 292 42 then (
         script := [];
+        selected_id := None;
         run_simulation ());
-      if click && point_in_rect mouse_x mouse_y bx clear_inputs_y bw 44 then (
+      if click && point_in_rect mouse_x mouse_y (panel_x + 16) (panel_y + 156) 292 42 then (
         Array.fill input_cells 0 instants None;
         run_simulation ());
-      if click && point_in_rect mouse_x mouse_y bx sample_y bw 44 then (
-        script :=
-          [ Emit Sig_a
-          ; Pause_block
-          ; Await Sig_b
-          ; When_emit (Sig_a, Sig_b)
-          ; Parallel_emit (Sig_a, Sig_b)
-          ; Watch_await_emit (Sig_b, Sig_a, Sig_b)
-          ];
+      if click && point_in_rect mouse_x mouse_y (panel_x + 16) (panel_y + 204) 292 42 then (
+        script := sample_program ();
+        selected_id := None;
         run_simulation ());
+
+      draw_text "Insert target" (panel_x + 16) (panel_y + 262) 18 Color.raywhite;
+      draw_button (panel_x + 16) (panel_y + 286) 92 36 "Main" (!target = Into_main);
+      draw_button (panel_x + 116) (panel_y + 286) 92 36 "Body1" (!target = Into_body1);
+      draw_button (panel_x + 216) (panel_y + 286) 92 36 "Body2" (!target = Into_body2);
+      if click && point_in_rect mouse_x mouse_y (panel_x + 16) (panel_y + 286) 92 36 then target := Into_main;
+      if click && point_in_rect mouse_x mouse_y (panel_x + 116) (panel_y + 286) 92 36 then target := Into_body1;
+      if click && point_in_rect mouse_x mouse_y (panel_x + 216) (panel_y + 286) 92 36 then target := Into_body2;
+
+      draw_text "Selected block editor" (panel_x + 16) (panel_y + 338) 18 Color.raywhite;
+      begin
+        match !selected_id with
+        | None -> draw_text "No selection" (panel_x + 16) (panel_y + 362) 16 (Color.create 170 192 220 255)
+        | Some sid -> (
+            match find_by_id_in_list sid !script with
+            | None -> draw_text "Selection lost" (panel_x + 16) (panel_y + 362) 16 (Color.create 220 120 120 255)
+            | Some b ->
+                draw_text (Printf.sprintf "id=%d  kind=%s" b.id (kind_to_string b.kind))
+                  (panel_x + 16) (panel_y + 362) 15 (Color.create 220 236 252 255);
+                draw_text (Printf.sprintf "signal=%s" (signal_name_to_string b.s1))
+                  (panel_x + 16) (panel_y + 382) 15 (Color.create 220 236 252 255);
+                draw_button (panel_x + 16) (panel_y + 406) 140 36 "Cycle Kind" false;
+                draw_button (panel_x + 168) (panel_y + 406) 140 36 "Cycle Signal" false;
+                draw_button (panel_x + 16) (panel_y + 450) 292 36 "Remove Selected" false;
+                if click && point_in_rect mouse_x mouse_y (panel_x + 16) (panel_y + 406) 140 36 then (
+                  b.kind <- cycle_kind b.kind;
+                  if not (has_body1 b.kind) then b.body1 <- [];
+                  if not (has_body2 b.kind) then b.body2 <- [];
+                  run_simulation ());
+                if click && point_in_rect mouse_x mouse_y (panel_x + 168) (panel_y + 406) 140 36 then (
+                  b.s1 <- cycle_signal b.s1;
+                  run_simulation ());
+                if click && point_in_rect mouse_x mouse_y (panel_x + 16) (panel_y + 450) 292 36 then (
+                  script := fst (remove_by_id_from_list b.id !script);
+                  selected_id := None;
+                  run_simulation ()))
+      end;
 
       draw_text "Tick input editor (click cell: - -> A -> B)" 24 600 20 Color.raywhite;
       for i = 0 to instants - 1 do
@@ -360,7 +492,7 @@ let () =
       done;
 
       draw_text "Timeline output (per logical instant)" 24 690 20 Color.raywhite;
-      draw_text "Tip: click timeline input cells, result refreshes immediately" 400 692 16
+      draw_text "Tip: edit tree + inputs, simulation refreshes immediately" 420 692 16
         (Color.create 180 205 230 255);
       let max_rows = min instants 10 in
       List.iteri
@@ -381,9 +513,9 @@ let () =
         !results;
 
       draw_text
-        "Core focus: each block compiles to Tempo primitives; no FRP layer used."
+        "Core focus: hierarchical blocks compile to Tempo primitives; no FRP layer used."
         24 868 17 (Color.create 158 184 214 255);
-      draw_text !status 730 868 15 (Color.create 210 225 245 255);
+      draw_text !status 720 868 15 (Color.create 210 225 245 255);
 
       end_drawing ()
     done;
