@@ -1,5 +1,6 @@
 open Tempo
 open Raylib
+open Tempo_game
 
 type ext_input = {
   red : bool;
@@ -149,20 +150,13 @@ let block_label b =
   | K_pause -> "pause"
   | K_when -> "when do"
   | K_watch -> "watch do"
-  | K_parallel ->
-      Printf.sprintf "parallel body1[%d] || body2[%d]"
-        (List.length b.body1)
-        (List.length b.body2)
+  | K_parallel -> "parallel do"
 
 let point_in_rect x y rx ry rw rh =
   x >= rx && x <= rx + rw && y >= ry && y <= ry + rh
 
-let draw_button x y w h label active =
-  let rect = Rectangle.create (float_of_int x) (float_of_int y) (float_of_int w) (float_of_int h) in
-  let bg = if active then Color.create 65 150 210 255 else Color.create 38 62 88 255 in
-  draw_rectangle_rec rect bg;
-  draw_rectangle_lines_ex rect 2.0 (Color.create 195 220 245 255);
-  draw_text label (x + 10) (y + 9) 18 Color.raywhite
+let mk_button ~id ~x ~y ~w ~h ~label =
+  Ui.button ~id { Ui.x = float_of_int x; y = float_of_int y; w = float_of_int w; h = float_of_int h } ~label ()
 
 let next_id =
   let r = ref 0 in
@@ -435,9 +429,9 @@ let () =
       ; ("await", K_await)
       ; ("await_immediate", K_await_imm)
       ; ("pause", K_pause)
-      ; ("when (container)", K_when)
-      ; ("watch (container)", K_watch)
-      ; ("parallel (container)", K_parallel)
+      ; ("when", K_when)
+      ; ("watch", K_watch)
+      ; ("parallel", K_parallel)
       ]
     in
 
@@ -470,9 +464,10 @@ let () =
     run_simulation ();
 
     while not (window_should_close ()) do
-      let mouse_x = get_mouse_x () in
-      let mouse_y = get_mouse_y () in
-      let click = is_mouse_button_pressed MouseButton.Left in
+      let interaction = Tempo_game_raylib.Ui.interaction_from_mouse () in
+      let click = interaction.pressed in
+      let mouse_x = int_of_float interaction.pointer.x in
+      let mouse_y = int_of_float interaction.pointer.y in
 
       begin_drawing ();
       clear_background (Color.create 20 31 48 255);
@@ -488,27 +483,9 @@ let () =
       List.iteri
         (fun i (label, kind) ->
           let y = palette_y + 50 + (i * 54) in
-          draw_button (palette_x + 12) y 336 44 "" false;
-          if kind_uses_signal kind then (
-            let prefix, suffix =
-              match kind with
-              | K_emit -> ("emit", "")
-              | K_await -> ("await", "")
-              | K_await_imm -> ("await_immediate", "")
-              | K_when -> ("when", "do")
-              | K_watch -> ("watch", "do")
-              | _ -> ("", "")
-            in
-            let tx = palette_x + 26 in
-            let ty = y + 9 in
-            draw_text prefix tx ty 18 Color.raywhite;
-            let px = tx + measure_text prefix 18 + 12 in
-            draw_circle px (y + 22) 6.5 (signal_color Sig_b);
-            draw_circle_lines px (y + 22) 6.5 (Color.create 225 236 248 255);
-            if suffix <> "" then draw_text suffix (px + 12) ty 18 Color.raywhite)
-          else
-            draw_text label (palette_x + 22) (y + 9) 18 Color.raywhite;
-          if click && point_in_rect mouse_x mouse_y (palette_x + 12) y 336 44 then (
+          let btn = mk_button ~id:(Printf.sprintf "palette:%d" i) ~x:(palette_x + 12) ~y ~w:336 ~h:44 ~label in
+          Tempo_game_raylib.Ui.draw_button btn;
+          if Ui.button_pressed interaction btn then (
             let b = mk_block kind Sig_a in
             script := append_block ~selected_target:!selected_target ~program:!script b;
             run_simulation ()))
@@ -552,26 +529,33 @@ let () =
 
       let panel_x = 1050 in
       let panel_y = 100 in
-      draw_rectangle panel_x panel_y 326 540 (Color.create 24 44 69 255);
-      draw_rectangle_lines panel_x panel_y 326 540 (Color.create 105 145 187 255);
-      draw_text "Actions" (panel_x + 14) (panel_y + 10) 20 Color.raywhite;
+      let panel =
+        Hud.panel
+          ~rect:{ Ui.x = float_of_int panel_x; y = float_of_int panel_y; w = 326.0; h = 540.0 }
+          ~title:"Actions"
+      in
+      Tempo_game_raylib.Hud.draw_panel panel;
       draw_text (Printf.sprintf "Runs: %d" !run_count) (panel_x + 220) (panel_y + 14) 18
         (Color.create 255 220 130 255);
 
-      draw_button (panel_x + 16) (panel_y + 54) 292 46 "Run Simulation" true;
-      draw_button (panel_x + 16) (panel_y + 108) 292 42 "Clear Program" false;
-      draw_button (panel_x + 16) (panel_y + 156) 292 42 "Clear Inputs" false;
-      draw_button (panel_x + 16) (panel_y + 204) 292 42 "Load Sample" false;
+      let run_btn = mk_button ~id:"run" ~x:(panel_x + 16) ~y:(panel_y + 54) ~w:292 ~h:46 ~label:"Run Simulation" in
+      let clear_prog_btn = mk_button ~id:"clear_program" ~x:(panel_x + 16) ~y:(panel_y + 108) ~w:292 ~h:42 ~label:"Clear Program" in
+      let clear_inputs_btn = mk_button ~id:"clear_inputs" ~x:(panel_x + 16) ~y:(panel_y + 156) ~w:292 ~h:42 ~label:"Clear Inputs" in
+      let load_sample_btn = mk_button ~id:"load_sample" ~x:(panel_x + 16) ~y:(panel_y + 204) ~w:292 ~h:42 ~label:"Load Sample" in
+      Tempo_game_raylib.Ui.draw_button ~active:true run_btn;
+      Tempo_game_raylib.Ui.draw_button clear_prog_btn;
+      Tempo_game_raylib.Ui.draw_button clear_inputs_btn;
+      Tempo_game_raylib.Ui.draw_button load_sample_btn;
 
-      if click && point_in_rect mouse_x mouse_y (panel_x + 16) (panel_y + 54) 292 46 then run_simulation ();
-      if click && point_in_rect mouse_x mouse_y (panel_x + 16) (panel_y + 108) 292 42 then (
+      if Ui.button_pressed interaction run_btn then run_simulation ();
+      if Ui.button_pressed interaction clear_prog_btn then (
         script := [];
         selected_target := Target_main;
         run_simulation ());
-      if click && point_in_rect mouse_x mouse_y (panel_x + 16) (panel_y + 156) 292 42 then (
+      if Ui.button_pressed interaction clear_inputs_btn then (
         Array.fill input_cells 0 instants None;
         run_simulation ());
-      if click && point_in_rect mouse_x mouse_y (panel_x + 16) (panel_y + 204) 292 42 then (
+      if Ui.button_pressed interaction load_sample_btn then (
         script := sample_program ();
         selected_target := Target_main;
         run_simulation ());
@@ -597,18 +581,21 @@ let () =
                   (panel_x + 16) (panel_y + 286) 15 (Color.create 220 236 252 255);
                 draw_text (Printf.sprintf "signal=%s" (signal_name_to_string b.s1))
                   (panel_x + 16) (panel_y + 306) 15 (Color.create 220 236 252 255);
-                draw_button (panel_x + 16) (panel_y + 330) 140 36 "Cycle Kind" false;
-                draw_button (panel_x + 168) (panel_y + 330) 140 36 "Cycle Signal" false;
-                draw_button (panel_x + 16) (panel_y + 374) 292 36 "Remove Selected" false;
-                if click && point_in_rect mouse_x mouse_y (panel_x + 16) (panel_y + 330) 140 36 then (
+                let cycle_kind_btn = mk_button ~id:"cycle_kind" ~x:(panel_x + 16) ~y:(panel_y + 330) ~w:140 ~h:36 ~label:"Cycle Kind" in
+                let cycle_signal_btn = mk_button ~id:"cycle_signal" ~x:(panel_x + 168) ~y:(panel_y + 330) ~w:140 ~h:36 ~label:"Cycle Signal" in
+                let remove_btn = mk_button ~id:"remove_selected" ~x:(panel_x + 16) ~y:(panel_y + 374) ~w:292 ~h:36 ~label:"Remove Selected" in
+                Tempo_game_raylib.Ui.draw_button cycle_kind_btn;
+                Tempo_game_raylib.Ui.draw_button cycle_signal_btn;
+                Tempo_game_raylib.Ui.draw_button remove_btn;
+                if Ui.button_pressed interaction cycle_kind_btn then (
                   b.kind <- cycle_kind b.kind;
                   if not (has_body1 b.kind) then b.body1 <- [];
                   if not (has_body2 b.kind) then b.body2 <- [];
                   run_simulation ());
-                if click && point_in_rect mouse_x mouse_y (panel_x + 168) (panel_y + 330) 140 36 then (
+                if Ui.button_pressed interaction cycle_signal_btn then (
                   b.s1 <- cycle_signal b.s1;
                   run_simulation ());
-                if click && point_in_rect mouse_x mouse_y (panel_x + 16) (panel_y + 374) 292 36 then (
+                if Ui.button_pressed interaction remove_btn then (
                   script := fst (remove_by_id_from_list b.id !script);
                   selected_target := Target_main;
                   run_simulation ()))

@@ -54,6 +54,7 @@ dune exec ./applications/run -- tempo-core-studio -- --headless --instants 12
 - OCaml 5.x, dune
 - raylib (mode UI)
 - tempo
+- tempo-raylib
 
 ## Headless / Reproducible Mode
 
