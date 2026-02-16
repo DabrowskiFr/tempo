@@ -162,12 +162,21 @@ type loaded_font = {
 }
 
 let font_candidates =
-  [ "applications/advanced/tempo-core-studio/assets/fonts/JetBrainsMono-Regular.ttf"
+  [ "applications/advanced/tempo-core-studio/assets/fonts/AndaleMono.ttf"
+  ; "applications/advanced/tempo-core-studio/assets/fonts/CourierNew.ttf"
+  ; "applications/advanced/tempo-core-studio/assets/fonts/JetBrainsMono-Regular.ttf"
   ; "applications/advanced/tempo-core-studio/assets/fonts/PressStart2P-Regular.ttf"
   ; "/System/Library/Fonts/SFNSMono.ttf"
   ; "/System/Library/Fonts/Supplemental/Menlo.ttc"
   ; "/System/Library/Fonts/Supplemental/Courier New.ttf"
   ; "/System/Library/Fonts/Supplemental/Andale Mono.ttf"
+  ; "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
+  ; "/usr/share/fonts/TTF/DejaVuSansMono.ttf"
+  ; "/usr/share/fonts/truetype/liberation2/LiberationMono-Regular.ttf"
+  ; "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf"
+  ; "/usr/share/fonts/truetype/ubuntu/UbuntuMono-R.ttf"
+  ; "/usr/share/fonts/opentype/noto/NotoSansMono-Regular.ttf"
+  ; "/usr/share/fonts/truetype/noto/NotoSansMono-Regular.ttf"
   ]
 
 let load_ui_font () =
