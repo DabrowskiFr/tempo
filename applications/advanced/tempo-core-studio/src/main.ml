@@ -703,38 +703,32 @@ let () =
           run_simulation ())
       done;
 
-      draw_text "Timeline output (color traces)" 24 700 20 Color.raywhite;
+      draw_text "Output sequencer" 24 700 20 Color.raywhite;
       draw_text "Tip: edit tree + pads, simulation refreshes immediately" 420 702 16
         (Color.create 180 205 230 255);
-      let max_rows = min instants 5 in
-      List.iteri
-        (fun i row ->
-          if i < max_rows then
-            let y = 730 + (i * 26) in
-            let bg =
-              if i mod 2 = 0 then Color.create 28 46 70 255
-              else Color.create 33 53 80 255
-            in
-            draw_rectangle 24 (y - 1) 1320 24 bg;
-            draw_text (Printf.sprintf "t=%02d" row.instant) 30 y 15 (Color.create 236 244 255 255);
-            let _ =
-              draw_signal_quad ~x:102 ~y:(y + 2) ~cell_w:8 ~cell_h:5 ~gap:2
-                ~is_on:(fun signal -> signal_active_in_input signal row.input)
-            in
+      for i = 0 to instants - 1 do
+        let x = 24 + (i * 84) in
+        let y = 728 in
+        let w = 78 in
+        let h = 62 in
+        let rect = Rectangle.create (float_of_int x) (float_of_int y) (float_of_int w) (float_of_int h) in
+        draw_rectangle_rec rect (Color.create 23 34 48 255);
+        draw_rectangle_lines_ex rect 1.5 (Color.create 190 214 239 255);
+        draw_text (Printf.sprintf "%02d" i) (x + 6) 733 12 (Color.create 190 214 239 255);
 
-            let out_signals =
-              match row.output with
-              | None -> []
-              | Some s -> extract_output_signals s
-            in
-            draw_text "->" 180 y 15 (Color.create 190 214 239 255);
-            let _ =
-              draw_signal_quad ~x:212 ~y:(y + 2) ~cell_w:8 ~cell_h:5 ~gap:2
-                ~is_on:(fun signal -> List.mem signal out_signals)
-            in
-            if out_signals = [] then
-              draw_text "-" 210 y 15 (Color.create 146 170 196 255))
-        !results;
+        let out_signals =
+          if i < List.length !results then
+            match (List.nth !results i).output with
+            | None -> []
+            | Some s -> extract_output_signals s
+          else []
+        in
+        let _ =
+          draw_signal_quad ~x:(x + 9) ~y:(y + 19) ~cell_w:28 ~cell_h:18 ~gap:4
+            ~is_on:(fun signal -> List.mem signal out_signals)
+        in
+        ()
+      done;
 
       draw_text
         "Core focus: hierarchical blocks compile to Tempo primitives; no FRP layer used."
