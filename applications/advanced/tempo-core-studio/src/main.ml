@@ -336,10 +336,10 @@ let () =
           ];
         run_simulation ());
 
-      draw_text "Tick input editor (click cell: - -> A -> B)" 24 655 20 Color.raywhite;
+      draw_text "Tick input editor (click cell: - -> A -> B)" 24 600 20 Color.raywhite;
       for i = 0 to instants - 1 do
         let x = 24 + (i * 84) in
-        let y = 686 in
+        let y = 630 in
         let w = 78 in
         let h = 44 in
         let rect = Rectangle.create (float_of_int x) (float_of_int y) (float_of_int w) (float_of_int h) in
@@ -352,38 +352,38 @@ let () =
         in
         draw_rectangle_rec rect bg;
         draw_rectangle_lines_ex rect 1.5 (Color.create 190 214 239 255);
-        draw_text (Printf.sprintf "%02d" i) (x + 6) 692 14 (Color.create 190 214 239 255);
-        draw_text (ext_input_to_string cell) (x + 33) 705 20 Color.raywhite;
+        draw_text (Printf.sprintf "%02d" i) (x + 6) 636 14 (Color.create 190 214 239 255);
+        draw_text (ext_input_to_string cell) (x + 33) 649 20 Color.raywhite;
         if click && point_in_rect mouse_x mouse_y x y w h then (
           input_cells.(i) <- cycle_input cell;
           run_simulation ())
       done;
 
-      draw_text "Timeline output (per logical instant)" 24 745 20 Color.raywhite;
-      draw_text "Tip: click timeline input cells, result refreshes immediately" 400 747 16
+      draw_text "Timeline output (per logical instant)" 24 690 20 Color.raywhite;
+      draw_text "Tip: click timeline input cells, result refreshes immediately" 400 692 16
         (Color.create 180 205 230 255);
       let max_rows = min instants 10 in
       List.iteri
         (fun i row ->
           if i < max_rows then
-            let y = 772 + (i * 18) in
+            let y = 718 + (i * 16) in
             let bg =
               if i mod 2 = 0 then Color.create 28 46 70 255
               else Color.create 33 53 80 255
             in
-            draw_rectangle 24 (y - 2) 1320 18 bg;
+            draw_rectangle 24 (y - 1) 1320 16 bg;
             draw_text
               (Printf.sprintf "t=%02d in=%s out=%s"
                  row.instant
                  (ext_input_to_string row.input)
                  (match row.output with None -> "-" | Some s -> s))
-              28 y 16 (Color.create 236 244 255 255))
+              28 y 15 (Color.create 236 244 255 255))
         !results;
 
       draw_text
         "Core focus: each block compiles to Tempo primitives; no FRP layer used."
-        24 876 18 (Color.create 158 184 214 255);
-      draw_text !status 730 876 16 (Color.create 210 225 245 255);
+        24 868 17 (Color.create 158 184 214 255);
+      draw_text !status 730 868 15 (Color.create 210 225 245 255);
 
       end_drawing ()
     done;
