@@ -2,6 +2,10 @@ open Tempo
 open Raylib
 open Tempo_game
 
+(* -------------------------------------------------------------------------- *)
+(* Part 1: Domain logic (model, editing, view data)                           *)
+(* -------------------------------------------------------------------------- *)
+
 type ext_input = {
   red : bool;
   blue : bool;
@@ -272,12 +276,6 @@ let rec flatten_blocks (depth : int) (blocks : block list) : row list =
 let flatten_tree (blocks : block list) : row list =
   { target = Target_main; depth = 0; text = "main"; signal = None } :: flatten_blocks 1 blocks
 
-let signal_of_name sa sb sc sd = function
-  | Sig_a -> sa
-  | Sig_b -> sb
-  | Sig_c -> sc
-  | Sig_d -> sd
-
 let signal_active_in_input signal = function
   | None -> false
   | Some v -> (
@@ -317,79 +315,91 @@ let extract_output_signals (s : string) : signal_name list =
   in
   consume 0 []
 
-let simulate ~(blocks : block list) ~(inputs : ext_input option list) ~(instants : int) : timeline_row list =
-  let run input output =
-    let sa = new_signal () in
-    let sb = new_signal () in
-    let sc = new_signal () in
-    let sd = new_signal () in
-    let trace = new_signal_agg ~initial:[] ~combine:(fun acc msg -> msg :: acc) in
-    let emit_once sigv name =
-      if is_present sigv then
-        emit trace (Printf.sprintf "emit %s skipped (already present this instant)" name)
-      else (
-        emit sigv ();
-        emit trace (Printf.sprintf "emit %s" name))
+(* -------------------------------------------------------------------------- *)
+(* Part 2: Synchronous execution (Tempo primitives and instants)              *)
+(* -------------------------------------------------------------------------- *)
+
+module Sync = struct
+  let signal_of_name sa sb sc sd = function
+    | Sig_a -> sa
+    | Sig_b -> sb
+    | Sig_c -> sc
+    | Sig_d -> sd
+
+  let simulate ~(blocks : block list) ~(inputs : ext_input option list) ~(instants : int) : timeline_row list =
+    let run input output =
+      let sa = new_signal () in
+      let sb = new_signal () in
+      let sc = new_signal () in
+      let sd = new_signal () in
+      let trace = new_signal_agg ~initial:[] ~combine:(fun acc msg -> msg :: acc) in
+      let emit_once sigv name =
+        if is_present sigv then
+          emit trace (Printf.sprintf "emit %s skipped (already present this instant)" name)
+        else (
+          emit sigv ();
+          emit trace (Printf.sprintf "emit %s" name))
+      in
+      let rec input_pump () =
+        when_ input (fun () ->
+            let frame = await_immediate input in
+            if frame.red then (
+              if not (is_present sa) then emit sa ();
+              emit trace "input red");
+            if frame.blue then (
+              if not (is_present sb) then emit sb ();
+              emit trace "input blue");
+            if frame.green then (
+              if not (is_present sc) then emit sc ();
+              emit trace "input green");
+            if frame.yellow then (
+              if not (is_present sd) then emit sd ();
+              emit trace "input yellow"));
+        pause ();
+        input_pump ()
+      and eval_block b =
+        match b.kind with
+        | K_emit ->
+            let sigv = signal_of_name sa sb sc sd b.s1 in
+            emit_once sigv (signal_name_to_string b.s1)
+        | K_await ->
+            let sigv = signal_of_name sa sb sc sd b.s1 in
+            let () = await sigv in
+            emit trace (Printf.sprintf "await %s satisfied" (signal_name_to_string b.s1))
+        | K_await_imm ->
+            let sigv = signal_of_name sa sb sc sd b.s1 in
+            let () = await_immediate sigv in
+            emit trace (Printf.sprintf "await_immediate %s satisfied" (signal_name_to_string b.s1))
+        | K_pause ->
+            emit trace "pause";
+            pause ()
+        | K_when ->
+            let guard = signal_of_name sa sb sc sd b.s1 in
+            when_ guard (fun () ->
+                emit trace (Printf.sprintf "when %s active" (signal_name_to_string b.s1));
+                eval_blocks b.body1)
+        | K_watch ->
+            let watched = signal_of_name sa sb sc sd b.s1 in
+            watch watched (fun () -> eval_blocks b.body1)
+        | K_parallel ->
+            parallel [ (fun () -> eval_blocks b.body1); (fun () -> eval_blocks b.body2) ]
+      and eval_blocks lst = List.iter eval_block lst
+      and program_once () =
+        eval_blocks blocks;
+        emit trace "program end"
+      and flush_trace () =
+        let msgs = await trace in
+        emit output (String.concat " | " (List.rev msgs));
+        flush_trace ()
+      in
+      parallel [ input_pump; program_once; flush_trace ]
     in
-    let rec input_pump () =
-      when_ input (fun () ->
-          let frame = await_immediate input in
-          if frame.red then (
-            if not (is_present sa) then emit sa ();
-            emit trace "input red");
-          if frame.blue then (
-            if not (is_present sb) then emit sb ();
-            emit trace "input blue");
-          if frame.green then (
-            if not (is_present sc) then emit sc ();
-            emit trace "input green");
-          if frame.yellow then (
-            if not (is_present sd) then emit sd ();
-            emit trace "input yellow"));
-      pause ();
-      input_pump ()
-    and eval_block b =
-      match b.kind with
-      | K_emit ->
-          let sigv = signal_of_name sa sb sc sd b.s1 in
-          emit_once sigv (signal_name_to_string b.s1)
-      | K_await ->
-          let sigv = signal_of_name sa sb sc sd b.s1 in
-          let () = await sigv in
-          emit trace (Printf.sprintf "await %s satisfied" (signal_name_to_string b.s1))
-      | K_await_imm ->
-          let sigv = signal_of_name sa sb sc sd b.s1 in
-          let () = await_immediate sigv in
-          emit trace (Printf.sprintf "await_immediate %s satisfied" (signal_name_to_string b.s1))
-      | K_pause ->
-          emit trace "pause";
-          pause ()
-      | K_when ->
-          let guard = signal_of_name sa sb sc sd b.s1 in
-          when_ guard (fun () ->
-              emit trace (Printf.sprintf "when %s active" (signal_name_to_string b.s1));
-              eval_blocks b.body1)
-      | K_watch ->
-          let watched = signal_of_name sa sb sc sd b.s1 in
-          watch watched (fun () -> eval_blocks b.body1)
-      | K_parallel ->
-          parallel [ (fun () -> eval_blocks b.body1); (fun () -> eval_blocks b.body2) ]
-    and eval_blocks lst = List.iter eval_block lst
-    and program_once () =
-      eval_blocks blocks;
-      emit trace "program end"
-    and flush_trace () =
-      let msgs = await trace in
-      emit output (String.concat " | " (List.rev msgs));
-      flush_trace ()
-    in
-    parallel [ input_pump; program_once; flush_trace ]
-  in
-  let timeline = execute_timeline ~instants ~inputs run in
-  List.map
-    (fun ({ instant; input; output } : (ext_input, string) timeline_instant) ->
-      { instant; input; output })
-    timeline
+    let timeline = execute_timeline ~instants ~inputs run in
+    List.map
+      (fun ({ instant; input; output } : (ext_input, string) timeline_instant) ->
+        { instant; input; output })
+      timeline
+end
 
 let parse_args () =
   let headless = ref false in
@@ -417,7 +427,7 @@ let run_headless instants =
     ; None
     ]
   in
-  let rows = simulate ~blocks:program ~inputs ~instants in
+  let rows = Sync.simulate ~blocks:program ~inputs ~instants in
   List.iter
     (fun r ->
       Printf.printf "t=%02d in=%s out=%s\n"
@@ -458,7 +468,7 @@ let () =
 
     let run_simulation () =
       let inputs = Array.to_list input_cells in
-      results := simulate ~blocks:!script ~inputs ~instants;
+      results := Sync.simulate ~blocks:!script ~inputs ~instants;
       incr run_count;
       let non_empty =
         List.fold_left
