@@ -10,10 +10,11 @@ Application avancée de type Scratch orientée exclusivement sur le core Tempo. 
 - cliquer un bloc dans la palette pour l'ajouter au programme;
 - sélectionner une ligne dans `Program Tree` pour définir la cible contextuelle d'insertion;
 - le nœud implicite `main` est sélectionnable pour revenir au niveau le plus haut;
+- l'arbre affiche une pastille couleur (`red`/`blue`) sur les blocs qui portent un signal;
 - un clic palette insère dans le bloc sélectionné: dans `body1/body2` pour les conteneurs, sinon juste après le bloc sélectionné;
 - sélectionner un bloc (hors `main`) puis éditer son `kind` et son signal dans `Selected block editor`;
 - cliquer `X` sur une ligne pour supprimer un bloc;
-- cliquer une cellule de timeline pour cycler l'entrée `- -> red -> blue`.
+- cliquer les sélecteurs `red` et `blue` de chaque instant (les deux peuvent être actifs simultanément).
 - Buttons:
 - `Run Simulation`: exécute le programme sur les instants configurés;
 - `Clear Program`: vide le script;

@@ -1,9 +1,10 @@
 open Tempo
 open Raylib
 
-type ext_input =
-  | In_a
-  | In_b
+type ext_input = {
+  red : bool;
+  blue : bool;
+}
 
 type signal_name =
   | Sig_a
@@ -36,6 +37,7 @@ type row = {
   id : int;
   depth : int;
   text : string;
+  signal : signal_name option;
 }
 
 let signal_name_to_string = function
@@ -44,22 +46,37 @@ let signal_name_to_string = function
 
 let ext_input_to_string = function
   | None -> "-"
-  | Some In_a -> "red"
-  | Some In_b -> "blue"
+  | Some { red = true; blue = true } -> "red+blue"
+  | Some { red = true; blue = false } -> "red"
+  | Some { red = false; blue = true } -> "blue"
+  | Some { red = false; blue = false } -> "-"
 
 let ext_input_short = function
   | None -> "-"
-  | Some In_a -> "R"
-  | Some In_b -> "B"
+  | Some { red = true; blue = true } -> "RB"
+  | Some { red = true; blue = false } -> "R"
+  | Some { red = false; blue = true } -> "B"
+  | Some { red = false; blue = false } -> "-"
 
 let cycle_signal = function
   | Sig_a -> Sig_b
   | Sig_b -> Sig_a
 
-let cycle_input = function
-  | None -> Some In_a
-  | Some In_a -> Some In_b
-  | Some In_b -> None
+let signal_color = function
+  | Sig_a -> Color.create 210 84 84 255
+  | Sig_b -> Color.create 76 132 214 255
+
+let toggle_input_red = function
+  | None -> Some { red = true; blue = false }
+  | Some v ->
+      let next = { v with red = not v.red } in
+      if next.red || next.blue then Some next else None
+
+let toggle_input_blue = function
+  | None -> Some { red = false; blue = true }
+  | Some v ->
+      let next = { v with blue = not v.blue } in
+      if next.red || next.blue then Some next else None
 
 let kind_to_string = function
   | K_emit -> "emit"
@@ -86,6 +103,10 @@ let has_body1 = function
 let has_body2 = function
   | K_parallel -> true
   | _ -> false
+
+let kind_uses_signal = function
+  | K_emit | K_await | K_await_imm | K_when | K_watch -> true
+  | K_pause | K_parallel -> false
 
 let block_label b =
   match b.kind with
@@ -204,14 +225,16 @@ let rec flatten_blocks (depth : int) (blocks : block list) : row list =
   List.concat
     (List.map
        (fun (b : block) ->
-         let me = [ { id = b.id; depth; text = block_label b } ] in
+         let me =
+           [ { id = b.id; depth; text = block_label b; signal = if kind_uses_signal b.kind then Some b.s1 else None } ]
+         in
          let c1 = flatten_blocks (depth + 1) b.body1 in
          let c2 = flatten_blocks (depth + 1) b.body2 in
          me @ c1 @ c2)
        blocks)
 
 let flatten_tree (blocks : block list) : row list =
-  { id = 0; depth = 0; text = "main" } :: flatten_blocks 1 blocks
+  { id = 0; depth = 0; text = "main"; signal = None } :: flatten_blocks 1 blocks
 
 let signal_of_name sa sb = function
   | Sig_a -> sa
@@ -219,8 +242,10 @@ let signal_of_name sa sb = function
 
 let input_color = function
   | None -> Color.create 42 58 78 255
-  | Some In_a -> Color.create 190 76 76 255
-  | Some In_b -> Color.create 66 108 176 255
+  | Some { red = true; blue = false } -> Color.create 190 76 76 255
+  | Some { red = false; blue = true } -> Color.create 66 108 176 255
+  | Some { red = true; blue = true } -> Color.create 130 78 170 255
+  | Some { red = false; blue = false } -> Color.create 42 58 78 255
 
 let simulate ~(blocks : block list) ~(inputs : ext_input option list) ~(instants : int) : timeline_row list =
   let run input output =
@@ -236,13 +261,13 @@ let simulate ~(blocks : block list) ~(inputs : ext_input option list) ~(instants
     in
     let rec input_pump () =
       when_ input (fun () ->
-          match await_immediate input with
-          | In_a ->
-              if not (is_present sa) then emit sa ();
-              emit trace "input red"
-          | In_b ->
-              if not (is_present sb) then emit sb ();
-              emit trace "input blue");
+          let frame = await_immediate input in
+          if frame.red then (
+            if not (is_present sa) then emit sa ();
+            emit trace "input red");
+          if frame.blue then (
+            if not (is_present sb) then emit sb ();
+            emit trace "input blue"));
       pause ();
       input_pump ()
     and eval_block b =
@@ -304,12 +329,12 @@ let parse_args () =
 let run_headless instants =
   let program = sample_program () in
   let inputs =
-    [ Some In_b
+    [ Some { red = false; blue = true }
     ; None
-    ; Some In_b
-    ; Some In_a
+    ; Some { red = false; blue = true }
+    ; Some { red = true; blue = false }
     ; None
-    ; Some In_b
+    ; Some { red = false; blue = true }
     ; None
     ; None
     ]
@@ -344,10 +369,10 @@ let () =
     let script = ref (sample_program ()) in
     let selected_id = ref 0 in
     let input_cells = Array.make instants None in
-    if instants > 0 then input_cells.(0) <- Some In_b;
-    if instants > 2 then input_cells.(2) <- Some In_b;
-    if instants > 3 then input_cells.(3) <- Some In_a;
-    if instants > 5 then input_cells.(5) <- Some In_b;
+    if instants > 0 then input_cells.(0) <- Some { red = false; blue = true };
+    if instants > 2 then input_cells.(2) <- Some { red = false; blue = true };
+    if instants > 3 then input_cells.(3) <- Some { red = true; blue = false };
+    if instants > 5 then input_cells.(5) <- Some { red = false; blue = true };
 
     let results = ref [] in
     let run_count = ref 0 in
@@ -414,9 +439,16 @@ let () =
             let row_rect = Rectangle.create (float_of_int (script_x + 12)) (float_of_int y) 590.0 26.0 in
             draw_rectangle_rec row_rect bg;
             draw_rectangle_lines_ex row_rect 1.5 (Color.create 165 205 240 255);
+            begin
+              match r.signal with
+              | None -> ()
+              | Some s ->
+                  draw_circle (script_x + 26) (y + 13) 6.0 (signal_color s);
+                  draw_circle_lines (script_x + 26) (y + 13) 6.0 (Color.create 235 245 255 255)
+            end;
             draw_text
               (Printf.sprintf "%s%s" (String.make (r.depth * 2) ' ') r.text)
-              (script_x + 18)
+              (script_x + 40)
               (y + 6)
               16
               Color.raywhite;
@@ -480,21 +512,45 @@ let () =
                   run_simulation ())
       end;
 
-      draw_text "Tick input editor (click cell: - -> red -> blue)" 24 600 20 Color.raywhite;
+      draw_text "Tick input editor (toggle red/blue selectors per instant)" 24 600 20 Color.raywhite;
       for i = 0 to instants - 1 do
         let x = 24 + (i * 84) in
         let y = 630 in
         let w = 78 in
-        let h = 44 in
+        let h = 56 in
         let rect = Rectangle.create (float_of_int x) (float_of_int y) (float_of_int w) (float_of_int h) in
         let cell = input_cells.(i) in
         let bg = input_color cell in
         draw_rectangle_rec rect bg;
         draw_rectangle_lines_ex rect 1.5 (Color.create 190 214 239 255);
         draw_text (Printf.sprintf "%02d" i) (x + 6) 636 14 (Color.create 190 214 239 255);
-        draw_text (ext_input_short cell) (x + 33) 649 20 Color.raywhite;
-        if click && point_in_rect mouse_x mouse_y x y w h then (
-          input_cells.(i) <- cycle_input cell;
+        draw_text (ext_input_short cell) (x + 30) 650 16 Color.raywhite;
+
+        let red_x = x + 12 in
+        let blue_x = x + 44 in
+        let sel_y = y + 676 - 630 in
+        let red_on =
+          match cell with
+          | Some v -> v.red
+          | None -> false
+        in
+        let blue_on =
+          match cell with
+          | Some v -> v.blue
+          | None -> false
+        in
+        draw_circle red_x sel_y 8.0
+          (if red_on then signal_color Sig_a else Color.create 66 78 92 255);
+        draw_circle_lines red_x sel_y 8.0 (Color.create 225 236 248 255);
+        draw_circle blue_x sel_y 8.0
+          (if blue_on then signal_color Sig_b else Color.create 66 78 92 255);
+        draw_circle_lines blue_x sel_y 8.0 (Color.create 225 236 248 255);
+
+        if click && point_in_rect mouse_x mouse_y (red_x - 10) (sel_y - 10) 20 20 then (
+          input_cells.(i) <- toggle_input_red cell;
+          run_simulation ());
+        if click && point_in_rect mouse_x mouse_y (blue_x - 10) (sel_y - 10) 20 20 then (
+          input_cells.(i) <- toggle_input_blue cell;
           run_simulation ())
       done;
 
