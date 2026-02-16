@@ -70,16 +70,6 @@ let ext_input_to_string = function
       in
       if names = [] then "-" else String.concat "+" names
 
-let ext_input_short = function
-  | None -> "-"
-  | Some { red; blue; green; yellow } ->
-      let tags =
-        List.filter_map
-          (fun (on, tag) -> if on then Some tag else None)
-          [ (red, "R"); (blue, "B"); (green, "G"); (yellow, "Y") ]
-      in
-      if tags = [] then "-" else String.concat "" tags
-
 let cycle_signal = function
   | Sig_a -> Sig_b
   | Sig_b -> Sig_c
@@ -294,19 +284,44 @@ let signal_of_name sa sb sc sd = function
   | Sig_c -> sc
   | Sig_d -> sd
 
-let input_color = function
-  | None -> Color.create 42 58 78 255
-  | Some { red; blue; green; yellow } ->
-      let add_if on (ar, ag, ab, n) (r, g, b) =
-        if on then (ar + r, ag + g, ab + b, n + 1) else (ar, ag, ab, n)
+let signal_active_in_input signal = function
+  | None -> false
+  | Some v -> (
+      match signal with
+      | Sig_a -> v.red
+      | Sig_b -> v.blue
+      | Sig_c -> v.green
+      | Sig_d -> v.yellow)
+
+let signal_of_token = function
+  | "red" -> Some Sig_a
+  | "blue" -> Some Sig_b
+  | "green" -> Some Sig_c
+  | "yellow" -> Some Sig_d
+  | _ -> None
+
+let extract_output_signals (s : string) : signal_name list =
+  let len = String.length s in
+  let is_alpha c =
+    (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+  in
+  let rec consume i acc =
+    if i >= len then acc
+    else if is_alpha s.[i] then
+      let j = ref (i + 1) in
+      while !j < len && is_alpha s.[!j] do
+        incr j
+      done;
+      let tok = String.lowercase_ascii (String.sub s i (!j - i)) in
+      let acc' =
+        match signal_of_token tok with
+        | Some sig_name when not (List.mem sig_name acc) -> acc @ [ sig_name ]
+        | _ -> acc
       in
-      let ar, ag, ab, n = (0, 0, 0, 0) in
-      let ar, ag, ab, n = add_if red (ar, ag, ab, n) (190, 76, 76) in
-      let ar, ag, ab, n = add_if blue (ar, ag, ab, n) (66, 108, 176) in
-      let ar, ag, ab, n = add_if green (ar, ag, ab, n) (88, 186, 98) in
-      let ar, ag, ab, n = add_if yellow (ar, ag, ab, n) (228, 188, 78) in
-      if n = 0 then Color.create 42 58 78 255
-      else Color.create (ar / n) (ag / n) (ab / n) 255
+      consume !j acc'
+    else consume (i + 1) acc
+  in
+  consume 0 []
 
 let simulate ~(blocks : block list) ~(inputs : ext_input option list) ~(instants : int) : timeline_row list =
   let run input output =
@@ -601,92 +616,106 @@ let () =
                   run_simulation ()))
       end;
 
-      draw_text "Tick input editor (toggle red/blue/green/yellow per instant)" 24 600 20 Color.raywhite;
+      draw_text "Input sequencer (Simon-style pads, click quadrants)" 24 600 20 Color.raywhite;
       for i = 0 to instants - 1 do
         let x = 24 + (i * 84) in
-        let y = 630 in
+        let y = 628 in
         let w = 78 in
         let h = 62 in
         let rect = Rectangle.create (float_of_int x) (float_of_int y) (float_of_int w) (float_of_int h) in
         let cell = input_cells.(i) in
-        let bg = input_color cell in
-        draw_rectangle_rec rect bg;
+        draw_rectangle_rec rect (Color.create 23 34 48 255);
         draw_rectangle_lines_ex rect 1.5 (Color.create 190 214 239 255);
-        draw_text (Printf.sprintf "%02d" i) (x + 6) 636 14 (Color.create 190 214 239 255);
-        draw_text (ext_input_short cell) (x + 24) 650 14 Color.raywhite;
+        draw_text (Printf.sprintf "%02d" i) (x + 6) 633 12 (Color.create 190 214 239 255);
 
-        let red_x = x + 16 in
-        let blue_x = x + 46 in
-        let green_x = x + 16 in
-        let yellow_x = x + 46 in
-        let sel_y1 = y + 45 in
-        let sel_y2 = y + 58 in
-        let red_on =
-          match cell with
-          | Some v -> v.red
-          | None -> false
+        let pad_x = x + 9 in
+        let pad_y = y + 19 in
+        let cell_w = 28 in
+        let cell_h = 18 in
+        let gap = 4 in
+        let draw_pad px py signal =
+          let on = signal_active_in_input signal cell in
+          let base = signal_color signal in
+          let c =
+            if on then base
+            else
+              match signal with
+              | Sig_a -> Color.create 104 63 63 255
+              | Sig_b -> Color.create 57 76 103 255
+              | Sig_c -> Color.create 62 99 66 255
+              | Sig_d -> Color.create 116 102 64 255
+          in
+          draw_rectangle px py cell_w cell_h c;
+          draw_rectangle_lines px py cell_w cell_h (Color.create 215 232 250 210)
         in
-        let blue_on =
-          match cell with
-          | Some v -> v.blue
-          | None -> false
-        in
-        let green_on =
-          match cell with
-          | Some v -> v.green
-          | None -> false
-        in
-        let yellow_on =
-          match cell with
-          | Some v -> v.yellow
-          | None -> false
-        in
-        draw_circle red_x sel_y1 5.5
-          (if red_on then signal_color Sig_a else Color.create 66 78 92 255);
-        draw_circle_lines red_x sel_y1 5.5 (Color.create 225 236 248 255);
-        draw_circle blue_x sel_y1 5.5
-          (if blue_on then signal_color Sig_b else Color.create 66 78 92 255);
-        draw_circle_lines blue_x sel_y1 5.5 (Color.create 225 236 248 255);
-        draw_circle green_x sel_y2 5.5
-          (if green_on then signal_color Sig_c else Color.create 66 78 92 255);
-        draw_circle_lines green_x sel_y2 5.5 (Color.create 225 236 248 255);
-        draw_circle yellow_x sel_y2 5.5
-          (if yellow_on then signal_color Sig_d else Color.create 66 78 92 255);
-        draw_circle_lines yellow_x sel_y2 5.5 (Color.create 225 236 248 255);
+        let red_rect = (pad_x, pad_y, cell_w, cell_h) in
+        let blue_rect = (pad_x + cell_w + gap, pad_y, cell_w, cell_h) in
+        let green_rect = (pad_x, pad_y + cell_h + gap, cell_w, cell_h) in
+        let yellow_rect = (pad_x + cell_w + gap, pad_y + cell_h + gap, cell_w, cell_h) in
+        let rx, ry, rw, rh = red_rect in
+        draw_pad rx ry Sig_a;
+        let bx, by, bw, bh = blue_rect in
+        draw_pad bx by Sig_b;
+        let gx, gy, gw, gh = green_rect in
+        draw_pad gx gy Sig_c;
+        let yx, yy, yw, yh = yellow_rect in
+        draw_pad yx yy Sig_d;
 
-        if click && point_in_rect mouse_x mouse_y (red_x - 8) (sel_y1 - 8) 16 16 then (
+        if click && point_in_rect mouse_x mouse_y rx ry rw rh then (
           input_cells.(i) <- toggle_input_signal Sig_a cell;
           run_simulation ());
-        if click && point_in_rect mouse_x mouse_y (blue_x - 8) (sel_y1 - 8) 16 16 then (
+        if click && point_in_rect mouse_x mouse_y bx by bw bh then (
           input_cells.(i) <- toggle_input_signal Sig_b cell;
           run_simulation ());
-        if click && point_in_rect mouse_x mouse_y (green_x - 8) (sel_y2 - 8) 16 16 then (
+        if click && point_in_rect mouse_x mouse_y gx gy gw gh then (
           input_cells.(i) <- toggle_input_signal Sig_c cell;
           run_simulation ());
-        if click && point_in_rect mouse_x mouse_y (yellow_x - 8) (sel_y2 - 8) 16 16 then (
+        if click && point_in_rect mouse_x mouse_y yx yy yw yh then (
           input_cells.(i) <- toggle_input_signal Sig_d cell;
           run_simulation ())
       done;
 
-      draw_text "Timeline output (per logical instant)" 24 690 20 Color.raywhite;
-      draw_text "Tip: edit tree + inputs, simulation refreshes immediately" 420 692 16
+      draw_text "Timeline output (color traces)" 24 700 20 Color.raywhite;
+      draw_text "Tip: edit tree + pads, simulation refreshes immediately" 420 702 16
         (Color.create 180 205 230 255);
       let max_rows = min instants 10 in
       List.iteri
         (fun i row ->
           if i < max_rows then
-            let y = 718 + (i * 16) in
+            let y = 730 + (i * 18) in
             let bg =
               if i mod 2 = 0 then Color.create 28 46 70 255
               else Color.create 33 53 80 255
             in
-            draw_rectangle 24 (y - 1) 1320 16 bg;
-            draw_text
-              (Printf.sprintf "t=%02d in=%s out=%s"
-                 row.instant
-                 (ext_input_to_string row.input)
-                 (match row.output with None -> "-" | Some s -> s))
-              28 y 15 (Color.create 236 244 255 255))
+            draw_rectangle 24 (y - 1) 1320 18 bg;
+            draw_text (Printf.sprintf "t=%02d" row.instant) 30 y 15 (Color.create 236 244 255 255);
+
+            let draw_chip x signal active =
+              let color =
+                if active then signal_color signal
+                else Color.create 66 78 92 255
+              in
+              draw_circle x (y + 8) 6.0 color;
+              draw_circle_lines x (y + 8) 6.0 (Color.create 225 236 248 220)
+            in
+            draw_chip 108 Sig_a (signal_active_in_input Sig_a row.input);
+            draw_chip 124 Sig_b (signal_active_in_input Sig_b row.input);
+            draw_chip 140 Sig_c (signal_active_in_input Sig_c row.input);
+            draw_chip 156 Sig_d (signal_active_in_input Sig_d row.input);
+
+            let out_signals =
+              match row.output with
+              | None -> []
+              | Some s -> extract_output_signals s
+            in
+            draw_text "->" 180 y 15 (Color.create 190 214 239 255);
+            List.iteri
+              (fun k sig_name ->
+                draw_circle (212 + (k * 16)) (y + 8) 6.0 (signal_color sig_name);
+                draw_circle_lines (212 + (k * 16)) (y + 8) 6.0 (Color.create 225 236 248 220))
+              out_signals;
+            if out_signals = [] then
+              draw_text "-" 210 y 15 (Color.create 146 170 196 255))
         !results;
 
       draw_text
