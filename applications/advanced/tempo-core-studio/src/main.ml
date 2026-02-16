@@ -156,6 +156,39 @@ let c_topline = Color.create 88 140 188 200
 let c_seq_box = Color.create 19 33 49 220
 let c_seq_border = Color.create 90 138 182 230
 
+type loaded_font = {
+  font : Font.t;
+  owned : bool;
+}
+
+let font_candidates =
+  [ "applications/advanced/tempo-core-studio/assets/fonts/JetBrainsMono-Regular.ttf"
+  ; "applications/advanced/tempo-core-studio/assets/fonts/PressStart2P-Regular.ttf"
+  ; "/System/Library/Fonts/SFNSMono.ttf"
+  ; "/System/Library/Fonts/Supplemental/Menlo.ttc"
+  ; "/System/Library/Fonts/Supplemental/Courier New.ttf"
+  ; "/System/Library/Fonts/Supplemental/Andale Mono.ttf"
+  ]
+
+let load_ui_font () =
+  let rec try_paths = function
+    | [] -> { font = get_font_default (); owned = false }
+    | p :: rest ->
+        if Sys.file_exists p then
+          try
+            let f = load_font_ex p 36 None in
+            if is_font_valid f then { font = f; owned = true } else try_paths rest
+          with _ -> try_paths rest
+        else try_paths rest
+  in
+  try_paths font_candidates
+
+let draw_text_ui (f : loaded_font) text x y size color =
+  draw_text_ex f.font text (Vector2.create (float_of_int x) (float_of_int y)) (float_of_int size) 1.0 color
+
+let measure_text_ui (f : loaded_font) text size =
+  int_of_float (Vector2.x (measure_text_ex f.font text (float_of_int size) 1.0))
+
 let dim_signal_color = function
   | Sig_a -> Color.create 104 63 63 255
   | Sig_b -> Color.create 57 76 103 255
@@ -488,8 +521,11 @@ let () =
     init_window logical_width logical_height "Tempo Core Studio";
     set_window_state [ ConfigFlags.Window_resizable ];
     set_target_fps 60;
+    let ui_font = load_ui_font () in
+    let draw_text = draw_text_ui ui_font in
+    let measure_text = measure_text_ui ui_font in
     let canvas = load_render_texture logical_width logical_height in
-    set_texture_filter (RenderTexture.texture canvas) TextureFilter.Point;
+    set_texture_filter (RenderTexture.texture canvas) TextureFilter.Bilinear;
 
     let palette : (string * block_kind) list =
       [ ("emit", K_emit)
@@ -542,7 +578,7 @@ let () =
       let win_h = get_screen_height () in
       let sx = float_of_int win_w /. float_of_int logical_width in
       let sy = float_of_int win_h /. float_of_int logical_height in
-      let scale = max 1.0 (floor (min sx sy)) in
+      let scale = min sx sy in
       let dst_w = int_of_float (float_of_int logical_width *. scale) in
       let dst_h = int_of_float (float_of_int logical_height *. scale) in
       let dst_x = (win_w - dst_w) / 2 in
@@ -600,10 +636,11 @@ let () =
             run_simulation ()))
         palette;
 
-      let script_x = 410 in
+      let script_x = 360 in
       let script_y = 100 in
-      draw_rectangle script_x script_y 620 450 (Color.create 26 47 73 255);
-      draw_rectangle_lines script_x script_y 620 450 (Color.create 105 145 187 255);
+      let script_w = 560 in
+      draw_rectangle script_x script_y script_w 450 (Color.create 26 47 73 255);
+      draw_rectangle_lines script_x script_y script_w 450 (Color.create 105 145 187 255);
       draw_text "Program Tree" (script_x + 14) (script_y + 10) 20 Color.raywhite;
 
       let rows = flatten_tree !script in
@@ -613,7 +650,9 @@ let () =
             let y = script_y + 48 + (i * 30) in
             let selected = r.target = !selected_target in
             let bg = if selected then Color.create 74 116 163 255 else Color.create 45 80 120 255 in
-            let row_rect = Rectangle.create (float_of_int (script_x + 12)) (float_of_int y) 590.0 26.0 in
+            let row_rect =
+              Rectangle.create (float_of_int (script_x + 12)) (float_of_int y) (float_of_int (script_w - 24)) 26.0
+            in
             draw_rectangle_rec row_rect bg;
             draw_rectangle_lines_ex row_rect 1.5 (Color.create 165 205 240 255);
             begin
@@ -632,19 +671,20 @@ let () =
               (y + 6)
               16
               Color.raywhite;
-            if click && point_in_rect mouse_x mouse_y (script_x + 12) y 590 26 then
+            if click && point_in_rect mouse_x mouse_y (script_x + 12) y (script_w - 24) 26 then
               selected_target := r.target)
         rows;
 
-      let panel_x = 1050 in
+      let panel_x = 936 in
       let panel_y = 100 in
+      let panel_w = 320 in
       let panel =
         Hud.panel
-          ~rect:{ Ui.x = float_of_int panel_x; y = float_of_int panel_y; w = 326.0; h = 450.0 }
+          ~rect:{ Ui.x = float_of_int panel_x; y = float_of_int panel_y; w = float_of_int panel_w; h = 450.0 }
           ~title:"Actions"
       in
       Tempo_game_raylib.Hud.draw_panel panel;
-      draw_text (Printf.sprintf "Runs: %d" !run_count) (panel_x + 220) (panel_y + 14) 18
+      draw_text (Printf.sprintf "Runs: %d" !run_count) (panel_x + 214) (panel_y + 14) 18
         (Color.create 255 220 130 255);
 
       let clear_prog_btn = mk_button ~id:"clear_program" ~x:(panel_x + 16) ~y:(panel_y + 54) ~w:292 ~h:42 ~label:"Clear Program" in
@@ -669,37 +709,37 @@ let () =
         set_notice "Sample program loaded.";
         run_simulation ());
 
-      draw_text "Selected block editor" (panel_x + 16) (panel_y + 262) 18 Color.raywhite;
+      draw_text "Selected block editor" (panel_x + 16) (panel_y + 220) 18 Color.raywhite;
       begin
         match !selected_target with
         | Target_main ->
             draw_text "main selected: insertions go to top-level"
-              (panel_x + 16) (panel_y + 286) 16 (Color.create 170 192 220 255)
+              (panel_x + 16) (panel_y + 244) 16 (Color.create 170 192 220 255)
         | Target_parallel_branch (_, branch) ->
             let txt =
               match branch with
               | Branch_left -> "parallel branch selected: insertions go to left branch"
               | Branch_right -> "parallel branch selected: insertions go to right branch"
             in
-            draw_text txt (panel_x + 16) (panel_y + 286) 16 (Color.create 170 192 220 255)
+            draw_text txt (panel_x + 16) (panel_y + 244) 16 (Color.create 170 192 220 255)
         | Target_block sid -> (
             match find_by_id_in_list sid !script with
-            | None -> draw_text "Selection lost" (panel_x + 16) (panel_y + 362) 16 (Color.create 220 120 120 255)
+            | None -> draw_text "Selection lost" (panel_x + 16) (panel_y + 320) 16 (Color.create 220 120 120 255)
             | Some b ->
                 draw_text (Printf.sprintf "id=%d  kind=%s" b.id (kind_to_string b.kind))
-                  (panel_x + 16) (panel_y + 286) 15 (Color.create 220 236 252 255);
+                  (panel_x + 16) (panel_y + 244) 15 (Color.create 220 236 252 255);
                 draw_text (Printf.sprintf "signal=%s" (signal_name_to_string b.s1))
-                  (panel_x + 16) (panel_y + 306) 15 (Color.create 220 236 252 255);
-                let remove_btn = mk_button ~id:"remove_selected" ~x:(panel_x + 16) ~y:(panel_y + 392) ~w:292 ~h:34 ~label:"Remove Selected" in
+                  (panel_x + 16) (panel_y + 264) 15 (Color.create 220 236 252 255);
+                let remove_btn = mk_button ~id:"remove_selected" ~x:(panel_x + 16) ~y:(panel_y + 336) ~w:292 ~h:32 ~label:"Remove Selected" in
                 let change_primitive_btn =
-                  mk_button ~id:"change_primitive" ~x:(panel_x + 16) ~y:(panel_y + 434) ~w:292 ~h:34 ~label:"Change Primitive"
+                  mk_button ~id:"change_primitive" ~x:(panel_x + 16) ~y:(panel_y + 374) ~w:292 ~h:32 ~label:"Change Primitive"
                 in
                 Tempo_game_raylib.Ui.draw_button remove_btn;
                 Tempo_game_raylib.Ui.draw_button change_primitive_btn;
 
                 if kind_uses_signal b.kind then (
                   let pad_x = panel_x + 16 in
-                  let pad_y = panel_y + 330 in
+                  let pad_y = panel_y + 286 in
                   let red_rect, blue_rect, green_rect, yellow_rect =
                     draw_signal_quad ~x:pad_x ~y:pad_y ~cell_w:140 ~cell_h:20 ~gap:12
                       ~is_on:(fun signal -> b.s1 = signal)
@@ -725,7 +765,7 @@ let () =
                     set_notice "Signal set to yellow.";
                     run_simulation ()))
                 else
-                  draw_text "no signal selector for this kind" (panel_x + 168) (panel_y + 342) 13
+                  draw_text "no signal selector for this kind" (panel_x + 168) (panel_y + 300) 13
                     (Color.create 150 170 198 255);
 
                 if Ui.button_pressed interaction change_primitive_btn then (
@@ -744,19 +784,27 @@ let () =
       draw_rectangle 20 556 1240 94 c_seq_box;
       draw_rectangle_lines 20 556 1240 94 c_seq_border;
       draw_text "Input sequencer (click quadrants)" 24 560 20 Color.raywhite;
+      let seq_x = 24 in
+      let seq_w = 1240 in
+      let step = max 1 (seq_w / max 1 instants) in
+      let card_w = max 12 (step - 4) in
       for i = 0 to instants - 1 do
-        let x = 24 + (i * 84) in
+        let x = seq_x + (i * step) in
         let y = 588 in
-        let w = 78 in
+        let w = card_w in
         let h = 62 in
         let rect = Rectangle.create (float_of_int x) (float_of_int y) (float_of_int w) (float_of_int h) in
         let cell = input_cells.(i) in
         draw_rectangle_rec rect (Color.create 23 34 48 255);
         draw_rectangle_lines_ex rect 1.5 (Color.create 190 214 239 255);
-        draw_text (Printf.sprintf "%02d" i) (x + 6) 633 12 (Color.create 190 214 239 255);
+        draw_text (Printf.sprintf "%02d" i) (x + 6) (y + 4) 12 (Color.create 190 214 239 255);
 
+        let pad_x = x + 6 in
+        let pad_y = y + 15 in
+        let pad_w = max 8 (w - 12) in
+        let cell_w = max 4 ((pad_w - 4) / 2) in
         let red_rect, blue_rect, green_rect, yellow_rect =
-          draw_signal_quad ~x:(x + 9) ~y:(y + 15) ~cell_w:28 ~cell_h:18 ~gap:4
+          draw_signal_quad ~x:pad_x ~y:pad_y ~cell_w ~cell_h:18 ~gap:4
             ~is_on:(fun signal -> signal_active_in_input signal cell)
         in
         let rx, ry, rw, rh = red_rect in
@@ -787,15 +835,19 @@ let () =
       draw_text "Output sequencer" 24 652 20 Color.raywhite;
       draw_text "Tip: edit tree + pads, simulation refreshes immediately" 420 654 16
         (Color.create 180 205 230 255);
+      let seq_x = 24 in
+      let seq_w = 1240 in
+      let step = max 1 (seq_w / max 1 instants) in
+      let card_w = max 12 (step - 4) in
       for i = 0 to instants - 1 do
-        let x = 24 + (i * 84) in
+        let x = seq_x + (i * step) in
         let y = 680 in
-        let w = 78 in
+        let w = card_w in
         let h = 62 in
         let rect = Rectangle.create (float_of_int x) (float_of_int y) (float_of_int w) (float_of_int h) in
         draw_rectangle_rec rect (Color.create 23 34 48 255);
         draw_rectangle_lines_ex rect 1.5 (Color.create 190 214 239 255);
-        draw_text (Printf.sprintf "%02d" i) (x + 6) 733 12 (Color.create 190 214 239 255);
+        draw_text (Printf.sprintf "%02d" i) (x + 6) (y + 4) 12 (Color.create 190 214 239 255);
 
         let out_signals =
           let out_i = i + 1 in
@@ -805,8 +857,12 @@ let () =
             | Some s -> extract_output_signals s
           else []
         in
+        let pad_x = x + 6 in
+        let pad_y = y + 15 in
+        let pad_w = max 8 (w - 12) in
+        let cell_w = max 4 ((pad_w - 4) / 2) in
         let _ =
-          draw_signal_quad ~x:(x + 9) ~y:(y + 15) ~cell_w:28 ~cell_h:18 ~gap:4
+          draw_signal_quad ~x:pad_x ~y:pad_y ~cell_w ~cell_h:18 ~gap:4
             ~is_on:(fun signal -> List.mem signal out_signals)
         in
         ()
@@ -840,4 +896,5 @@ let () =
     done;
 
     unload_render_texture canvas;
+    if ui_font.owned then unload_font ui_font.font;
     close_window ())
