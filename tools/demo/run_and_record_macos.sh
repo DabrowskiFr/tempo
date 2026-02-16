@@ -33,14 +33,11 @@ STARTUP_DELAY="${6:-8}"
 
 APP_DIR=""
 case "$APP" in
-  game-univ|snake-raylib|temporal-arena|time-echo-jumper)
-    APP_DIR="applications/game/$APP"
+  game-univ|refactor)
+    APP_DIR="applications/advanced/$APP"
     ;;
-  boids-raylib|ca-continuous-raylib|emergent-city-lab|solar-system-raylib|temporal-physics-sandbox)
-    APP_DIR="applications/simulation/$APP"
-    ;;
-  logicgroove|logicgroove-evolution|temporalsim)
-    APP_DIR="applications/logic/$APP"
+  snake-raylib|boids-raylib|ca-continuous-raylib|lenia-raylib|solar-system-raylib|logicgroove|temporalsim)
+    APP_DIR="applications/simple-demos/$APP"
     ;;
   *)
     echo "Unknown app: $APP" >&2

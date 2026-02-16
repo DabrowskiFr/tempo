@@ -322,7 +322,11 @@ Bonnes pratiques:
 - Implémentation: `lib/tempo.ml`
 - Module game re-export: `lib/tempo_game.mli`, `lib/tempo_game.ml`
 - Tests: `tests/ok`
-- Exemple jeu utilisant Tempo: `applications/game/game-univ/`
+- Exemple jeu utilisant Tempo: `applications/advanced/game-univ/`
+- Architecture applications: `applications/ARCHITECTURE.md`
+- Matrice smoke release: `applications/SMOKE_MATRIX.md`
+- Politique de compatibilité: `docs/COMPATIBILITY_POLICY.md`
+- Notes de release/migration: `RELEASE_NOTES.md`
 
 ## 16. Lancer les applications depuis la racine (sans `cd`, sans `.exe`)
 Depuis `/Users/fredericdabrowski/Repos/tempo`.
@@ -345,7 +349,7 @@ snake-raylib
 solar-system-raylib
 logicgroove
 temporalsim
-reactive-reconfiguration-engine
+refactor
 ```
 
 Exemples:
@@ -353,24 +357,40 @@ Exemples:
 ```bash
 dune exec ./applications/run -- game-univ
 dune exec ./applications/run -- temporalsim
-dune exec ./applications/run -- reactive-reconfiguration-engine
+dune exec ./applications/run -- refactor
 ```
 
 Alternative (lancement direct d'un jeu):
 
 ```bash
-dune exec ./applications/game/game-univ/run
-dune exec ./applications/simulation/boids-raylib/run
-dune exec ./applications/simulation/ca-continuous-raylib/run
-dune exec ./applications/simulation/lenia-raylib/run
-dune exec ./applications/game/snake-raylib/run
-dune exec ./applications/simulation/solar-system-raylib/run
-dune exec ./applications/logic/logicgroove/run
-dune exec ./applications/logic/temporalsim/run
-dune exec ./applications/reconfiguration/reactive-reconfiguration-engine/run
+dune exec ./applications/advanced/game-univ/run
+dune exec ./applications/simple-demos/boids-raylib/run
+dune exec ./applications/simple-demos/ca-continuous-raylib/run
+dune exec ./applications/simple-demos/lenia-raylib/run
+dune exec ./applications/simple-demos/snake-raylib/run
+dune exec ./applications/simple-demos/solar-system-raylib/run
+dune exec ./applications/simple-demos/logicgroove/run
+dune exec ./applications/simple-demos/temporalsim/run
+dune exec ./applications/advanced/refactor/run
 ```
 
-## 17. Enregistrer des videos de demo (macOS)
+## 17. Validation pre-release des applications
+Depuis `/Users/fredericdabrowski/Repos/tempo`.
+
+Commande officielle de gate release:
+
+```bash
+./tools/release/validate_apps.sh
+```
+
+Le script verifie:
+- routeurs de lancement;
+- presence/structure des README applications;
+- build des executables applications;
+- contrat `run --help` de chaque application;
+- smoke test headless de `refactor`.
+
+## 18. Enregistrer des videos de demo (macOS)
 Depuis `/Users/fredericdabrowski/Repos/tempo`.
 
 Prerequis:

@@ -195,4 +195,4 @@ Best practices:
 - Implementation: `lib/tempo.ml`
 - Game re-export module: `lib/tempo_game.mli`, `lib/tempo_game.ml`
 - Tests: `tests/ok`
-- Tempo-based game example: `applications/games/game-univ/`
+- Tempo-based game example: `applications/advanced/game-univ/`

@@ -6,6 +6,8 @@ This note explains where to make changes in the runtime and which invariants mus
 
 - Runtime semantics are implemented in:
   - `/Users/fredericdabrowski/Repos/tempo/lib/tempo.ml`
+- Hot-path/performance invariants are documented in:
+  - `/Users/fredericdabrowski/Repos/tempo/docs/runtime_perf_invariants.md`
 
 Legacy modules (`tempo_engine`, `tempo_signal`, `tempo_task`) are kept as references only and are not part of the `tempo` build.
 
@@ -63,6 +65,7 @@ When changing scheduler internals, update or extend these tests first, then modi
 - Adding debug/metrics work on hot paths without guard checks.
 - Coupling runtime semantics to mutable shared references across processes.
 - Hiding lifecycle transitions (`blocked`, `next_instant`, task completion) across unrelated helpers.
+- Growing hot-path logic without benchmark evidence and guard checks.
 
 Preferred pattern:
 

@@ -78,7 +78,9 @@ type scheduler_state =
 let log_ctx st =
   Tempo_log.context ~instant:st.debug.instant_counter ~step:st.debug.step_counter
 
-
+(** [Thread_store] is the only owner of thread-state allocation and indexing.
+    It centralizes dense-array growth and hash fallback so runtime code can
+    rely on stable O(1) access patterns on hot paths. *)
 module Thread_store = struct
   let ensure_dense_capacity st thread =
     let len = Array.length st.thread_dense in
@@ -155,7 +157,14 @@ let add_join_waiter st thread waiter =
   if state.completed then waiter ()
   else state.waiters <- waiter :: state.waiters
 
+(** [Join_many] owns the semantics and fast paths of multi-join synchronization.
+    Scheduler code delegates here so "resume once when all done" remains
+    implemented in a single, auditable place. *)
 module Join_many = struct
+  (* Contract:
+     - never join current thread;
+     - resume exactly once when all target threads complete;
+     - avoid allocating intermediate structures on common paths. *)
   let wait_for_threads st ~(current_thread : thread) ~(resume_parent : unit -> unit)
       (thread_ids : thread list) : unit =
     match thread_ids with
@@ -255,7 +264,10 @@ let finalize_signals : scheduler_state -> unit =
 (* Guard helpers                                                              *)
 (* -------------------------------------------------------------------------- *)
 
+(** [Task_fastpath] contains branch-light predicates used by the scheduler loop.
+    Keep it allocation-free: this module is performance-critical. *)
 module Task_fastpath = struct
+  (* Hot-path predicates only: keep this module branch-light and allocation-free. *)
   let kills_alive kills =
     List.for_all (fun k -> !(k.alive)) kills
 
@@ -274,11 +286,11 @@ end
 let task_kills_alive = Task_fastpath.task_kills_alive
 let task_guard_ok = Task_fastpath.task_guard_ok
 
-(** [missing_guards signals] : returns the signals in [signals] that are not present. 
-    @param guards a list of signals
-    @return the sublist of signals that are absent
-  *)
+(** [Task_builder] constructs scheduler tasks with explicit defaults.
+    It avoids ad-hoc record assembly scattered across runtime internals. *)
 module Task_builder = struct
+  (* Ownership contract:
+     every created task must register its thread_state exactly once. *)
   let guard_single (guards : any_signal list) : any_signal option =
     match guards with
     | [ g ] -> Some g
@@ -347,7 +359,11 @@ let enqueue_next : scheduler_state -> task -> unit =
         end else
           finish_task_state t.thread_state
 
+(** [Instant_rollover] is the sole owner of transitions between logical instants.
+    It finalizes signals, wakes blocked tasks, and promotes next-instant queues. *)
 module Instant_rollover = struct
+  (* End-of-instant contract:
+     this module is the only owner of queue transitions between instants. *)
   let schedule_unblocked_for_next (st : scheduler_state) : unit =
     List.iter
       (fun (t : task) ->
@@ -371,7 +387,11 @@ module Instant_rollover = struct
             ts)
 end
 
+(** [Guard_waiters] centralizes all logic that wakes tasks blocked by [when_]
+    guard conditions. Keeping this isolated avoids duplicated wakeup rules. *)
 module Guard_waiters = struct
+  (* Guard contract:
+     registration is monotonic inside an instant (absent -> present only). *)
   let register_missing_guards (t : task) (guards : any_signal list) : any_signal list =
     let rec loop acc = function
       | [] -> acc
@@ -446,7 +466,12 @@ let emit_event_from_host :
 
 (* Handle a task by performing its effect *)
 
+(** [Effects_handler] interprets all Tempo effects and maps them to scheduler
+    actions. This is the semantic core of primitive execution. *)
 module Effects_handler = struct
+(* Effect contract:
+   interpret runtime effects and schedule continuations without changing
+   observable synchronous semantics. *)
 let run : scheduler_state -> task -> unit =
   fun st t ->
    let debug_enabled = Tempo_log.level_enabled Logs.Debug in
@@ -659,7 +684,12 @@ let handle_task = Effects_handler.run
 (* -------------------------------------------------------------------------- *)
 
 (* Scheduler main loop *)
+(** [Scheduler_step] executes one scheduler step and one instant run-loop pass.
+    It is the operational boundary used by execute/inspect helpers. *)
 module Scheduler_step = struct
+(* Scheduler contract:
+   - [step] drains the current instant queue;
+   - [run_instant] owns instant lifecycle boundaries and rollover. *)
 let rec step : scheduler_state -> unit =
   fun st ->
     let measure = Tempo_log.metrics_enabled in
@@ -792,7 +822,11 @@ let run_instant = Scheduler_step.run_instant
 (* Public API entry point                                                     *)
 (* -------------------------------------------------------------------------- *)
 
+(** [Runtime_bootstrap] creates a fresh scheduler state and wraps the user main
+    process as the initial task owned by thread 0. *)
 module Runtime_bootstrap = struct
+  (* Bootstrap contract:
+     centralize state initialization and host I/O wiring for execute variants. *)
   let create_state () : scheduler_state =
     {
       current = Queue.create ();
@@ -867,7 +901,11 @@ let execute_inspect ?instants ?(input = fun () -> None) ?(output = fun _ -> ())
   Runtime_bootstrap.enqueue_root st initial input_signal output_signal;
   run_instant ~before_step ~after_step ~on_instant_end st instants
 
+(** [Execution_helpers] provides public execution front-ends (execute, trace,
+    inspect) while keeping low-level scheduling internals private. *)
 module Execution_helpers = struct
+  (* API helper contract:
+     keep deterministic input script handling shared by trace/timeline utilities. *)
   let resolve_instants ~instants ~inputs =
     match instants with Some n -> n | None -> List.length inputs
 
@@ -977,8 +1015,6 @@ let parallel (procs : (unit -> unit) list) : unit =
       let threads = fork_all_rev [] procs in
       join_many threads
 
-(* let (||) f g  = fun () -> parallel [f; g] *)
-
 let when_ :
     type emit agg mode. (emit, agg, mode) signal_core -> (unit -> unit) -> unit =
  fun g body -> perform (With_guard (g, body))
@@ -1011,43 +1047,6 @@ let with_kill k body = perform (With_kill (k, body))
     with_kill shared_k (fun () ->
         body ();
         abort_kill guardian_k)
-
-(* let trap (body : trap -> unit) : unit =
-  let module Owner_exit = struct exception Exit end in
-  let handle =
-    { trap_kill = new_kill ()
-    ; trap_completion = new_signal ()
-    ; trap_owner = current_task_id ()
-    ; trap_finished = false
-    ; raise_owner = (fun () -> raise Owner_exit.Exit)
-    }
-  in
-  let finish () =
-    if not handle.trap_finished then begin
-      handle.trap_finished <- true;
-      emit handle.trap_completion ()
-    end
-  in
-  let wrapped () =
-    try body handle with Owner_exit.Exit -> ()
-  in
-  with_kill handle.trap_kill (fun () ->
-      wrapped ();
-      finish ());
-  let _ = await handle.trap_completion in
-  () *)
-
-(* let exit handle =
-  if not handle.trap_finished then begin
-    handle.trap_finished <- true;
-    abort_kill handle.trap_kill;
-    emit handle.trap_completion ();
-    match (handle.trap_owner, current_task_id ()) with
-    | (Some owner, Some current) when owner = current ->
-        handle.raise_owner ()
-    | _ ->
-        raise Aborted
-  end *)
 
 let present_then_else :
     ('emit, 'agg, 'mode) signal_core -> (unit -> unit) -> (unit -> unit) -> unit =
@@ -1757,91 +1756,3 @@ module Layer2 = struct
   module Error_bus = Error_bus
   module Dev_hud = Dev_hud
 end
-
-(* let rec do_every (s : ('emit, 'agg, 'mode) signal_core) (body : unit -> unit) :
-    unit =
-  let completion = new_signal () in
-  watch s (fun () ->
-      body ();
-      emit completion ());
-  present_then_else completion
-    (fun () ->
-      pause ();
-      do_every s body)
-    (fun () -> do_every s body) *)
-
-(* let every_do (s : ('emit, 'agg, 'mode) signal_core) (body : unit -> unit) : unit =
-  let rec loop () =
-    let _ = await s in
-    pause ();
-    let completion = new_signal () in
-    watch s (fun () ->
-        body ();
-        emit completion ());
-    present_then_else completion
-      (fun () ->
-        pause ();
-        loop ())
-      (fun () -> loop ())
-  in
-  loop () *)
-
-(*****************)
-
-(* let watch_ (g : 'a signal) (body : kill -> unit) : proc =
-  fun () ->
-    let k = new_kill () in
-    let guardian () =
-      let _ = await g in
-      abort k
-    in
-    fork guardian;
-    try
-      with_kill k (fun () -> body k)
-    with Aborted -> ()
-
-  let every_ (g : 'a signal) (body : kill -> unit) : proc =
-    fun () ->
-      let current = ref (new_kill ()) in
-      let start_instance (k : kill) =
-        fork (fun () ->
-          try with_kill k (fun () -> body k) with Aborted -> ())
-      in
-      (* démarre une première instance *)
-      start_instance !current;
-
-      let rec controller () =
-        (* strong restart: si g est déjà présent, await revient immédiatement *)
-        let _ = await g in
-          abort !current;
-        let k' = new_kill () in
-          current := k';
-        start_instance k';
-        (* empêche de redéclencher en boucle dans le même instant *)
-        pause ();
-        controller ()
-    in
-    controller () *)
-
-(** Kill *)
-(* let new_kill () = {alive = ref true}
-let abort k = k.alive := false
-let check k = if not !(k.alive) then raise Aborted 
-let with_kill k body = perform (With_kill (k, body)) *)
-(* let kills_ok (ks : kill list) = 
-  List.for_all (fun k -> !(k.alive)) ks *)
-
-  (* | effect (With_kill (kk, body)), k ->
-          enqueue_now st  
-            (mk_task st
-              t.guards
-              (kk::t.kills)
-              (fun () -> 
-                  body ();
-                  enqueue_now st (
-                    mk_task st
-                      t.guards 
-                      t.kills
-                      (fun () -> continue k ())
-                  ) 
-                  )) *)

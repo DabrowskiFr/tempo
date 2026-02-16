@@ -5,6 +5,7 @@
 The runtime source of truth is:
 
 - `/Users/fredericdabrowski/Repos/tempo/lib/tempo.ml`
+- `/Users/fredericdabrowski/Repos/tempo/docs/runtime_perf_invariants.md` (hot-path rules)
 
 Public runtime behavior, scheduler semantics, signal handling, and performance work must be implemented there.
 
@@ -58,3 +59,4 @@ Before merging runtime refactors:
 2. Deterministic tests assert values/signals, not print order.
 3. New helper/module has an explicit ownership boundary.
 4. Runtime docs list the new helper in the internal module map.
+5. Hot-path changes respect `/Users/fredericdabrowski/Repos/tempo/docs/runtime_perf_invariants.md`.

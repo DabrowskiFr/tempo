@@ -37,7 +37,7 @@ if [ "$#" -gt 0 ]; then
   GAMES="$*"
 else
   GAMES=""
-  for d in applications/game/*; do
+  for d in applications/advanced/* applications/simple-demos/*; do
     [ -d "$d/src" ] || continue
     [ -f "$d/src/main.ml" ] || continue
     slug="$(basename "$d")"
@@ -46,17 +46,28 @@ else
 fi
 
 if [ -z "$(echo "$GAMES" | tr -d '[:space:]')" ]; then
-  echo "No games found under applications/game/* with src/main.ml" >&2
+  echo "No games found under applications/advanced/* applications/simple-demos/* with src/main.ml" >&2
   exit 1
 fi
 
+app_src_dir() {
+  slug="$1"
+  if [ -f "$ROOT/applications/advanced/$slug/src/main.ml" ]; then
+    echo "applications/advanced/$slug"
+  elif [ -f "$ROOT/applications/simple-demos/$slug/src/main.ml" ]; then
+    echo "applications/simple-demos/$slug"
+  else
+    return 1
+  fi
+}
+
 BUILD_TARGETS=""
 for g in $GAMES; do
-  target="./applications/game/$g/src/main.exe"
-  if [ ! -f "$ROOT/applications/game/$g/src/main.ml" ]; then
-    echo "Unknown game '$g' (expected $ROOT/applications/game/$g/src/main.ml)" >&2
+  if ! app_dir="$(app_src_dir "$g")"; then
+    echo "Unknown game '$g' (expected $ROOT/applications/advanced/$g/src/main.ml or $ROOT/applications/simple-demos/$g/src/main.ml)" >&2
     exit 1
   fi
+  target="./$app_dir/src/main.exe"
   BUILD_TARGETS="$BUILD_TARGETS $target"
 done
 
@@ -67,7 +78,8 @@ dune build --profile "$PROFILE" $BUILD_TARGETS
 mkdir -p "$OUT_DIR"
 
 for g in $GAMES; do
-  exe_rel="_build/default/applications/game/$g/src/main.exe"
+  app_dir="$(app_src_dir "$g")"
+  exe_rel="_build/default/$app_dir/src/main.exe"
   exe="$ROOT/$exe_rel"
   if [ ! -x "$exe" ]; then
     echo "Executable not found after build: $exe" >&2

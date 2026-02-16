@@ -358,6 +358,13 @@ val await_state : 'a state -> 'a
 module State : sig
   type 'a t = 'a state
 
+  (** Minimal state cell example:
+      {[
+        let score = State.create 0 in
+        State.modify score (fun s -> s + 10);
+        let now = State.get score in
+        Format.printf "score=%d@." now
+      ]} *)
   val create : 'a -> 'a t
   val get : 'a t -> 'a
   val set : 'a t -> 'a -> unit
@@ -369,7 +376,14 @@ end
 module Dynamic : sig
   type handle
 
-  (** [spawn p] starts [p] as a managed process. *)
+  (** [spawn p] starts [p] as a managed process.
+      Example:
+      {[
+        let h = Dynamic.spawn (fun () -> while true do pause () done) in
+        (* ... later ... *)
+        Dynamic.stop h;
+        Dynamic.join h
+      ]} *)
   val spawn : (unit -> unit) -> handle
 
   (** [stop h] requests termination of [h]. *)
@@ -386,7 +400,12 @@ module Game : sig
   (** [after_n n body] executes [body] after [n] logical instants. *)
   val after_n : int -> (unit -> unit) -> unit
 
-  (** [every_n n body] executes [body] every [n] logical instants. *)
+  (** [every_n n body] executes [body] every [n] logical instants.
+      Example:
+      {[
+        Game.every_n 30 (fun () -> emit heartbeat ());
+        Game.after_n 120 (fun () -> emit end_round ())
+      ]} *)
   val every_n : int -> (unit -> unit) -> unit
 
   (** [timeout n ~on_timeout body] runs [body] with a timeout of [n] instants.
@@ -425,7 +444,15 @@ module Reactive : sig
   val toggle_on : ?initial:bool -> unit signal -> bool state
 
   (** [pulse_n n] creates an event signal that emits [()] every [n] logical
-      instants. *)
+      instants.
+      Example:
+      {[
+        let tick = Reactive.pulse_n 10 in
+        while true do
+          let () = await tick in
+          emit spawn_enemy ()
+        done
+      ]} *)
   val pulse_n : int -> unit signal
 
   (** [supervise_until stop procs] runs [procs] in synchronous parallel and
@@ -438,6 +465,15 @@ module App : sig
   type 'msg dispatch = 'msg -> unit
   type 'msg command = dispatch:'msg dispatch -> unit
 
+  (** Example command pipeline:
+      {[
+        type msg = Boot | Tick | Click
+
+        let update model = function
+          | Boot -> (model, App.tick_every 30 ~tick:Tick)
+          | Tick -> ({ model with frame = model.frame + 1 }, App.none)
+          | Click -> (model, App.emit Tick)
+      ]} *)
   val none : 'msg command
   val emit : 'msg -> 'msg command
   val after_n : int -> 'msg -> 'msg command
@@ -496,7 +532,21 @@ module Loop : sig
     output : 'output -> unit;
   }
 
-  (** Canonical fixed logical loop over Tempo instants. *)
+  (** Canonical fixed logical loop over Tempo instants.
+      Example:
+      {[
+        let cfg =
+          {
+            Loop.init = 0;
+            input = (fun () -> Some 1);
+            step = (fun st inp ->
+              let st' = st + Option.value inp ~default:0 in
+              (st', Some st'));
+            output = (fun n -> Format.printf "%d@." n);
+          }
+        in
+        Loop.run ~instants:5 cfg
+      ]} *)
   val run : ?instants:int -> ('input, 'output, 'state) config -> unit
 end
 
@@ -540,6 +590,19 @@ end
 module Event_bus : sig
   type 'a channel = ('a, 'a list) agg_signal
 
+  (** Batch event collection per logical instant.
+      {[
+        let bus = Event_bus.channel () in
+        parallel
+          [
+            (fun () -> emit frame_done ());
+            (fun () -> Event_bus.publish bus `Move_left);
+            (fun () -> Event_bus.publish bus `Jump);
+          ];
+        let intents = Event_bus.await_batch bus in
+        (* intents = [`Move_left; `Jump] at next instant *)
+        ignore intents
+      ]} *)
   val channel : unit -> 'a channel
   val publish : 'a channel -> 'a -> unit
   val await_batch : 'a channel -> 'a list
@@ -621,6 +684,14 @@ end
 module Timeline_json : sig
   type 'a serializer = 'a -> string
 
+  (** Serialize deterministic execution traces for tests and release reports.
+      {[
+        let json =
+          Timeline_json.of_timeline_with
+            ~input_to_string:string_of_int
+            ~output_to_string:string_of_int
+            timeline
+      ]} *)
   val of_timeline_with :
     input_to_string:'input serializer ->
     output_to_string:'output serializer ->
