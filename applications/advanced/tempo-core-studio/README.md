@@ -2,7 +2,7 @@
 
 ## Overview
 
-Application avancée de type Scratch orientée exclusivement sur le core Tempo. Elle permet de construire un programme hiérarchique par blocs (`emit`, `await`, `await_immediate`, `pause`, `when`, `watch`, `parallel`) avec des sous-corps (`body1`, `body2`) pour les blocs conteneurs, d'injecter des signaux d'entrée par instant, puis d'observer la timeline résultante de manière déterministe.
+Application avancée de type Scratch orientée exclusivement sur le core Tempo. Elle permet de construire un programme hiérarchique par blocs (`emit`, `await`, `await_immediate`, `pause`, `when`, `watch`, `parallel`) avec des sous-corps (`body1`, `body2`) pour les blocs conteneurs, d'injecter des signaux d'entrée par instant, puis d'observer la timeline résultante de manière déterministe. La fenêtre est redimensionnable avec rendu mis à l'échelle depuis un canvas logique.
 
 ## Controls / Inputs
 

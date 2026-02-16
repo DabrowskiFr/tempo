@@ -146,6 +146,9 @@ let point_in_rect x y rx ry rw rh =
 let mk_button ~id ~x ~y ~w ~h ~label =
   Ui.button ~id { Ui.x = float_of_int x; y = float_of_int y; w = float_of_int w; h = float_of_int h } ~label ()
 
+let logical_width = 1280
+let logical_height = 768
+
 let dim_signal_color = function
   | Sig_a -> Color.create 104 63 63 255
   | Sig_b -> Color.create 57 76 103 255
@@ -466,8 +469,11 @@ let () =
   let headless, instants = parse_args () in
   if headless then run_headless instants
   else (
-    init_window 1400 900 "Tempo Core Studio";
+    init_window logical_width logical_height "Tempo Core Studio";
+    set_window_state [ ConfigFlags.Window_resizable ];
     set_target_fps 60;
+    let canvas = load_render_texture logical_width logical_height in
+    set_texture_filter (RenderTexture.texture canvas) TextureFilter.Bilinear;
 
     let palette : (string * block_kind) list =
       [ ("emit", K_emit)
@@ -509,20 +515,50 @@ let () =
     run_simulation ();
 
     while not (window_should_close ()) do
-      let interaction = Tempo_game_raylib.Ui.interaction_from_mouse () in
+      let win_w = get_screen_width () in
+      let win_h = get_screen_height () in
+      let sx = float_of_int win_w /. float_of_int logical_width in
+      let sy = float_of_int win_h /. float_of_int logical_height in
+      let scale = min sx sy in
+      let dst_w = int_of_float (float_of_int logical_width *. scale) in
+      let dst_h = int_of_float (float_of_int logical_height *. scale) in
+      let dst_x = (win_w - dst_w) / 2 in
+      let dst_y = (win_h - dst_h) / 2 in
+      let mp = get_mouse_position () in
+      let mx = int_of_float (Vector2.x mp) in
+      let my = int_of_float (Vector2.y mp) in
+      let inside_viewport =
+        mx >= dst_x && mx < dst_x + dst_w && my >= dst_y && my < dst_y + dst_h
+      in
+      let logical_mx =
+        if inside_viewport && scale > 0.0 then
+          (float_of_int (mx - dst_x)) /. scale
+        else -1000.0
+      in
+      let logical_my =
+        if inside_viewport && scale > 0.0 then
+          (float_of_int (my - dst_y)) /. scale
+        else -1000.0
+      in
+      let interaction =
+        { Ui.pointer = { x = logical_mx; y = logical_my }
+        ; down = is_mouse_button_down MouseButton.Left
+        ; pressed = is_mouse_button_pressed MouseButton.Left
+        }
+      in
       let click = interaction.pressed in
       let mouse_x = int_of_float interaction.pointer.x in
       let mouse_y = int_of_float interaction.pointer.y in
 
-      begin_drawing ();
+      begin_texture_mode canvas;
       clear_background (Color.create 20 31 48 255);
 
       draw_text "Tempo Core Studio" 24 16 36 (Color.create 235 240 255 255);
 
       let palette_x = 24 in
       let palette_y = 100 in
-      draw_rectangle palette_x palette_y 360 760 (Color.create 24 44 69 255);
-      draw_rectangle_lines palette_x palette_y 360 760 (Color.create 105 145 187 255);
+      draw_rectangle palette_x palette_y 360 490 (Color.create 24 44 69 255);
+      draw_rectangle_lines palette_x palette_y 360 490 (Color.create 105 145 187 255);
       draw_text "Palette (click to insert)" (palette_x + 14) (palette_y + 10) 20 Color.raywhite;
 
       List.iteri
@@ -538,14 +574,14 @@ let () =
 
       let script_x = 410 in
       let script_y = 100 in
-      draw_rectangle script_x script_y 620 540 (Color.create 26 47 73 255);
-      draw_rectangle_lines script_x script_y 620 540 (Color.create 105 145 187 255);
+      draw_rectangle script_x script_y 620 490 (Color.create 26 47 73 255);
+      draw_rectangle_lines script_x script_y 620 490 (Color.create 105 145 187 255);
       draw_text "Program Tree" (script_x + 14) (script_y + 10) 20 Color.raywhite;
 
       let rows = flatten_tree !script in
       List.iteri
         (fun i r ->
-          if i < 16 then
+          if i < 14 then
             let y = script_y + 48 + (i * 30) in
             let selected = r.target = !selected_target in
             let bg = if selected then Color.create 74 116 163 255 else Color.create 45 80 120 255 in
@@ -576,7 +612,7 @@ let () =
       let panel_y = 100 in
       let panel =
         Hud.panel
-          ~rect:{ Ui.x = float_of_int panel_x; y = float_of_int panel_y; w = 326.0; h = 540.0 }
+          ~rect:{ Ui.x = float_of_int panel_x; y = float_of_int panel_y; w = 326.0; h = 490.0 }
           ~title:"Actions"
       in
       Tempo_game_raylib.Hud.draw_panel panel;
@@ -623,9 +659,9 @@ let () =
                   (panel_x + 16) (panel_y + 286) 15 (Color.create 220 236 252 255);
                 draw_text (Printf.sprintf "signal=%s" (signal_name_to_string b.s1))
                   (panel_x + 16) (panel_y + 306) 15 (Color.create 220 236 252 255);
-                let remove_btn = mk_button ~id:"remove_selected" ~x:(panel_x + 16) ~y:(panel_y + 382) ~w:292 ~h:34 ~label:"Remove Selected" in
+                let remove_btn = mk_button ~id:"remove_selected" ~x:(panel_x + 16) ~y:(panel_y + 392) ~w:292 ~h:34 ~label:"Remove Selected" in
                 let change_primitive_btn =
-                  mk_button ~id:"change_primitive" ~x:(panel_x + 16) ~y:(panel_y + 424) ~w:292 ~h:34 ~label:"Change Primitive"
+                  mk_button ~id:"change_primitive" ~x:(panel_x + 16) ~y:(panel_y + 434) ~w:292 ~h:34 ~label:"Change Primitive"
                 in
                 Tempo_game_raylib.Ui.draw_button remove_btn;
                 Tempo_game_raylib.Ui.draw_button change_primitive_btn;
@@ -735,7 +771,23 @@ let () =
         24 868 17 (Color.create 158 184 214 255);
       draw_text !status 720 868 15 (Color.create 210 225 245 255);
 
+      end_texture_mode ();
+
+      begin_drawing ();
+      clear_background (Color.create 8 12 18 255);
+      let src =
+        Rectangle.create 0.0 0.0 (float_of_int logical_width) (-.(float_of_int logical_height))
+      in
+      let dst =
+        Rectangle.create
+          (float_of_int dst_x)
+          (float_of_int dst_y)
+          (float_of_int dst_w)
+          (float_of_int dst_h)
+      in
+      draw_texture_pro (RenderTexture.texture canvas) src dst (Vector2.create 0.0 0.0) 0.0 Color.raywhite;
       end_drawing ()
     done;
 
+    unload_render_texture canvas;
     close_window ())
