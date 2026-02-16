@@ -533,6 +533,33 @@ let () =
     let ui_font = load_ui_font () in
     let draw_text = draw_text_ui ui_font in
     let measure_text = measure_text_ui ui_font in
+    let draw_button_ui ?(active = false) interaction (btn : Ui.button) =
+      let hovered = Ui.contains btn.rect interaction.Ui.pointer in
+      let fill =
+        if not btn.enabled then Color.create 58 70 84 220
+        else if active then Color.create 86 162 222 245
+        else if hovered then Color.create 70 129 182 238
+        else Color.create 41 74 108 230
+      in
+      let border =
+        if hovered then Color.create 230 243 255 255 else Color.create 168 203 234 245
+      in
+      draw_rectangle
+        (int_of_float btn.rect.x)
+        (int_of_float btn.rect.y)
+        (int_of_float btn.rect.w)
+        (int_of_float btn.rect.h)
+        fill;
+      let rr =
+        Rectangle.create btn.rect.x btn.rect.y btn.rect.w btn.rect.h
+      in
+      draw_rectangle_lines_ex rr 1.5 border;
+      if btn.label <> "" then (
+        let tw = measure_text btn.label 18 in
+        let tx = int_of_float btn.rect.x + ((int_of_float btn.rect.w - tw) / 2) in
+        let ty = int_of_float btn.rect.y + ((int_of_float btn.rect.h - 18) / 2) in
+        draw_text btn.label tx ty 18 (Color.create 240 247 255 255))
+    in
     let canvas = load_render_texture logical_width logical_height in
     set_texture_filter (RenderTexture.texture canvas) TextureFilter.Bilinear;
 
@@ -636,8 +663,10 @@ let () =
       List.iteri
         (fun i (label, kind) ->
           let y = palette_y + 50 + (i * 54) in
-          let btn = mk_button ~id:(Printf.sprintf "palette:%d" i) ~x:(palette_x + 12) ~y ~w:336 ~h:44 ~label in
-          Tempo_game_raylib.Ui.draw_button btn;
+          let btn =
+            mk_button ~id:(Printf.sprintf "palette:%d" i) ~x:(palette_x + 12) ~y ~w:336 ~h:44 ~label
+          in
+          draw_button_ui interaction btn;
           if Ui.button_pressed interaction btn then (
             let b = mk_block kind Sig_a in
             script := append_block ~selected_target:!selected_target ~program:!script b;
@@ -699,9 +728,9 @@ let () =
       let clear_prog_btn = mk_button ~id:"clear_program" ~x:(panel_x + 16) ~y:(panel_y + 54) ~w:292 ~h:42 ~label:"Clear Program" in
       let clear_inputs_btn = mk_button ~id:"clear_inputs" ~x:(panel_x + 16) ~y:(panel_y + 102) ~w:292 ~h:42 ~label:"Clear Inputs" in
       let load_sample_btn = mk_button ~id:"load_sample" ~x:(panel_x + 16) ~y:(panel_y + 150) ~w:292 ~h:42 ~label:"Load Sample" in
-      Tempo_game_raylib.Ui.draw_button clear_prog_btn;
-      Tempo_game_raylib.Ui.draw_button clear_inputs_btn;
-      Tempo_game_raylib.Ui.draw_button load_sample_btn;
+      draw_button_ui interaction clear_prog_btn;
+      draw_button_ui interaction clear_inputs_btn;
+      draw_button_ui interaction load_sample_btn;
 
       if Ui.button_pressed interaction clear_prog_btn then (
         script := [];
@@ -743,8 +772,8 @@ let () =
                 let change_primitive_btn =
                   mk_button ~id:"change_primitive" ~x:(panel_x + 16) ~y:(panel_y + 374) ~w:292 ~h:32 ~label:"Change Primitive"
                 in
-                Tempo_game_raylib.Ui.draw_button remove_btn;
-                Tempo_game_raylib.Ui.draw_button change_primitive_btn;
+                draw_button_ui interaction remove_btn;
+                draw_button_ui interaction change_primitive_btn;
 
                 if kind_uses_signal b.kind then (
                   let pad_x = panel_x + 16 in
