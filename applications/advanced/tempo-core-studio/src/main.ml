@@ -56,6 +56,7 @@ type row = {
   depth : int;
   text : string;
   signal : signal_name option;
+  kind : block_kind option;
 }
 
 let signal_name_to_string = function
@@ -79,6 +80,12 @@ let signal_color = function
   | Sig_b -> Color.create 76 132 214 255
   | Sig_c -> Color.create 88 186 98 255
   | Sig_d -> Color.create 228 188 78 255
+
+let signal_color_ui_active = function
+  | Sig_a -> Color.create 255 116 116 255
+  | Sig_b -> Color.create 118 182 255 255
+  | Sig_c -> Color.create 130 230 140 255
+  | Sig_d -> Color.create 255 224 118 255
 
 let input_has_any = function
   | { red; blue; green; yellow } -> red || blue || green || yellow
@@ -130,7 +137,7 @@ let kind_uses_signal = function
   | K_emit | K_await | K_await_imm | K_when | K_watch -> true
   | K_pause | K_parallel -> false
 
-let block_label b =
+let block_label (b : block) =
   match b.kind with
   | K_emit -> "EMIT"
   | K_await -> "AWAIT"
@@ -160,6 +167,23 @@ let c_text_section = Color.create 232 242 255 255
 let c_text_body = Color.create 222 236 252 255
 let c_text_meta = Color.create 196 220 244 255
 let c_text_warn = Color.create 244 162 146 255
+
+let kind_ui_color = function
+  | K_emit -> Color.create 238 159 154 255
+  | K_await -> Color.create 151 194 238 255
+  | K_await_imm -> Color.create 154 219 236 255
+  | K_pause -> Color.create 245 208 151 255
+  | K_when -> Color.create 164 219 169 255
+  | K_watch -> Color.create 190 171 234 255
+  | K_parallel -> Color.create 245 188 152 255
+
+let color_lift (c : Color.t) delta =
+  let clamp v = max 0 (min 255 v) in
+  Color.create
+    (clamp (Color.r c + delta))
+    (clamp (Color.g c + delta))
+    (clamp (Color.b c + delta))
+    (Color.a c)
 
 type loaded_font = {
   font : Font.t;
@@ -214,7 +238,7 @@ let dim_signal_color = function
 
 let draw_signal_quad ~x ~y ~cell_w ~cell_h ~gap ~is_on =
   let draw_one px py signal =
-    let c = if is_on signal then signal_color signal else dim_signal_color signal in
+    let c = if is_on signal then signal_color_ui_active signal else dim_signal_color signal in
     draw_rectangle px py cell_w cell_h c;
     draw_rectangle_lines px py cell_w cell_h (Color.create 215 232 250 210)
   in
@@ -342,16 +366,45 @@ let rec flatten_blocks (depth : int) (blocks : block list) : row list =
              ; depth
              ; text = block_label b
              ; signal = if kind_uses_signal b.kind then Some b.s1 else None
+             ; kind = Some b.kind
              }
            ]
          in
          if b.kind = K_parallel then
-           let left_begin = { target = Target_parallel_branch (b.id, Branch_left); depth = depth + 1; text = "BEGIN"; signal = None } in
+           let left_begin =
+             { target = Target_parallel_branch (b.id, Branch_left)
+             ; depth = depth + 1
+             ; text = "BEGIN"
+             ; signal = None
+             ; kind = None
+             }
+           in
            let left_body = flatten_blocks (depth + 2) b.body1 in
-           let left_end = { target = Target_parallel_branch (b.id, Branch_left); depth = depth + 1; text = "END"; signal = None } in
-           let right_begin = { target = Target_parallel_branch (b.id, Branch_right); depth = depth + 1; text = "BEGIN"; signal = None } in
+           let left_end =
+             { target = Target_parallel_branch (b.id, Branch_left)
+             ; depth = depth + 1
+             ; text = "END"
+             ; signal = None
+             ; kind = None
+             }
+           in
+           let right_begin =
+             { target = Target_parallel_branch (b.id, Branch_right)
+             ; depth = depth + 1
+             ; text = "BEGIN"
+             ; signal = None
+             ; kind = None
+             }
+           in
            let right_body = flatten_blocks (depth + 2) b.body2 in
-           let right_end = { target = Target_parallel_branch (b.id, Branch_right); depth = depth + 1; text = "END"; signal = None } in
+           let right_end =
+             { target = Target_parallel_branch (b.id, Branch_right)
+             ; depth = depth + 1
+             ; text = "END"
+             ; signal = None
+             ; kind = None
+             }
+           in
            me @ [ left_begin ] @ left_body @ [ left_end; right_begin ] @ right_body @ [ right_end ]
          else
            let c1 = flatten_blocks (depth + 1) b.body1 in
@@ -360,7 +413,8 @@ let rec flatten_blocks (depth : int) (blocks : block list) : row list =
        blocks)
 
 let flatten_tree (blocks : block list) : row list =
-  { target = Target_main; depth = 0; text = "MAIN"; signal = None } :: flatten_blocks 1 blocks
+  { target = Target_main; depth = 0; text = "MAIN"; signal = None; kind = None }
+  :: flatten_blocks 1 blocks
 
 let signal_active_in_input signal = function
   | None -> false
@@ -452,7 +506,7 @@ module Sync = struct
               emit trace "input yellow"));
         pause ();
         input_pump ()
-      and eval_block b =
+      and eval_block (b : block) =
         match b.kind with
         | K_emit ->
             let sigv = signal_of_name sa sb sc sd b.s1 in
@@ -584,6 +638,7 @@ let () =
 
     let script = ref (sample_program ()) in
     let selected_target = ref Target_main in
+    let tree_scroll = ref 0 in
     let input_cells = Array.make instants None in
     if instants > 0 then input_cells.(0) <- Some { red = false; blue = true; green = false; yellow = false };
     if instants > 2 then input_cells.(2) <- Some { red = false; blue = true; green = false; yellow = false };
@@ -672,11 +727,21 @@ let () =
       List.iteri
         (fun i (label, kind) ->
           let y = palette_y + 50 + (i * 54) in
-          let btn =
-            mk_button ~id:(Printf.sprintf "palette:%d" i) ~x:(palette_x + 12) ~y ~w:336 ~h:44 ~label
-          in
-          draw_button_ui interaction btn;
-          if Ui.button_pressed interaction btn then (
+          let bx = palette_x + 12 in
+          let by = y in
+          let bw = 336 in
+          let bh = 44 in
+          let hovered = point_in_rect mouse_x mouse_y bx by bw bh in
+          let base = kind_ui_color kind in
+          let fill = if hovered then color_lift base 18 else base in
+          let border = color_lift fill (-26) in
+          draw_rectangle (bx - 7) (by + 12) 7 20 fill;
+          draw_rectangle bx by bw bh fill;
+          draw_rectangle_lines bx by bw bh border;
+          let tw = measure_text label 20 in
+          let tx = bx + ((bw - tw) / 2) in
+          draw_text label tx (by + 11) 20 (Color.create 18 24 31 255);
+          if click && point_in_rect mouse_x mouse_y bx by bw bh then (
             let b = mk_block kind Sig_a in
             script := append_block ~selected_target:!selected_target ~program:!script b;
             set_notice (Printf.sprintf "Added block: %s" label);
@@ -691,36 +756,66 @@ let () =
       draw_text "Program Tree" (script_x + 14) (script_y + 10) 18 c_text_section;
 
       let rows = flatten_tree !script in
-      List.iteri
-        (fun i r ->
-          if i < 13 then
-            let y = script_y + 48 + (i * 30) in
+      let visible_rows = 13 in
+      let max_scroll = max 0 (List.length rows - visible_rows) in
+      if !tree_scroll > max_scroll then tree_scroll := max_scroll;
+      let inside_tree =
+        point_in_rect mouse_x mouse_y script_x script_y script_w 450
+      in
+      if inside_tree then (
+        let wheel = int_of_float (get_mouse_wheel_move ()) in
+        if wheel <> 0 then
+          tree_scroll := max 0 (min max_scroll (!tree_scroll - wheel)));
+      rows
+      |> List.mapi (fun i r -> (i, r))
+      |> List.iter (fun (i, r) ->
+             let slot = i - !tree_scroll in
+             if slot >= 0 && slot < visible_rows then
+               let y = script_y + 48 + (slot * 30) in
+            let indent_px = min 132 (r.depth * 16) in
+            let row_x = script_x + 12 + indent_px in
+            let row_w = max 120 (script_w - 24 - indent_px) in
             let selected = r.target = !selected_target in
-            let bg = if selected then Color.create 74 116 163 255 else Color.create 45 80 120 255 in
+            let base =
+              match r.kind with
+              | Some k -> kind_ui_color k
+              | None -> Color.create 191 206 223 255
+            in
+            let bg = if selected then color_lift base 20 else base in
             let row_rect =
-              Rectangle.create (float_of_int (script_x + 12)) (float_of_int y) (float_of_int (script_w - 24)) 26.0
+              Rectangle.create (float_of_int row_x) (float_of_int y) (float_of_int row_w) 26.0
             in
             draw_rectangle_rec row_rect bg;
-            draw_rectangle_lines_ex row_rect 1.5 (Color.create 165 205 240 255);
+            let border =
+              if selected then Color.create 255 248 204 255 else color_lift bg (-34)
+            in
+            draw_rectangle_lines_ex row_rect 1.5 border;
+            let label = r.text in
             begin
               match r.signal with
               | None -> ()
               | Some s ->
-                  let displayed = Printf.sprintf "%s%s" (String.make (r.depth * 2) ' ') r.text in
-                  let tw = measure_text displayed 16 in
-                  let cx = script_x + 18 + tw + 12 in
+                  let tw = measure_text label 16 in
+                  let cx = min (row_x + row_w - 14) (row_x + 10 + tw + 12) in
                   draw_circle cx (y + 13) 6.0 (signal_color s);
-                  draw_circle_lines cx (y + 13) 6.0 (Color.create 235 245 255 255)
+                  draw_circle_lines cx (y + 13) 6.0 (Color.create 138 146 154 255)
             end;
-            draw_text
-              (Printf.sprintf "%s%s" (String.make (r.depth * 2) ' ') r.text)
-              (script_x + 18)
-              (y + 6)
-              16
-              Color.raywhite;
-            if click && point_in_rect mouse_x mouse_y (script_x + 12) y (script_w - 24) 26 then
-              selected_target := r.target)
-        rows;
+            draw_text label (row_x + 10) (y + 6) 16 (Color.create 18 24 31 255);
+            if click && point_in_rect mouse_x mouse_y row_x y row_w 26 then
+              selected_target := r.target);
+      if List.length rows > visible_rows then (
+        let track_x = script_x + script_w - 9 in
+        let track_y = script_y + 48 in
+        let track_h = visible_rows * 30 in
+        draw_rectangle track_x track_y 4 track_h (Color.create 34 52 74 230);
+        let thumb_h = max 18 ((visible_rows * track_h) / max 1 (List.length rows)) in
+        let thumb_y =
+          track_y
+          + (((track_h - thumb_h) * !tree_scroll) / max 1 max_scroll)
+        in
+        draw_rectangle track_x thumb_y 4 thumb_h (Color.create 120 168 210 255))
+      else
+        ();
 
       let panel_x = 940 in
       let panel_y = 100 in
@@ -777,9 +872,9 @@ let () =
                   (panel_x + 16) (panel_y + 246) 14 c_text_body;
                 draw_text (Printf.sprintf "signal=%s" (signal_name_to_string b.s1))
                   (panel_x + 16) (panel_y + 266) 14 c_text_body;
-                let remove_btn = mk_button ~id:"remove_selected" ~x:(panel_x + 16) ~y:(panel_y + 336) ~w:292 ~h:32 ~label:"Remove Selected" in
+                let remove_btn = mk_button ~id:"remove_selected" ~x:(panel_x + 16) ~y:(panel_y + 356) ~w:292 ~h:32 ~label:"Remove Selected" in
                 let change_primitive_btn =
-                  mk_button ~id:"change_primitive" ~x:(panel_x + 16) ~y:(panel_y + 374) ~w:292 ~h:32 ~label:"Change Primitive"
+                  mk_button ~id:"change_primitive" ~x:(panel_x + 16) ~y:(panel_y + 394) ~w:292 ~h:32 ~label:"Change Primitive"
                 in
                 draw_button_ui interaction remove_btn;
                 draw_button_ui interaction change_primitive_btn;
