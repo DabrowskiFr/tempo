@@ -220,10 +220,21 @@ let () =
     let script = ref [ Emit Sig_a; Pause_block; Await Sig_b ] in
     let input_cells = Array.make instants None in
     let results = ref [] in
+    let run_count = ref 0 in
+    let status = ref "Ready" in
 
     let run_simulation () =
       let inputs = Array.to_list input_cells in
-      results := simulate ~blocks:!script ~inputs ~instants
+      results := simulate ~blocks:!script ~inputs ~instants;
+      incr run_count;
+      let non_empty =
+        List.fold_left
+          (fun acc row -> match row.output with None -> acc | Some _ -> acc + 1)
+          0 !results
+      in
+      status :=
+        Printf.sprintf "Simulation run #%d: %d instants, %d outputs"
+          !run_count instants non_empty
     in
 
     run_simulation ();
@@ -255,7 +266,9 @@ let () =
           let w = 336 in
           let h = 44 in
           draw_button x y w h label false;
-          if click && point_in_rect mouse_x mouse_y x y w h then script := !script @ [ block ])
+          if click && point_in_rect mouse_x mouse_y x y w h then (
+            script := !script @ [ block ];
+            run_simulation ()))
         palette;
 
       let script_x = 410 in
@@ -277,8 +290,9 @@ let () =
           let rw = 42 in
           let rh = 36 in
           draw_button rx y rw rh "X" false;
-          if click && point_in_rect mouse_x mouse_y rx y rw rh then
-            script := List.filteri (fun j _ -> j <> i) !script)
+          if click && point_in_rect mouse_x mouse_y rx y rw rh then (
+            script := List.filteri (fun j _ -> j <> i) !script;
+            run_simulation ()))
         !script;
 
       let panel_x = 1050 in
@@ -299,9 +313,13 @@ let () =
       draw_button bx sample_y bw 44 "Load Sample Program" false;
 
       if click && point_in_rect mouse_x mouse_y bx run_y bw 48 then run_simulation ();
-      if click && point_in_rect mouse_x mouse_y bx clear_script_y bw 44 then script := [];
-      if click && point_in_rect mouse_x mouse_y bx clear_inputs_y bw 44 then Array.fill input_cells 0 instants None;
-      if click && point_in_rect mouse_x mouse_y bx sample_y bw 44 then
+      if click && point_in_rect mouse_x mouse_y bx clear_script_y bw 44 then (
+        script := [];
+        run_simulation ());
+      if click && point_in_rect mouse_x mouse_y bx clear_inputs_y bw 44 then (
+        Array.fill input_cells 0 instants None;
+        run_simulation ());
+      if click && point_in_rect mouse_x mouse_y bx sample_y bw 44 then (
         script :=
           [ Emit Sig_a
           ; Pause_block
@@ -310,6 +328,7 @@ let () =
           ; Parallel_emit (Sig_a, Sig_b)
           ; Watch_await_emit (Sig_b, Sig_a, Sig_b)
           ];
+        run_simulation ());
 
       draw_text "Tick input editor (click cell: - -> A -> B)" 24 655 20 Color.raywhite;
       for i = 0 to instants - 1 do
@@ -329,7 +348,9 @@ let () =
         draw_rectangle_lines_ex rect 1.5 (Color.create 190 214 239 255);
         draw_text (Printf.sprintf "%02d" i) (x + 6) 692 14 (Color.create 190 214 239 255);
         draw_text (ext_input_to_string cell) (x + 33) 705 20 Color.raywhite;
-        if click && point_in_rect mouse_x mouse_y x y w h then input_cells.(i) <- cycle_input cell
+        if click && point_in_rect mouse_x mouse_y x y w h then (
+          input_cells.(i) <- cycle_input cell;
+          run_simulation ())
       done;
 
       draw_text "Timeline output (per logical instant)" 24 745 20 Color.raywhite;
@@ -349,6 +370,7 @@ let () =
       draw_text
         "Core focus: each block compiles to Tempo primitives; no FRP layer used."
         24 876 18 (Color.create 158 184 214 255);
+      draw_text !status 730 876 16 (Color.create 210 225 245 255);
 
       end_drawing ()
     done;
