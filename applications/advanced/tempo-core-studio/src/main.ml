@@ -132,13 +132,13 @@ let kind_uses_signal = function
 
 let block_label b =
   match b.kind with
-  | K_emit -> "emit"
-  | K_await -> "await"
-  | K_await_imm -> "await_immediate"
-  | K_pause -> "pause"
-  | K_when -> "when do"
-  | K_watch -> "watch do"
-  | K_parallel -> "parallel do"
+  | K_emit -> "EMIT"
+  | K_await -> "AWAIT"
+  | K_await_imm -> "AWAIT_IMMEDIATE"
+  | K_pause -> "PAUSE"
+  | K_when -> "WHEN DO"
+  | K_watch -> "WATCH DO"
+  | K_parallel -> "PARALLEL DO"
 
 let point_in_rect x y rx ry rw rh =
   x >= rx && x <= rx + rw && y >= ry && y <= ry + rh
@@ -156,11 +156,10 @@ let c_topline = Color.create 88 140 188 200
 let c_seq_box = Color.create 19 33 49 220
 let c_seq_border = Color.create 90 138 182 230
 let c_text_title = Color.create 238 246 255 255
-let c_text_section = Color.create 222 236 252 255
-let c_text_body = Color.create 204 224 246 255
-let c_text_meta = Color.create 168 198 228 255
-let c_text_warn = Color.create 231 136 120 255
-let c_text_shadow = Color.create 8 14 22 180
+let c_text_section = Color.create 232 242 255 255
+let c_text_body = Color.create 222 236 252 255
+let c_text_meta = Color.create 196 220 244 255
+let c_text_warn = Color.create 244 162 146 255
 
 type loaded_font = {
   font : Font.t;
@@ -192,7 +191,7 @@ let load_ui_font () =
     | p :: rest ->
         if Sys.file_exists p then
           try
-            let f = load_font_ex p 36 None in
+            let f = load_font_ex p 64 None in
             if is_font_valid f then { font = f; owned = true } else try_paths rest
           with _ -> try_paths rest
         else try_paths rest
@@ -200,13 +199,12 @@ let load_ui_font () =
   try_paths font_candidates
 
 let draw_text_ui (f : loaded_font) text x y size color =
-  let p = Vector2.create (float_of_int x) (float_of_int y) in
-  let ps = Vector2.create (float_of_int (x + 1)) (float_of_int (y + 1)) in
-  draw_text_ex f.font text ps (float_of_int size) 0.5 c_text_shadow;
-  draw_text_ex f.font text p (float_of_int size) 0.5 color
+  let _ = f in
+  draw_text text x y size color
 
 let measure_text_ui (f : loaded_font) text size =
-  int_of_float (Vector2.x (measure_text_ex f.font text (float_of_int size) 1.0))
+  let _ = f in
+  measure_text text size
 
 let dim_signal_color = function
   | Sig_a -> Color.create 104 63 63 255
@@ -348,12 +346,12 @@ let rec flatten_blocks (depth : int) (blocks : block list) : row list =
            ]
          in
          if b.kind = K_parallel then
-           let left_begin = { target = Target_parallel_branch (b.id, Branch_left); depth = depth + 1; text = "begin"; signal = None } in
+           let left_begin = { target = Target_parallel_branch (b.id, Branch_left); depth = depth + 1; text = "BEGIN"; signal = None } in
            let left_body = flatten_blocks (depth + 2) b.body1 in
-           let left_end = { target = Target_parallel_branch (b.id, Branch_left); depth = depth + 1; text = "end"; signal = None } in
-           let right_begin = { target = Target_parallel_branch (b.id, Branch_right); depth = depth + 1; text = "begin"; signal = None } in
+           let left_end = { target = Target_parallel_branch (b.id, Branch_left); depth = depth + 1; text = "END"; signal = None } in
+           let right_begin = { target = Target_parallel_branch (b.id, Branch_right); depth = depth + 1; text = "BEGIN"; signal = None } in
            let right_body = flatten_blocks (depth + 2) b.body2 in
-           let right_end = { target = Target_parallel_branch (b.id, Branch_right); depth = depth + 1; text = "end"; signal = None } in
+           let right_end = { target = Target_parallel_branch (b.id, Branch_right); depth = depth + 1; text = "END"; signal = None } in
            me @ [ left_begin ] @ left_body @ [ left_end; right_begin ] @ right_body @ [ right_end ]
          else
            let c1 = flatten_blocks (depth + 1) b.body1 in
@@ -362,7 +360,7 @@ let rec flatten_blocks (depth : int) (blocks : block list) : row list =
        blocks)
 
 let flatten_tree (blocks : block list) : row list =
-  { target = Target_main; depth = 0; text = "main"; signal = None } :: flatten_blocks 1 blocks
+  { target = Target_main; depth = 0; text = "MAIN"; signal = None } :: flatten_blocks 1 blocks
 
 let signal_active_in_input signal = function
   | None -> false
@@ -574,13 +572,13 @@ let () =
     set_texture_filter (RenderTexture.texture canvas) TextureFilter.Bilinear;
 
     let palette : (string * block_kind) list =
-      [ ("emit", K_emit)
-      ; ("await", K_await)
-      ; ("await_immediate", K_await_imm)
-      ; ("pause", K_pause)
-      ; ("when", K_when)
-      ; ("watch", K_watch)
-      ; ("parallel", K_parallel)
+      [ ("EMIT", K_emit)
+      ; ("AWAIT", K_await)
+      ; ("AWAIT_IMMEDIATE", K_await_imm)
+      ; ("PAUSE", K_pause)
+      ; ("WHEN", K_when)
+      ; ("WATCH", K_watch)
+      ; ("PARALLEL", K_parallel)
       ]
     in
 
@@ -662,14 +660,14 @@ let () =
       draw_rectangle 0 0 logical_width 72 c_topbar;
       draw_line 0 72 logical_width 72 c_topline;
 
-      draw_text "Tempo Core Studio" 24 14 38 c_text_title;
-      draw_text "Synchronous block editor powered by Tempo" 26 50 15 c_text_meta;
+      draw_text "Tempo Core Studio" 24 14 36 c_text_title;
+      draw_text "Synchronous block editor powered by Tempo" 26 50 14 c_text_meta;
 
-      let palette_x = 24 in
+      let palette_x = 20 in
       let palette_y = 100 in
       draw_rectangle palette_x palette_y 360 450 (Color.create 24 44 69 255);
       draw_rectangle_lines palette_x palette_y 360 450 (Color.create 105 145 187 255);
-      draw_text "Palette (click to insert)" (palette_x + 14) (palette_y + 10) 19 c_text_section;
+      draw_text "Palette (click to insert)" (palette_x + 14) (palette_y + 10) 18 c_text_section;
 
       List.iteri
         (fun i (label, kind) ->
@@ -685,12 +683,12 @@ let () =
             run_simulation ()))
         palette;
 
-      let script_x = 360 in
+      let script_x = 400 in
       let script_y = 100 in
-      let script_w = 560 in
+      let script_w = 520 in
       draw_rectangle script_x script_y script_w 450 (Color.create 26 47 73 255);
       draw_rectangle_lines script_x script_y script_w 450 (Color.create 105 145 187 255);
-      draw_text "Program Tree" (script_x + 14) (script_y + 10) 19 c_text_section;
+      draw_text "Program Tree" (script_x + 14) (script_y + 10) 18 c_text_section;
 
       let rows = flatten_tree !script in
       List.iteri
@@ -724,7 +722,7 @@ let () =
               selected_target := r.target)
         rows;
 
-      let panel_x = 936 in
+      let panel_x = 940 in
       let panel_y = 100 in
       let panel_w = 320 in
       let panel =
@@ -733,7 +731,7 @@ let () =
           ~title:"Actions"
       in
       Tempo_game_raylib.Hud.draw_panel panel;
-      draw_text (Printf.sprintf "Runs: %d" !run_count) (panel_x + 214) (panel_y + 14) 17
+      draw_text (Printf.sprintf "Runs: %d" !run_count) (panel_x + 214) (panel_y + 14) 16
         (Color.create 255 220 130 255);
 
       let clear_prog_btn = mk_button ~id:"clear_program" ~x:(panel_x + 16) ~y:(panel_y + 54) ~w:292 ~h:42 ~label:"Clear Program" in
@@ -758,27 +756,27 @@ let () =
         set_notice "Sample program loaded.";
         run_simulation ());
 
-      draw_text "Selected block editor" (panel_x + 16) (panel_y + 220) 18 c_text_section;
+      draw_text "Selected block editor" (panel_x + 16) (panel_y + 220) 17 c_text_section;
       begin
         match !selected_target with
         | Target_main ->
-            draw_text "main selected: insertions go to top-level"
-              (panel_x + 16) (panel_y + 244) 15 c_text_body
+            draw_text "main selected: top-level insertions"
+              (panel_x + 16) (panel_y + 246) 14 c_text_body
         | Target_parallel_branch (_, branch) ->
             let txt =
               match branch with
-              | Branch_left -> "parallel branch selected: insertions go to left branch"
-              | Branch_right -> "parallel branch selected: insertions go to right branch"
+              | Branch_left -> "parallel left branch selected"
+              | Branch_right -> "parallel right branch selected"
             in
-            draw_text txt (panel_x + 16) (panel_y + 244) 15 c_text_body
+            draw_text txt (panel_x + 16) (panel_y + 246) 14 c_text_body
         | Target_block sid -> (
             match find_by_id_in_list sid !script with
-            | None -> draw_text "Selection lost" (panel_x + 16) (panel_y + 320) 15 c_text_warn
+            | None -> draw_text "Selection lost" (panel_x + 16) (panel_y + 320) 14 c_text_warn
             | Some b ->
                 draw_text (Printf.sprintf "id=%d  kind=%s" b.id (kind_to_string b.kind))
-                  (panel_x + 16) (panel_y + 244) 15 c_text_body;
+                  (panel_x + 16) (panel_y + 246) 14 c_text_body;
                 draw_text (Printf.sprintf "signal=%s" (signal_name_to_string b.s1))
-                  (panel_x + 16) (panel_y + 264) 15 c_text_body;
+                  (panel_x + 16) (panel_y + 266) 14 c_text_body;
                 let remove_btn = mk_button ~id:"remove_selected" ~x:(panel_x + 16) ~y:(panel_y + 336) ~w:292 ~h:32 ~label:"Remove Selected" in
                 let change_primitive_btn =
                   mk_button ~id:"change_primitive" ~x:(panel_x + 16) ~y:(panel_y + 374) ~w:292 ~h:32 ~label:"Change Primitive"
@@ -814,7 +812,7 @@ let () =
                     set_notice "Signal set to yellow.";
                     run_simulation ()))
                 else
-                  draw_text "no signal selector for this kind" (panel_x + 168) (panel_y + 300) 13
+                  draw_text "no signal selector" (panel_x + 178) (panel_y + 302) 12
                     c_text_meta;
 
                 if Ui.button_pressed interaction change_primitive_btn then (
@@ -830,30 +828,30 @@ let () =
                   run_simulation ()))
       end;
 
-      draw_rectangle 20 556 1240 94 c_seq_box;
-      draw_rectangle_lines 20 556 1240 94 c_seq_border;
-      draw_text "Input sequencer (click quadrants)" 24 560 19 c_text_section;
+      draw_rectangle 20 544 1240 102 c_seq_box;
+      draw_rectangle_lines 20 544 1240 102 c_seq_border;
+      draw_text "Input sequencer (click quadrants)" 24 548 18 c_text_section;
       let seq_x = 24 in
       let seq_w = 1240 in
       let step = max 1 (seq_w / max 1 instants) in
       let card_w = max 12 (step - 4) in
       for i = 0 to instants - 1 do
         let x = seq_x + (i * step) in
-        let y = 588 in
+        let y = 576 in
         let w = card_w in
-        let h = 62 in
+        let h = 66 in
         let rect = Rectangle.create (float_of_int x) (float_of_int y) (float_of_int w) (float_of_int h) in
         let cell = input_cells.(i) in
         draw_rectangle_rec rect (Color.create 23 34 48 255);
         draw_rectangle_lines_ex rect 1.5 (Color.create 190 214 239 255);
-        draw_text (Printf.sprintf "%02d" i) (x + 6) (y + 4) 12 c_text_meta;
+        draw_text (Printf.sprintf "%02d" i) (x + 6) (y + 5) 11 c_text_meta;
 
         let pad_x = x + 6 in
         let pad_y = y + 15 in
         let pad_w = max 8 (w - 12) in
         let cell_w = max 4 ((pad_w - 4) / 2) in
         let red_rect, blue_rect, green_rect, yellow_rect =
-          draw_signal_quad ~x:pad_x ~y:pad_y ~cell_w ~cell_h:18 ~gap:4
+          draw_signal_quad ~x:pad_x ~y:pad_y ~cell_w ~cell_h:20 ~gap:4
             ~is_on:(fun signal -> signal_active_in_input signal cell)
         in
         let rx, ry, rw, rh = red_rect in
@@ -879,10 +877,10 @@ let () =
           run_simulation ())
       done;
 
-      draw_rectangle 20 648 1240 94 c_seq_box;
-      draw_rectangle_lines 20 648 1240 94 c_seq_border;
-      draw_text "Output sequencer" 24 652 19 c_text_section;
-      draw_text "Tip: edit tree + pads, simulation refreshes immediately" 420 654 15
+      draw_rectangle 20 650 1240 98 c_seq_box;
+      draw_rectangle_lines 20 650 1240 98 c_seq_border;
+      draw_text "Output sequencer" 24 654 18 c_text_section;
+      draw_text "Tip: edit tree + pads, simulation refreshes immediately" 420 656 14
         c_text_meta;
       let seq_x = 24 in
       let seq_w = 1240 in
@@ -892,11 +890,11 @@ let () =
         let x = seq_x + (i * step) in
         let y = 680 in
         let w = card_w in
-        let h = 62 in
+        let h = 64 in
         let rect = Rectangle.create (float_of_int x) (float_of_int y) (float_of_int w) (float_of_int h) in
         draw_rectangle_rec rect (Color.create 23 34 48 255);
         draw_rectangle_lines_ex rect 1.5 (Color.create 190 214 239 255);
-        draw_text (Printf.sprintf "%02d" i) (x + 6) (y + 4) 12 c_text_meta;
+        draw_text (Printf.sprintf "%02d" i) (x + 6) (y + 5) 11 c_text_meta;
 
         let out_signals =
           let out_i = i + 1 in
@@ -911,7 +909,7 @@ let () =
         let pad_w = max 8 (w - 12) in
         let cell_w = max 4 ((pad_w - 4) / 2) in
         let _ =
-          draw_signal_quad ~x:pad_x ~y:pad_y ~cell_w ~cell_h:18 ~gap:4
+          draw_signal_quad ~x:pad_x ~y:pad_y ~cell_w ~cell_h:20 ~gap:4
             ~is_on:(fun signal -> List.mem signal out_signals)
         in
         ()
@@ -919,8 +917,8 @@ let () =
 
       draw_text
         "Core focus: hierarchical blocks compile to Tempo primitives; no FRP layer used."
-        24 746 14 c_text_meta;
-      draw_text !status 720 746 14 c_text_body;
+        24 750 14 c_text_meta;
+      draw_text !status 720 750 14 c_text_body;
       if !notice_ttl > 0 then (
         let alpha = min 255 (80 + (!notice_ttl * 2)) in
         draw_rectangle 24 44 640 20 (Color.create 30 57 82 (alpha / 2));
