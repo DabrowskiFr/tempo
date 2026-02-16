@@ -355,6 +355,17 @@ val modify_state : 'a state -> ('a -> 'a) -> unit
 (** [await_state st] waits for the next state update and returns the new value. *)
 val await_state : 'a state -> 'a
 
+module State : sig
+  type 'a t = 'a state
+
+  val create : 'a -> 'a t
+  val get : 'a t -> 'a
+  val set : 'a t -> 'a -> unit
+  val modify : 'a t -> ('a -> 'a) -> unit
+  val await : 'a t -> 'a
+  val update_and_get : 'a t -> ('a -> 'a) -> 'a
+end
+
 module Dynamic : sig
   type handle
 
@@ -608,6 +619,14 @@ module Entity_set : sig
 end
 
 module Timeline_json : sig
+  type 'a serializer = 'a -> string
+
+  val of_timeline_with :
+    input_to_string:'input serializer ->
+    output_to_string:'output serializer ->
+    ('input, 'output) timeline_instant list ->
+    string
+
   val of_timeline :
     ('input -> string) ->
     ('output -> string) ->
@@ -678,6 +697,7 @@ module Layer2 : sig
   module Netcode = Netcode
   module Profiler = Profiler
   module Entity_set = Entity_set
+  module State = State
   module Timeline_json = Timeline_json
   module Tick_tags = Tick_tags
   module Runtime_snapshot = Runtime_snapshot

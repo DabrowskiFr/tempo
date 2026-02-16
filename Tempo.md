@@ -75,6 +75,8 @@ Le contrat de la librairie est maintenant explicite:
 - `Tempo.Reactive.pulse_n` : signal périodique de pulse.
 - `Tempo.Reactive.supervise_until` : supervision structurée jusqu'à un signal d'arrêt.
 - `Tempo.Game.after_n/every_n/timeout/cooldown` : temporalité gameplay.
+- `Tempo.State.create/get/set/modify/await/update_and_get` : état synchrone encapsulé (couche 2).
+- `Tempo.Timeline_json.of_timeline_with` : export JSON avec paramètres nommés et serializers explicites.
 
 ### 3.4 Exemple minimal Core
 ```ocaml
@@ -148,6 +150,33 @@ let update m = function
 let () =
   let program = { App.init = { running = true; ticks = 0 }; update } in
   App.run ~instants:10 ~input:boot_input program
+```
+
+### 3.8 Exemple Layer2: `State` + timeline JSON typée
+```ocaml
+open Tempo
+
+let program input output =
+  let counter = State.create 0 in
+  let rec loop () =
+    when_ input (fun () ->
+      let v = await_immediate input in
+      let n = State.update_and_get counter (fun x -> x + v) in
+      emit output n);
+    pause ();
+    loop ()
+  in
+  loop ()
+
+let () =
+  let timeline = execute_timeline ~inputs:[ Some 1; None; Some 2 ] program in
+  let _json =
+    Timeline_json.of_timeline_with
+      ~input_to_string:string_of_int
+      ~output_to_string:string_of_int
+      timeline
+  in
+  ()
 ```
 
 ## 4. Package `tempo.game`
@@ -263,7 +292,7 @@ Architecture type:
 Bonnes pratiques:
 - garder la logique gameplay dans Tempo, pas dans l'adaptateur rendu;
 - utiliser `Event_bus` pour découpler gameplay/UI/audio;
-- utiliser `execute_timeline` + `Timeline_json` pour débogage déterministe;
+- utiliser `execute_timeline` + `Timeline_json.of_timeline_with` pour débogage déterministe;
 - utiliser `Dynamic`/`Entity_set` pour spawn/despawn runtime.
 
 ## 11. Gestion des erreurs

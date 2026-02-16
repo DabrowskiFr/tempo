@@ -5,9 +5,6 @@
   tempo_types
   tempo_log
   tempo_thread
-  tempo_signal
-  tempo_task
-  tempo_engine
   tempo)
  (libraries logs mtime mtime.clock))
 

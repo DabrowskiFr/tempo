@@ -21,12 +21,18 @@ type thread = int
 type event
 type aggregate
 
+type thread_state = {
+    mutable active : int
+  ; mutable completed : bool
+  ; mutable waiters : (unit -> unit) list
+}
+
 type ('emit, 'agg, 'mode) signal_core = {
     s_id : int
   ; mutable present : bool
   ; mutable value : 'agg option
-  ; mutable awaiters : ('agg -> unit) list
-  ; mutable guard_waiters : task list
+  ; awaiters : ('agg -> unit) Stack.t
+  ; guard_waiters : task Stack.t
   ; kind : ('emit, 'agg, 'mode) signal_kind
 }
 
@@ -41,8 +47,11 @@ and ('emit, 'agg, 'mode) signal_kind =
 and task = {
     t_id : int
   ; guards : any_signal list
+  ; guard_single : any_signal option
   ; kills : kill list
+  ; has_kills : bool
   ; thread : thread
+  ; thread_state : thread_state
   ; run : unit -> unit
   ; mutable queued : bool
   ; mutable blocked : bool
@@ -52,12 +61,6 @@ and any_signal = Any : ('emit, 'agg, 'mode) signal_core -> any_signal
 
 type 'a signal = ('a, 'a, event) signal_core
 type ('emit, 'agg) agg_signal = ('emit, 'agg, aggregate) signal_core
-
-type thread_state = {
-    mutable active : int
-  ; mutable completed : bool
-  ; mutable waiters : (unit -> unit) list
-}
 
 type debug_info = {
     mutable sig_counter : int
@@ -88,6 +91,7 @@ type _ Effect.t +=
   | Pause : unit Effect.t
   | Fork : (unit -> unit) -> thread Effect.t
   | Join : thread -> unit Effect.t
+  | Join_many : thread list -> unit Effect.t
   | With_guard :
       ('emit, 'agg, 'mode) signal_core * (unit -> unit)
       -> unit Effect.t

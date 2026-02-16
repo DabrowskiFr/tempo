@@ -32,7 +32,6 @@
   when_parallel
   when_same_instant
   when_tick_tock
-  with_kill_abort
   await_immediate_parallel_order
   parallel_fanout_barrier
   watch_when_parallel_preempt
@@ -40,5 +39,8 @@
   sf_api
   timeline_json_api
   tooling_api
-  with_kill_inherit)
+  runtime_instant_observable_order
+  runtime_instant_current_empty
+  low_level_with_kill_abort
+  low_level_with_kill_inherit)
  (libraries tempo tempo-frp))

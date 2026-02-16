@@ -58,7 +58,7 @@ Objectifs cibles:
 
 Chaque optimisation doit etre validee par:
 
-1. `dune runtest`
+1. `dune runtest` (execution sequentielle; ne pas lancer plusieurs commandes `dune` en parallele)
 2. benchmark core standard
 3. benchmark core compare baseline
 
@@ -92,3 +92,78 @@ Tests dedies (focus zones critiques):
 - `watch_when_parallel_preempt`
 
 Ces tests doivent rester verts avant/apres toute optimisation runtime.
+
+## 7. Journal d'execution (branche `optimisation`)
+
+Baseline de comparaison:
+
+- `/Users/fredericdabrowski/Repos/tempo/bench/results/baseline-20260216-163831/core/core_bench.csv`
+
+Etapes executees:
+
+1. Etape 1: `parallel` optimise avec `join_many` interne.
+2. Etape 2: optimisation du chemin guards (`kills_alive`, `guard_ok`, enregistrement des guards manquants en une passe).
+3. Etape 3: optimisation complementaire guards (eviter la collecte detaillee des guards manquants quand inutile pour les logs).
+4. Etape 4: stabilisation des mesures (`--stat median`) + optimisation du hot path `await_immediate`.
+5. Etape 5: cache `thread_state` dans `task` (suppression des lookups `Hashtbl` chauds).
+6. Etape 6: optimisation `when_guard` (pas de re-inscription quand deja bloque + fast path mono-guard).
+7. Etape 7: allègement des chemins chauds `emit/await` (suppression de logs coûteux).
+8. Etape 8: optimisation `parallel_fanout` (join_many fast paths + cache dense `thread_state` dans le scheduler).
+9. Etape 9: reduction du coût de creation de tâches via `mk_task_with_state` (continuations intra-thread).
+10. Etape 10: suppression du coût caché de logging scheduler (gardes explicites Debug/Info autour des snapshots/formatage).
+11. Etape 11: désactivation des métriques runtime par défaut (activation explicite via `RML_METRICS`).
+12. Etape 12: migration des waiters de signaux vers `Stack.t` mutable (drain LIFO sans reconstruction de listes).
+13. Etape 13: fast paths `kills/guards` via métadonnées précalculées dans `task`.
+14. Etape 14: suppression du coût d'appel de logs sur `enqueue_now`/`enqueue_next` (garde explicite Debug).
+15. Etape 15: `log_ctx` lazy sur `handle_task` + consolidation des checks logs sur hot paths.
+16. Etape 16: fast paths API `parallel` (petits fanouts + fork loop sans `List.map`).
+17. Etape 17: fast paths `Join_many` dans l'effet handler pour petits fanouts (0/1/2).
+18. Etape 18: fast path contigu `new_thread_id` / `thread_dense`.
+
+Verification a chaque etape:
+
+- `dune runtest` (OK)
+- campagne bench complete avec comparaison baseline (`COMPARE.csv` / `COMPARE.md`)
+
+Dossiers de resultats:
+
+- `/Users/fredericdabrowski/Repos/tempo/bench/results/opt-step1-20260216-164557`
+- `/Users/fredericdabrowski/Repos/tempo/bench/results/opt-step2-20260216-164719`
+- `/Users/fredericdabrowski/Repos/tempo/bench/results/opt-step3-20260216-164822`
+- `/Users/fredericdabrowski/Repos/tempo/bench/results/opt-final-20260216-165015`
+- `/Users/fredericdabrowski/Repos/tempo/bench/results/opt-step12-20260216-173502`
+- `/Users/fredericdabrowski/Repos/tempo/bench/results/opt-step3-cache-threadstate-20260216-174216`
+- `/Users/fredericdabrowski/Repos/tempo/bench/results/opt-step6-when-guard-20260216-174736`
+- `/Users/fredericdabrowski/Repos/tempo/bench/results/opt-step7-await-logging-rerun-20260216-175122`
+- `/Users/fredericdabrowski/Repos/tempo/bench/results/opt-step8b-thread-dense-20260216-175455`
+- `/Users/fredericdabrowski/Repos/tempo/bench/results/opt-step9-mk-task-with-state-20260216-175743`
+- `/Users/fredericdabrowski/Repos/tempo/bench/results/opt-step10-log-guards-rerun-20260216-180044`
+- `/Users/fredericdabrowski/Repos/tempo/bench/results/opt-step11-metrics-gate-20260216-180313`
+- `/Users/fredericdabrowski/Repos/tempo/bench/results/opt-step12-waiters-stack-20260216-180942`
+- `/Users/fredericdabrowski/Repos/tempo/bench/results/opt-step13-task-flags-20260216-181334`
+- `/Users/fredericdabrowski/Repos/tempo/bench/results/opt-step14-enqueue-log-guards-rerun-20260216-181921`
+- `/Users/fredericdabrowski/Repos/tempo/bench/results/opt-step15-lazy-logctx-20260216-183139`
+- `/Users/fredericdabrowski/Repos/tempo/bench/results/opt-step16-parallel-api-fastpaths-20260216-184420`
+- `/Users/fredericdabrowski/Repos/tempo/bench/results/opt-step17-joinmany-small-fastpaths-20260216-184721`
+- `/Users/fredericdabrowski/Repos/tempo/bench/results/opt-step18-thread-id-fastpath-20260216-184958`
+
+Bilan synthetique (tendance moyenne observee sur les runs stables):
+
+- `await_immediate`: amelioration marquee (jusqu'a ~`-14%` sur runs stables recents)
+- `parallel_fanout`: amelioration moderee (jusqu'a ~`-5%`)
+- `combined_core`: amelioration moderee a forte (jusqu'a ~`-7.5%`)
+- la passe "log guard" montre un gain massif supplementaire (ordre de grandeur ~`-75%` a `-80%`) en supprimant des calculs de debug executes inutilement en mode non-debug.
+- la passe "metrics gate" ajoute un gain massif complémentaire en retirant le coût `Mtime` + agrégation métrique du chemin nominal.
+- la passe "waiters stack" consolide ces gains en évitant les reconstructions de listes de waiters tout en conservant l'ordre LIFO historique.
+- la passe "task flags" retire le coût résiduel de parcours de listes sur les checks `kills/guards` du chemin chaud.
+- la passe "enqueue log guards" retire un coût d'appel/logging encore présent sur les primitives les plus fréquentes.
+- la passe "lazy log_ctx" retire le coût résiduel de construction de contexte de log sur `handle_task` quand aucun log n'est émis.
+- la passe "parallel api fastpaths" réduit encore le coût de composition côté API sans changer la sémantique.
+- la passe "join_many small fastpaths" consolide les gains sur les petits fanouts fréquents côté handler.
+- la passe "thread id fastpath" réduit le coût d'allocation de threads logiques sur les rafales de forks.
+- pas de regression semantique (tests OK)
+
+Note de mesure:
+
+- quelques points presentent des outliers ponctuels selon la charge machine;
+- pour les comparaisons finales, privilegier plusieurs runs et la lecture des tendances (moyennes par benchmark) plutot qu'un unique point.
