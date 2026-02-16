@@ -1,4 +1,0 @@
-step,kind,detail
-240,queue,tx#1 start-backend
-240,tx-step,tx#1 step failed: already running
-241,tx-step,tx#1 rollback done
