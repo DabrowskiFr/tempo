@@ -26,11 +26,6 @@ type block = {
   mutable body2 : block list;
 }
 
-type insert_target =
-  | Into_main
-  | Into_body1
-  | Into_body2
-
 type timeline_row = {
   instant : int;
   input : ext_input option;
@@ -166,27 +161,39 @@ let rec remove_by_id_from_list (target_id : int) (blocks : block list) : block l
   in
   loop [] blocks
 
-let append_block ~target ~selected_id ~program block =
-  match target with
-  | Into_main -> program @ [ block ]
-  | Into_body1 -> (
-      match selected_id with
-      | None -> program @ [ block ]
-      | Some sid -> (
-          match find_by_id_in_list sid program with
-          | Some b when has_body1 b.kind ->
-              b.body1 <- b.body1 @ [ block ];
-              program
-          | _ -> program @ [ block ]))
-  | Into_body2 -> (
-      match selected_id with
-      | None -> program @ [ block ]
-      | Some sid -> (
-          match find_by_id_in_list sid program with
-          | Some b when has_body2 b.kind ->
-              b.body2 <- b.body2 @ [ block ];
-              program
-          | _ -> program @ [ block ]))
+let rec insert_after_in_list (target_id : int) (new_block : block) (blocks : block list) :
+    block list * bool =
+  let rec loop acc = function
+    | [] -> (List.rev acc, false)
+    | (b : block) :: rest ->
+        if b.id = target_id then (List.rev_append acc (b :: new_block :: rest), true)
+        else
+          let body1', inserted1 = insert_after_in_list target_id new_block b.body1 in
+          b.body1 <- body1';
+          if inserted1 then (List.rev_append (b :: acc) rest, true)
+          else
+            let body2', inserted2 = insert_after_in_list target_id new_block b.body2 in
+            b.body2 <- body2';
+            if inserted2 then (List.rev_append (b :: acc) rest, true)
+            else loop (b :: acc) rest
+  in
+  loop [] blocks
+
+let append_block ~selected_id ~program block =
+  if selected_id = 0 then program @ [ block ]
+  else
+    match find_by_id_in_list selected_id program with
+    | Some b when b.kind = K_when || b.kind = K_watch ->
+        b.body1 <- b.body1 @ [ block ];
+        program
+    | Some b when b.kind = K_parallel ->
+        if List.length b.body1 <= List.length b.body2 then b.body1 <- b.body1 @ [ block ]
+        else b.body2 <- b.body2 @ [ block ];
+        program
+    | Some _ ->
+        let program', inserted = insert_after_in_list selected_id block program in
+        if inserted then program' else program @ [ block ]
+    | None -> program @ [ block ]
 
 let rec flatten_blocks (depth : int) (blocks : block list) : row list =
   List.concat
@@ -197,6 +204,9 @@ let rec flatten_blocks (depth : int) (blocks : block list) : row list =
          let c2 = flatten_blocks (depth + 1) b.body2 in
          me @ c1 @ c2)
        blocks)
+
+let flatten_tree (blocks : block list) : row list =
+  { id = 0; depth = 0; text = "main" } :: flatten_blocks 1 blocks
 
 let signal_of_name sa sb = function
   | Sig_a -> sa
@@ -322,8 +332,7 @@ let () =
     in
 
     let script = ref (sample_program ()) in
-    let selected_id = ref None in
-    let target = ref Into_main in
+    let selected_id = ref 0 in
     let input_cells = Array.make instants None in
     if instants > 0 then input_cells.(0) <- Some In_b;
     if instants > 2 then input_cells.(2) <- Some In_b;
@@ -375,7 +384,7 @@ let () =
           draw_button (palette_x + 12) y 336 44 label false;
           if click && point_in_rect mouse_x mouse_y (palette_x + 12) y 336 44 then (
             let b = mk_block kind Sig_a in
-            script := append_block ~target:!target ~selected_id:!selected_id ~program:!script b;
+            script := append_block ~selected_id:!selected_id ~program:!script b;
             run_simulation ()))
         palette;
 
@@ -385,12 +394,12 @@ let () =
       draw_rectangle_lines script_x script_y 620 540 (Color.create 105 145 187 255);
       draw_text "Program Tree" (script_x + 14) (script_y + 10) 20 Color.raywhite;
 
-      let rows = flatten_blocks 0 !script in
+      let rows = flatten_tree !script in
       List.iteri
         (fun i r ->
           if i < 16 then
             let y = script_y + 48 + (i * 30) in
-            let selected = Some r.id = !selected_id in
+            let selected = r.id = !selected_id in
             let bg = if selected then Color.create 74 116 163 255 else Color.create 45 80 120 255 in
             let row_rect = Rectangle.create (float_of_int (script_x + 12)) (float_of_int y) 590.0 26.0 in
             draw_rectangle_rec row_rect bg;
@@ -402,7 +411,7 @@ let () =
               16
               Color.raywhite;
             if click && point_in_rect mouse_x mouse_y (script_x + 12) y 590 26 then
-              selected_id := Some r.id)
+              selected_id := r.id)
         rows;
 
       let panel_x = 1050 in
@@ -421,51 +430,44 @@ let () =
       if click && point_in_rect mouse_x mouse_y (panel_x + 16) (panel_y + 54) 292 46 then run_simulation ();
       if click && point_in_rect mouse_x mouse_y (panel_x + 16) (panel_y + 108) 292 42 then (
         script := [];
-        selected_id := None;
+        selected_id := 0;
         run_simulation ());
       if click && point_in_rect mouse_x mouse_y (panel_x + 16) (panel_y + 156) 292 42 then (
         Array.fill input_cells 0 instants None;
         run_simulation ());
       if click && point_in_rect mouse_x mouse_y (panel_x + 16) (panel_y + 204) 292 42 then (
         script := sample_program ();
-        selected_id := None;
+        selected_id := 0;
         run_simulation ());
 
-      draw_text "Insert target" (panel_x + 16) (panel_y + 262) 18 Color.raywhite;
-      draw_button (panel_x + 16) (panel_y + 286) 92 36 "Main" (!target = Into_main);
-      draw_button (panel_x + 116) (panel_y + 286) 92 36 "Body1" (!target = Into_body1);
-      draw_button (panel_x + 216) (panel_y + 286) 92 36 "Body2" (!target = Into_body2);
-      if click && point_in_rect mouse_x mouse_y (panel_x + 16) (panel_y + 286) 92 36 then target := Into_main;
-      if click && point_in_rect mouse_x mouse_y (panel_x + 116) (panel_y + 286) 92 36 then target := Into_body1;
-      if click && point_in_rect mouse_x mouse_y (panel_x + 216) (panel_y + 286) 92 36 then target := Into_body2;
-
-      draw_text "Selected block editor" (panel_x + 16) (panel_y + 338) 18 Color.raywhite;
+      draw_text "Selected block editor" (panel_x + 16) (panel_y + 262) 18 Color.raywhite;
       begin
-        match !selected_id with
-        | None -> draw_text "No selection" (panel_x + 16) (panel_y + 362) 16 (Color.create 170 192 220 255)
-        | Some sid -> (
-            match find_by_id_in_list sid !script with
+        if !selected_id = 0 then
+          draw_text "main selected: insertions go to top-level"
+            (panel_x + 16) (panel_y + 286) 16 (Color.create 170 192 220 255)
+        else
+          match find_by_id_in_list !selected_id !script with
             | None -> draw_text "Selection lost" (panel_x + 16) (panel_y + 362) 16 (Color.create 220 120 120 255)
             | Some b ->
                 draw_text (Printf.sprintf "id=%d  kind=%s" b.id (kind_to_string b.kind))
-                  (panel_x + 16) (panel_y + 362) 15 (Color.create 220 236 252 255);
+                  (panel_x + 16) (panel_y + 286) 15 (Color.create 220 236 252 255);
                 draw_text (Printf.sprintf "signal=%s" (signal_name_to_string b.s1))
-                  (panel_x + 16) (panel_y + 382) 15 (Color.create 220 236 252 255);
-                draw_button (panel_x + 16) (panel_y + 406) 140 36 "Cycle Kind" false;
-                draw_button (panel_x + 168) (panel_y + 406) 140 36 "Cycle Signal" false;
-                draw_button (panel_x + 16) (panel_y + 450) 292 36 "Remove Selected" false;
-                if click && point_in_rect mouse_x mouse_y (panel_x + 16) (panel_y + 406) 140 36 then (
+                  (panel_x + 16) (panel_y + 306) 15 (Color.create 220 236 252 255);
+                draw_button (panel_x + 16) (panel_y + 330) 140 36 "Cycle Kind" false;
+                draw_button (panel_x + 168) (panel_y + 330) 140 36 "Cycle Signal" false;
+                draw_button (panel_x + 16) (panel_y + 374) 292 36 "Remove Selected" false;
+                if click && point_in_rect mouse_x mouse_y (panel_x + 16) (panel_y + 330) 140 36 then (
                   b.kind <- cycle_kind b.kind;
                   if not (has_body1 b.kind) then b.body1 <- [];
                   if not (has_body2 b.kind) then b.body2 <- [];
                   run_simulation ());
-                if click && point_in_rect mouse_x mouse_y (panel_x + 168) (panel_y + 406) 140 36 then (
+                if click && point_in_rect mouse_x mouse_y (panel_x + 168) (panel_y + 330) 140 36 then (
                   b.s1 <- cycle_signal b.s1;
                   run_simulation ());
-                if click && point_in_rect mouse_x mouse_y (panel_x + 16) (panel_y + 450) 292 36 then (
+                if click && point_in_rect mouse_x mouse_y (panel_x + 16) (panel_y + 374) 292 36 then (
                   script := fst (remove_by_id_from_list b.id !script);
-                  selected_id := None;
-                  run_simulation ()))
+                  selected_id := 0;
+                  run_simulation ())
       end;
 
       draw_text "Tick input editor (click cell: - -> A -> B)" 24 600 20 Color.raywhite;

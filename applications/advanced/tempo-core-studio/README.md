@@ -8,8 +8,10 @@ Application avancée de type Scratch orientée exclusivement sur le core Tempo. 
 
 - Mouse:
 - cliquer un bloc dans la palette pour l'ajouter au programme;
-- choisir la cible d'insertion (`Main`, `Body1`, `Body2`) dans le panneau `Actions`;
-- sélectionner un bloc dans l'arbre puis éditer son `kind` et son signal dans `Selected block editor`;
+- sélectionner une ligne dans `Program Tree` pour définir la cible contextuelle d'insertion;
+- le nœud implicite `main` est sélectionnable pour revenir au niveau le plus haut;
+- un clic palette insère dans le bloc sélectionné: dans `body1/body2` pour les conteneurs, sinon juste après le bloc sélectionné;
+- sélectionner un bloc (hors `main`) puis éditer son `kind` et son signal dans `Selected block editor`;
 - cliquer `X` sur une ligne pour supprimer un bloc;
 - cliquer une cellule de timeline pour cycler l'entrée `- -> A -> B`.
 - Buttons:
