@@ -39,12 +39,17 @@ type row = {
 }
 
 let signal_name_to_string = function
-  | Sig_a -> "A"
-  | Sig_b -> "B"
+  | Sig_a -> "red"
+  | Sig_b -> "blue"
 
 let ext_input_to_string = function
   | None -> "-"
-  | Some In_a -> "A"
+  | Some In_a -> "red"
+  | Some In_b -> "blue"
+
+let ext_input_short = function
+  | None -> "-"
+  | Some In_a -> "R"
   | Some In_b -> "B"
 
 let cycle_signal = function
@@ -212,6 +217,11 @@ let signal_of_name sa sb = function
   | Sig_a -> sa
   | Sig_b -> sb
 
+let input_color = function
+  | None -> Color.create 42 58 78 255
+  | Some In_a -> Color.create 190 76 76 255
+  | Some In_b -> Color.create 66 108 176 255
+
 let simulate ~(blocks : block list) ~(inputs : ext_input option list) ~(instants : int) : timeline_row list =
   let run input output =
     let sa = new_signal () in
@@ -229,10 +239,10 @@ let simulate ~(blocks : block list) ~(inputs : ext_input option list) ~(instants
           match await_immediate input with
           | In_a ->
               if not (is_present sa) then emit sa ();
-              emit trace "input A"
+              emit trace "input red"
           | In_b ->
               if not (is_present sb) then emit sb ();
-              emit trace "input B");
+              emit trace "input blue");
       pause ();
       input_pump ()
     and eval_block b =
@@ -470,7 +480,7 @@ let () =
                   run_simulation ())
       end;
 
-      draw_text "Tick input editor (click cell: - -> A -> B)" 24 600 20 Color.raywhite;
+      draw_text "Tick input editor (click cell: - -> red -> blue)" 24 600 20 Color.raywhite;
       for i = 0 to instants - 1 do
         let x = 24 + (i * 84) in
         let y = 630 in
@@ -478,16 +488,11 @@ let () =
         let h = 44 in
         let rect = Rectangle.create (float_of_int x) (float_of_int y) (float_of_int w) (float_of_int h) in
         let cell = input_cells.(i) in
-        let bg =
-          match cell with
-          | None -> Color.create 42 58 78 255
-          | Some In_a -> Color.create 167 92 54 255
-          | Some In_b -> Color.create 66 108 176 255
-        in
+        let bg = input_color cell in
         draw_rectangle_rec rect bg;
         draw_rectangle_lines_ex rect 1.5 (Color.create 190 214 239 255);
         draw_text (Printf.sprintf "%02d" i) (x + 6) 636 14 (Color.create 190 214 239 255);
-        draw_text (ext_input_to_string cell) (x + 33) 649 20 Color.raywhite;
+        draw_text (ext_input_short cell) (x + 33) 649 20 Color.raywhite;
         if click && point_in_rect mouse_x mouse_y x y w h then (
           input_cells.(i) <- cycle_input cell;
           run_simulation ())
