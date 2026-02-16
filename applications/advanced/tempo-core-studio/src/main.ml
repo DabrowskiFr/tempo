@@ -146,6 +146,32 @@ let point_in_rect x y rx ry rw rh =
 let mk_button ~id ~x ~y ~w ~h ~label =
   Ui.button ~id { Ui.x = float_of_int x; y = float_of_int y; w = float_of_int w; h = float_of_int h } ~label ()
 
+let dim_signal_color = function
+  | Sig_a -> Color.create 104 63 63 255
+  | Sig_b -> Color.create 57 76 103 255
+  | Sig_c -> Color.create 62 99 66 255
+  | Sig_d -> Color.create 116 102 64 255
+
+let draw_signal_quad ~x ~y ~cell_w ~cell_h ~gap ~is_on =
+  let draw_one px py signal =
+    let c = if is_on signal then signal_color signal else dim_signal_color signal in
+    draw_rectangle px py cell_w cell_h c;
+    draw_rectangle_lines px py cell_w cell_h (Color.create 215 232 250 210)
+  in
+  let red_rect = (x, y, cell_w, cell_h) in
+  let blue_rect = (x + cell_w + gap, y, cell_w, cell_h) in
+  let green_rect = (x, y + cell_h + gap, cell_w, cell_h) in
+  let yellow_rect = (x + cell_w + gap, y + cell_h + gap, cell_w, cell_h) in
+  let rx, ry, _, _ = red_rect in
+  draw_one rx ry Sig_a;
+  let bx, by, _, _ = blue_rect in
+  draw_one bx by Sig_b;
+  let gx, gy, _, _ = green_rect in
+  draw_one gx gy Sig_c;
+  let yx, yy, _, _ = yellow_rect in
+  draw_one yx yy Sig_d;
+  (red_rect, blue_rect, green_rect, yellow_rect)
+
 let next_id =
   let r = ref 0 in
   fun () ->
@@ -557,16 +583,13 @@ let () =
       draw_text (Printf.sprintf "Runs: %d" !run_count) (panel_x + 220) (panel_y + 14) 18
         (Color.create 255 220 130 255);
 
-      let run_btn = mk_button ~id:"run" ~x:(panel_x + 16) ~y:(panel_y + 54) ~w:292 ~h:46 ~label:"Run Simulation" in
-      let clear_prog_btn = mk_button ~id:"clear_program" ~x:(panel_x + 16) ~y:(panel_y + 108) ~w:292 ~h:42 ~label:"Clear Program" in
-      let clear_inputs_btn = mk_button ~id:"clear_inputs" ~x:(panel_x + 16) ~y:(panel_y + 156) ~w:292 ~h:42 ~label:"Clear Inputs" in
-      let load_sample_btn = mk_button ~id:"load_sample" ~x:(panel_x + 16) ~y:(panel_y + 204) ~w:292 ~h:42 ~label:"Load Sample" in
-      Tempo_game_raylib.Ui.draw_button ~active:true run_btn;
+      let clear_prog_btn = mk_button ~id:"clear_program" ~x:(panel_x + 16) ~y:(panel_y + 54) ~w:292 ~h:42 ~label:"Clear Program" in
+      let clear_inputs_btn = mk_button ~id:"clear_inputs" ~x:(panel_x + 16) ~y:(panel_y + 102) ~w:292 ~h:42 ~label:"Clear Inputs" in
+      let load_sample_btn = mk_button ~id:"load_sample" ~x:(panel_x + 16) ~y:(panel_y + 150) ~w:292 ~h:42 ~label:"Load Sample" in
       Tempo_game_raylib.Ui.draw_button clear_prog_btn;
       Tempo_game_raylib.Ui.draw_button clear_inputs_btn;
       Tempo_game_raylib.Ui.draw_button load_sample_btn;
 
-      if Ui.button_pressed interaction run_btn then run_simulation ();
       if Ui.button_pressed interaction clear_prog_btn then (
         script := [];
         selected_target := Target_main;
@@ -600,43 +623,24 @@ let () =
                   (panel_x + 16) (panel_y + 286) 15 (Color.create 220 236 252 255);
                 draw_text (Printf.sprintf "signal=%s" (signal_name_to_string b.s1))
                   (panel_x + 16) (panel_y + 306) 15 (Color.create 220 236 252 255);
-                let cycle_kind_btn = mk_button ~id:"cycle_kind" ~x:(panel_x + 16) ~y:(panel_y + 330) ~w:140 ~h:36 ~label:"Cycle Kind" in
-                let remove_btn = mk_button ~id:"remove_selected" ~x:(panel_x + 16) ~y:(panel_y + 420) ~w:292 ~h:36 ~label:"Remove Selected" in
-                Tempo_game_raylib.Ui.draw_button cycle_kind_btn;
+                let remove_btn = mk_button ~id:"remove_selected" ~x:(panel_x + 16) ~y:(panel_y + 382) ~w:292 ~h:34 ~label:"Remove Selected" in
+                let change_primitive_btn =
+                  mk_button ~id:"change_primitive" ~x:(panel_x + 16) ~y:(panel_y + 424) ~w:292 ~h:34 ~label:"Change Primitive"
+                in
                 Tempo_game_raylib.Ui.draw_button remove_btn;
+                Tempo_game_raylib.Ui.draw_button change_primitive_btn;
 
                 if kind_uses_signal b.kind then (
-                  let pad_x = panel_x + 176 in
-                  let pad_y = panel_y + 326 in
-                  let cell_w = 58 in
-                  let cell_h = 18 in
-                  let gap = 4 in
-                  let draw_signal_pad px py signal =
-                    let selected = b.s1 = signal in
-                    let c =
-                      if selected then signal_color signal
-                      else
-                        match signal with
-                        | Sig_a -> Color.create 104 63 63 255
-                        | Sig_b -> Color.create 57 76 103 255
-                        | Sig_c -> Color.create 62 99 66 255
-                        | Sig_d -> Color.create 116 102 64 255
-                    in
-                    draw_rectangle px py cell_w cell_h c;
-                    draw_rectangle_lines px py cell_w cell_h (Color.create 215 232 250 210)
+                  let pad_x = panel_x + 16 in
+                  let pad_y = panel_y + 330 in
+                  let red_rect, blue_rect, green_rect, yellow_rect =
+                    draw_signal_quad ~x:pad_x ~y:pad_y ~cell_w:140 ~cell_h:20 ~gap:12
+                      ~is_on:(fun signal -> b.s1 = signal)
                   in
-                  let red_rect = (pad_x, pad_y, cell_w, cell_h) in
-                  let blue_rect = (pad_x + cell_w + gap, pad_y, cell_w, cell_h) in
-                  let green_rect = (pad_x, pad_y + cell_h + gap, cell_w, cell_h) in
-                  let yellow_rect = (pad_x + cell_w + gap, pad_y + cell_h + gap, cell_w, cell_h) in
                   let rx, ry, rw, rh = red_rect in
-                  draw_signal_pad rx ry Sig_a;
                   let bx, by, bw, bh = blue_rect in
-                  draw_signal_pad bx by Sig_b;
                   let gx, gy, gw, gh = green_rect in
-                  draw_signal_pad gx gy Sig_c;
                   let yx, yy, yw, yh = yellow_rect in
-                  draw_signal_pad yx yy Sig_d;
                   if click && point_in_rect mouse_x mouse_y rx ry rw rh && b.s1 <> Sig_a then (
                     b.s1 <- Sig_a;
                     run_simulation ());
@@ -653,7 +657,7 @@ let () =
                   draw_text "no signal selector for this kind" (panel_x + 168) (panel_y + 342) 13
                     (Color.create 150 170 198 255);
 
-                if Ui.button_pressed interaction cycle_kind_btn then (
+                if Ui.button_pressed interaction change_primitive_btn then (
                   b.kind <- cycle_kind b.kind;
                   if not (has_body1 b.kind) then b.body1 <- [];
                   if not (has_body2 b.kind) then b.body2 <- [];
@@ -664,7 +668,7 @@ let () =
                   run_simulation ()))
       end;
 
-      draw_text "Input sequencer (Simon-style pads, click quadrants)" 24 600 20 Color.raywhite;
+      draw_text "Input sequencer (click quadrants)" 24 600 20 Color.raywhite;
       for i = 0 to instants - 1 do
         let x = 24 + (i * 84) in
         let y = 628 in
@@ -676,38 +680,14 @@ let () =
         draw_rectangle_lines_ex rect 1.5 (Color.create 190 214 239 255);
         draw_text (Printf.sprintf "%02d" i) (x + 6) 633 12 (Color.create 190 214 239 255);
 
-        let pad_x = x + 9 in
-        let pad_y = y + 19 in
-        let cell_w = 28 in
-        let cell_h = 18 in
-        let gap = 4 in
-        let draw_pad px py signal =
-          let on = signal_active_in_input signal cell in
-          let base = signal_color signal in
-          let c =
-            if on then base
-            else
-              match signal with
-              | Sig_a -> Color.create 104 63 63 255
-              | Sig_b -> Color.create 57 76 103 255
-              | Sig_c -> Color.create 62 99 66 255
-              | Sig_d -> Color.create 116 102 64 255
-          in
-          draw_rectangle px py cell_w cell_h c;
-          draw_rectangle_lines px py cell_w cell_h (Color.create 215 232 250 210)
+        let red_rect, blue_rect, green_rect, yellow_rect =
+          draw_signal_quad ~x:(x + 9) ~y:(y + 19) ~cell_w:28 ~cell_h:18 ~gap:4
+            ~is_on:(fun signal -> signal_active_in_input signal cell)
         in
-        let red_rect = (pad_x, pad_y, cell_w, cell_h) in
-        let blue_rect = (pad_x + cell_w + gap, pad_y, cell_w, cell_h) in
-        let green_rect = (pad_x, pad_y + cell_h + gap, cell_w, cell_h) in
-        let yellow_rect = (pad_x + cell_w + gap, pad_y + cell_h + gap, cell_w, cell_h) in
         let rx, ry, rw, rh = red_rect in
-        draw_pad rx ry Sig_a;
         let bx, by, bw, bh = blue_rect in
-        draw_pad bx by Sig_b;
         let gx, gy, gw, gh = green_rect in
-        draw_pad gx gy Sig_c;
         let yx, yy, yw, yh = yellow_rect in
-        draw_pad yx yy Sig_d;
 
         if click && point_in_rect mouse_x mouse_y rx ry rw rh then (
           input_cells.(i) <- toggle_input_signal Sig_a cell;
@@ -726,30 +706,21 @@ let () =
       draw_text "Timeline output (color traces)" 24 700 20 Color.raywhite;
       draw_text "Tip: edit tree + pads, simulation refreshes immediately" 420 702 16
         (Color.create 180 205 230 255);
-      let max_rows = min instants 10 in
+      let max_rows = min instants 5 in
       List.iteri
         (fun i row ->
           if i < max_rows then
-            let y = 730 + (i * 18) in
+            let y = 730 + (i * 26) in
             let bg =
               if i mod 2 = 0 then Color.create 28 46 70 255
               else Color.create 33 53 80 255
             in
-            draw_rectangle 24 (y - 1) 1320 18 bg;
+            draw_rectangle 24 (y - 1) 1320 24 bg;
             draw_text (Printf.sprintf "t=%02d" row.instant) 30 y 15 (Color.create 236 244 255 255);
-
-            let draw_chip x signal active =
-              let color =
-                if active then signal_color signal
-                else Color.create 66 78 92 255
-              in
-              draw_circle x (y + 8) 6.0 color;
-              draw_circle_lines x (y + 8) 6.0 (Color.create 225 236 248 220)
+            let _ =
+              draw_signal_quad ~x:102 ~y:(y + 2) ~cell_w:8 ~cell_h:5 ~gap:2
+                ~is_on:(fun signal -> signal_active_in_input signal row.input)
             in
-            draw_chip 108 Sig_a (signal_active_in_input Sig_a row.input);
-            draw_chip 124 Sig_b (signal_active_in_input Sig_b row.input);
-            draw_chip 140 Sig_c (signal_active_in_input Sig_c row.input);
-            draw_chip 156 Sig_d (signal_active_in_input Sig_d row.input);
 
             let out_signals =
               match row.output with
@@ -757,11 +728,10 @@ let () =
               | Some s -> extract_output_signals s
             in
             draw_text "->" 180 y 15 (Color.create 190 214 239 255);
-            List.iteri
-              (fun k sig_name ->
-                draw_circle (212 + (k * 16)) (y + 8) 6.0 (signal_color sig_name);
-                draw_circle_lines (212 + (k * 16)) (y + 8) 6.0 (Color.create 225 236 248 220))
-              out_signals;
+            let _ =
+              draw_signal_quad ~x:212 ~y:(y + 2) ~cell_w:8 ~cell_h:5 ~gap:2
+                ~is_on:(fun signal -> List.mem signal out_signals)
+            in
             if out_signals = [] then
               draw_text "-" 210 y 15 (Color.create 146 170 196 255))
         !results;

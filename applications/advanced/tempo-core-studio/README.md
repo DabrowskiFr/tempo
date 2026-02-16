@@ -11,16 +11,14 @@ Application avancée de type Scratch orientée exclusivement sur le core Tempo. 
 - sélectionner une ligne dans `Program Tree` pour définir la cible contextuelle d'insertion;
 - le nœud implicite `main` est sélectionnable pour revenir au niveau le plus haut;
 - l'arbre affiche une pastille couleur (`red`/`blue`/`green`/`yellow`) à la place du texte de signal;
-- la palette affiche une pastille blanche sur les blocs qui demandent un signal;
 - un clic palette insère dans le bloc sélectionné: dans `body1/body2` pour les conteneurs, sinon juste après le bloc sélectionné;
 - sélectionner un bloc (hors `main`) puis éditer son `kind`; pour les blocs à signal, choisir la couleur via un mini pad 2x2 (style Simon) dans `Selected block editor`;
 - cliquer `X` sur une ligne pour supprimer un bloc;
 - cliquer les quadrants du pad couleur (style Simon) pour activer `red`, `blue`, `green`, `yellow` par instant (plusieurs actifs possibles).
 - Buttons:
-- `Run Simulation`: exécute le programme sur les instants configurés;
 - `Clear Program`: vide le script;
 - `Clear Inputs`: remet les entrées à vide;
-- `Load Sample Program`: charge un scénario exemple.
+- `Load Sample`: charge un scénario exemple.
 - Keyboard:
 - `Esc`: fermer la fenêtre.
 
