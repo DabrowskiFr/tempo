@@ -1,14 +1,1 @@
-[driver] launch parallel workers
-[fast] start
-[medium] start
-[slow] start
-[fast] finish
-[medium] middle
-[slow] middle
-[fast] done
-[medium] finish
-[slow] one more time
-[medium] done
-[slow] finish
-[slow] done
-[driver] instant 3: all branches completed
+tag=codee;a=9;b=9;eq=true

@@ -1,28 +1,32 @@
 open Tempo
 
-let rec worker step limit () =
-  if step >= limit then
-    Format.printf "[worker] finished after %d steps@.%!" limit
-  else (
-    Format.printf "[worker] instant %d@.%!" step;
-    pause ();
-    worker (step + 1) limit ())
-
-let scenario () =
-  let trigger = new_signal () in
-  let body () =
-    watch trigger (fun () ->
-        Format.printf "[body] start@.%!";
-        worker 0 3 ());
-    Format.printf "[body] end (natural completion)@.%!"
+let () =
+  let run ~swap =
+    execute_trace ~instants:12 ~inputs:[ None ] (fun _input output ->
+        let trigger = new_signal () in
+        let ticks = new_state 0 in
+        let finished = new_state false in
+        let body () =
+          watch trigger (fun () ->
+              for _ = 1 to 3 do
+                modify_state ticks (fun x -> x + 1);
+                pause ()
+              done);
+          set_state finished true
+        in
+        let driver () =
+          pause ();
+          pause ();
+          pause ();
+          pause ()
+        in
+        let procs = [ body; driver ] in
+        parallel (if swap then List.rev procs else procs);
+        emit output (get_state ticks, get_state finished))
   in
-  let driver () =
-    Format.printf "[driver] trigger will stay silent@.%!";
-    pause ();
-    pause ();
-    pause ();
-    Format.printf "[driver] done@.%!"
-  in
-  parallel [ body; driver ]
-
-let () = execute ~instants:10 (fun _ _ -> scenario ())
+  let a = run ~swap:false in
+  let b = run ~swap:true in
+  match (a, b) with
+  | [ (t1, f1) ], [ (t2, f2) ] ->
+      Printf.printf "tag=codee;a=(%d,%b);b=(%d,%b);eq=%b\n" t1 f1 t2 f2 (a = b)
+  | _ -> Printf.printf "unexpected\n"

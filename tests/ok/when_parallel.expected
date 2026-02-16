@@ -1,13 +1,1 @@
-[driver] instant 0: emit guard_a to wake the first listener
-[listener/A] instant 0: guard present, branch resumes in parallel
-[driver] instant 1: emit guard_a and guard_b in the same instant
-[listener/A] instant 1: guard present, branch resumes in parallel
-[listener/B] instant 0: guard present, branch resumes in parallel
-[combo] instant 1: guard_a et guard_b présents dans le même instant
-[driver] instant 2: final emission of guard_a
-[listener/B] instant 1: done observing guard
-[combo] instant 2: combo branch done
-[listener/A] instant 2: guard present, branch resumes in parallel
-[driver] instant 3: all signals emitted
-[listener/A] instant 3: done observing guard
-[scenario] all parallel branches completed
+tag=codee;a=(3,1,1);b=(3,1,1);eq=true
