@@ -70,12 +70,6 @@ let ext_input_to_string = function
       in
       if names = [] then "-" else String.concat "+" names
 
-let cycle_signal = function
-  | Sig_a -> Sig_b
-  | Sig_b -> Sig_c
-  | Sig_c -> Sig_d
-  | Sig_d -> Sig_a
-
 let signal_color = function
   | Sig_a -> Color.create 210 84 84 255
   | Sig_b -> Color.create 76 132 214 255
@@ -597,18 +591,62 @@ let () =
                 draw_text (Printf.sprintf "signal=%s" (signal_name_to_string b.s1))
                   (panel_x + 16) (panel_y + 306) 15 (Color.create 220 236 252 255);
                 let cycle_kind_btn = mk_button ~id:"cycle_kind" ~x:(panel_x + 16) ~y:(panel_y + 330) ~w:140 ~h:36 ~label:"Cycle Kind" in
-                let cycle_signal_btn = mk_button ~id:"cycle_signal" ~x:(panel_x + 168) ~y:(panel_y + 330) ~w:140 ~h:36 ~label:"Cycle Signal" in
-                let remove_btn = mk_button ~id:"remove_selected" ~x:(panel_x + 16) ~y:(panel_y + 374) ~w:292 ~h:36 ~label:"Remove Selected" in
+                let remove_btn = mk_button ~id:"remove_selected" ~x:(panel_x + 16) ~y:(panel_y + 420) ~w:292 ~h:36 ~label:"Remove Selected" in
                 Tempo_game_raylib.Ui.draw_button cycle_kind_btn;
-                Tempo_game_raylib.Ui.draw_button cycle_signal_btn;
                 Tempo_game_raylib.Ui.draw_button remove_btn;
+
+                if kind_uses_signal b.kind then (
+                  let pad_x = panel_x + 176 in
+                  let pad_y = panel_y + 326 in
+                  let cell_w = 58 in
+                  let cell_h = 18 in
+                  let gap = 4 in
+                  let draw_signal_pad px py signal =
+                    let selected = b.s1 = signal in
+                    let c =
+                      if selected then signal_color signal
+                      else
+                        match signal with
+                        | Sig_a -> Color.create 104 63 63 255
+                        | Sig_b -> Color.create 57 76 103 255
+                        | Sig_c -> Color.create 62 99 66 255
+                        | Sig_d -> Color.create 116 102 64 255
+                    in
+                    draw_rectangle px py cell_w cell_h c;
+                    draw_rectangle_lines px py cell_w cell_h (Color.create 215 232 250 210)
+                  in
+                  let red_rect = (pad_x, pad_y, cell_w, cell_h) in
+                  let blue_rect = (pad_x + cell_w + gap, pad_y, cell_w, cell_h) in
+                  let green_rect = (pad_x, pad_y + cell_h + gap, cell_w, cell_h) in
+                  let yellow_rect = (pad_x + cell_w + gap, pad_y + cell_h + gap, cell_w, cell_h) in
+                  let rx, ry, rw, rh = red_rect in
+                  draw_signal_pad rx ry Sig_a;
+                  let bx, by, bw, bh = blue_rect in
+                  draw_signal_pad bx by Sig_b;
+                  let gx, gy, gw, gh = green_rect in
+                  draw_signal_pad gx gy Sig_c;
+                  let yx, yy, yw, yh = yellow_rect in
+                  draw_signal_pad yx yy Sig_d;
+                  if click && point_in_rect mouse_x mouse_y rx ry rw rh && b.s1 <> Sig_a then (
+                    b.s1 <- Sig_a;
+                    run_simulation ());
+                  if click && point_in_rect mouse_x mouse_y bx by bw bh && b.s1 <> Sig_b then (
+                    b.s1 <- Sig_b;
+                    run_simulation ());
+                  if click && point_in_rect mouse_x mouse_y gx gy gw gh && b.s1 <> Sig_c then (
+                    b.s1 <- Sig_c;
+                    run_simulation ());
+                  if click && point_in_rect mouse_x mouse_y yx yy yw yh && b.s1 <> Sig_d then (
+                    b.s1 <- Sig_d;
+                    run_simulation ()))
+                else
+                  draw_text "no signal selector for this kind" (panel_x + 168) (panel_y + 342) 13
+                    (Color.create 150 170 198 255);
+
                 if Ui.button_pressed interaction cycle_kind_btn then (
                   b.kind <- cycle_kind b.kind;
                   if not (has_body1 b.kind) then b.body1 <- [];
                   if not (has_body2 b.kind) then b.body2 <- [];
-                  run_simulation ());
-                if Ui.button_pressed interaction cycle_signal_btn then (
-                  b.s1 <- cycle_signal b.s1;
                   run_simulation ());
                 if Ui.button_pressed interaction remove_btn then (
                   script := fst (remove_by_id_from_list b.id !script);

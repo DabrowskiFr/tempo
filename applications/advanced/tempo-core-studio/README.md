@@ -13,7 +13,7 @@ Application avancée de type Scratch orientée exclusivement sur le core Tempo. 
 - l'arbre affiche une pastille couleur (`red`/`blue`/`green`/`yellow`) à la place du texte de signal;
 - la palette affiche une pastille blanche sur les blocs qui demandent un signal;
 - un clic palette insère dans le bloc sélectionné: dans `body1/body2` pour les conteneurs, sinon juste après le bloc sélectionné;
-- sélectionner un bloc (hors `main`) puis éditer son `kind` et son signal dans `Selected block editor`;
+- sélectionner un bloc (hors `main`) puis éditer son `kind`; pour les blocs à signal, choisir la couleur via un mini pad 2x2 (style Simon) dans `Selected block editor`;
 - cliquer `X` sur une ligne pour supprimer un bloc;
 - cliquer les quadrants du pad couleur (style Simon) pour activer `red`, `blue`, `green`, `yellow` par instant (plusieurs actifs possibles).
 - Buttons:
