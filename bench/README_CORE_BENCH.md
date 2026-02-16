@@ -40,6 +40,7 @@ Convertisseur utilise (ordre): `rsvg-convert`, `inkscape`, puis `cairosvg`.
 - `--out-dir <dir>`: repertoire de sortie.
 - `--repeats <n>`: repetitions par point (defaut `5`).
 - `--warmup <n>`: warmups par point (defaut `1`).
+- `--stat <mean|median>`: statistique sur les repetitions (defaut `median`).
 - `--scale <f>`: facteur global de complexite (defaut `1.0`).
 - `--only <id>`: un seul benchmark.
 - `--log-y`: ajoute des graphes SVG en echelle logarithmique sur l'axe Y.

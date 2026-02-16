@@ -55,18 +55,27 @@ let with_out path f =
     ~finally:(fun () -> close_out oc)
     (fun () -> f oc)
 
-let measure_ms ~warmup ~repeats f =
+let measure_ms ~warmup ~repeats ~stat f =
   for _ = 1 to warmup do
     f ()
   done;
-  let sum = ref 0.0 in
+  let samples = ref [] in
   for _ = 1 to repeats do
     Gc.compact ();
     let t0 = now_ms () in
     f ();
-    sum := !sum +. (now_ms () -. t0)
+    samples := (now_ms () -. t0) :: !samples
   done;
-  !sum /. float_of_int repeats
+  let arr = Array.of_list !samples in
+  match stat with
+  | "mean" ->
+      let sum = Array.fold_left ( +. ) 0.0 arr in
+      sum /. float_of_int (Array.length arr)
+  | "median" ->
+      Array.sort Float.compare arr;
+      let n = Array.length arr in
+      if n mod 2 = 1 then arr.(n / 2) else 0.5 *. (arr.((n / 2) - 1) +. arr.(n / 2))
+  | _ -> invalid_arg "--stat must be mean or median"
 
 let run_pause_loop n =
   execute ~instants:(n + 3) (fun _input _output ->
@@ -473,7 +482,7 @@ let scale_label x =
   let s = Printf.sprintf "%.3g" x in
   String.map (function '.' -> '_' | c -> c) s
 
-let run_suite ~out_dir ~repeats ~warmup ~scale ~only ~log_y ~baseline_csv ~fail_on_regression_pct =
+let run_suite ~out_dir ~repeats ~warmup ~stat ~scale ~only ~log_y ~baseline_csv ~fail_on_regression_pct =
   ensure_dir out_dir;
   let selected =
     benches ~scale
@@ -489,7 +498,7 @@ let run_suite ~out_dir ~repeats ~warmup ~scale ~only ~log_y ~baseline_csv ~fail_
         let pts =
           List.map
             (fun n ->
-              let ms = measure_ms ~warmup ~repeats (fun () -> b.run n) in
+              let ms = measure_ms ~warmup ~repeats ~stat (fun () -> b.run n) in
               let per_op_ns = (ms *. 1_000_000.0) /. max 1.0 (b.ops_count n) in
               { complexity = n; total_ms = ms; per_op_ns })
             b.complexities
@@ -585,6 +594,7 @@ let () =
   let only = ref "" in
   let log_y = ref false in
   let sweep = ref "" in
+  let stat = ref "median" in
   let baseline_csv = ref "" in
   let fail_on_regression_pct = ref "" in
   let specs =
@@ -596,6 +606,7 @@ let () =
       ("--only", Arg.Set_string only, "Run only one benchmark id");
       ("--log-y", Arg.Set log_y, "Generate additional SVG charts with logarithmic Y scale");
       ("--sweep", Arg.Set_string sweep, "Comma-separated scales, e.g. 0.5,1,2");
+      ("--stat", Arg.Set_string stat, "Statistic for repeated samples: mean|median (default: median)");
       ("--baseline-csv", Arg.Set_string baseline_csv, "Compare against a previous core_bench.csv");
       ("--fail-on-regression-pct", Arg.Set_string fail_on_regression_pct, "Fail if any matched point regresses above this percent");
     ]
@@ -610,7 +621,7 @@ let () =
   in
   if !sweep = "" then (
     if !scale <= 0.0 then invalid_arg "--scale must be > 0";
-    run_suite ~out_dir:!out_dir ~repeats:!repeats ~warmup:!warmup ~scale:!scale ~only:!only
+    run_suite ~out_dir:!out_dir ~repeats:!repeats ~warmup:!warmup ~stat:!stat ~scale:!scale ~only:!only
       ~log_y:!log_y ~baseline_csv:baseline_csv_opt ~fail_on_regression_pct:fail_opt)
   else (
     let scales = parse_sweep !sweep in
@@ -622,7 +633,7 @@ let () =
         List.iter
           (fun s ->
             let sub = Filename.concat !out_dir ("scale_" ^ scale_label s) in
-            run_suite ~out_dir:sub ~repeats:!repeats ~warmup:!warmup ~scale:s ~only:!only ~log_y:!log_y
+            run_suite ~out_dir:sub ~repeats:!repeats ~warmup:!warmup ~stat:!stat ~scale:s ~only:!only ~log_y:!log_y
               ~baseline_csv:baseline_csv_opt ~fail_on_regression_pct:fail_opt;
             Printf.fprintf oc "- scale %.3g: `%s`\n" s sub)
           scales))
