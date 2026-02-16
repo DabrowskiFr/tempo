@@ -1,0 +1,7 @@
+step,kind,detail
+240,queue,tx#1 start-backend
+240,tx-step,tx#1 step failed: already running
+241,tx-step,tx#1 rollback done
+480,queue,tx#2 api-hot-update
+480,tx-step,tx#2 step failed: network drop
+481,tx-step,tx#2 rollback done

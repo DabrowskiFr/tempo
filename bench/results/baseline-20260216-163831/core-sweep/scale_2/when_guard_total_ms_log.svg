@@ -1,0 +1,42 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='980' height='580' viewBox='0 0 980 580' style='background:#0b1220;font-family:Menlo,Consolas,monospace'>
+<text x='90' y='36' fill='#e2e8f0' font-size='24'>when_ guard cost — total time vs complexity (log Y)</text>
+<rect x='90.00' y='70.00' width='862.00' height='430.00' fill='#111827' stroke='#334155'/>
+<line x1='90.00' y1='70.00' x2='952.00' y2='70.00' stroke='#1f2937'/>
+<text x='12' y='74.00' fill='#94a3b8' font-size='12'>97.8</text>
+<line x1='90.00' y1='141.67' x2='952.00' y2='141.67' stroke='#1f2937'/>
+<text x='12' y='145.67' fill='#94a3b8' font-size='12'>59.7</text>
+<line x1='90.00' y1='213.33' x2='952.00' y2='213.33' stroke='#1f2937'/>
+<text x='12' y='217.33' fill='#94a3b8' font-size='12'>36.4</text>
+<line x1='90.00' y1='285.00' x2='952.00' y2='285.00' stroke='#1f2937'/>
+<text x='12' y='289.00' fill='#94a3b8' font-size='12'>22.2</text>
+<line x1='90.00' y1='356.67' x2='952.00' y2='356.67' stroke='#1f2937'/>
+<text x='12' y='360.67' fill='#94a3b8' font-size='12'>13.6</text>
+<line x1='90.00' y1='428.33' x2='952.00' y2='428.33' stroke='#1f2937'/>
+<text x='12' y='432.33' fill='#94a3b8' font-size='12'>8.28</text>
+<line x1='90.00' y1='500.00' x2='952.00' y2='500.00' stroke='#1f2937'/>
+<text x='12' y='504.00' fill='#94a3b8' font-size='12'>5.05</text>
+<line x1='90.00' y1='70.00' x2='90.00' y2='500.00' stroke='#1f2937'/>
+<text x='80.00' y='518.00' fill='#94a3b8' font-size='12'>1000</text>
+<line x1='233.67' y1='70.00' x2='233.67' y2='500.00' stroke='#1f2937'/>
+<text x='223.67' y='518.00' fill='#94a3b8' font-size='12'>3500</text>
+<line x1='377.33' y1='70.00' x2='377.33' y2='500.00' stroke='#1f2937'/>
+<text x='367.33' y='518.00' fill='#94a3b8' font-size='12'>6000</text>
+<line x1='521.00' y1='70.00' x2='521.00' y2='500.00' stroke='#1f2937'/>
+<text x='511.00' y='518.00' fill='#94a3b8' font-size='12'>8500</text>
+<line x1='664.67' y1='70.00' x2='664.67' y2='500.00' stroke='#1f2937'/>
+<text x='654.67' y='518.00' fill='#94a3b8' font-size='12'>11000</text>
+<line x1='808.33' y1='70.00' x2='808.33' y2='500.00' stroke='#1f2937'/>
+<text x='798.33' y='518.00' fill='#94a3b8' font-size='12'>13500</text>
+<line x1='952.00' y1='70.00' x2='952.00' y2='500.00' stroke='#1f2937'/>
+<text x='942.00' y='518.00' fill='#94a3b8' font-size='12'>16000</text>
+<path d='M 90.00 500.00 L 147.47 397.26 L 262.40 298.03 L 492.27 203.57 L 952.00 101.85' fill='none' stroke='#ef4444' stroke-width='2.4'/>
+<circle cx='90.00' cy='500.00' r='3.2' fill='#ef4444'/>
+<circle cx='147.47' cy='397.26' r='3.2' fill='#ef4444'/>
+<circle cx='262.40' cy='298.03' r='3.2' fill='#ef4444'/>
+<circle cx='492.27' cy='203.57' r='3.2' fill='#ef4444'/>
+<circle cx='952.00' cy='101.85' r='3.2' fill='#ef4444'/>
+<text x='473.00' y='556.00' fill='#cbd5e1' font-size='14'>complexity</text>
+<text x='22' y='285.00' fill='#cbd5e1' font-size='14' transform='rotate(-90 22 285.00)'>total time (ms, log)</text>
+<line x1='722.00' y1='88.00' x2='744.00' y2='88.00' stroke='#ef4444' stroke-width='3'/>
+<text x='750.00' y='92.00' fill='#e2e8f0' font-size='13'>when_guard</text>
+</svg>

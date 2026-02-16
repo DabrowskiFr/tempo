@@ -1,0 +1,28 @@
+# reconfig.concerto
+# transaction <name> [deadline <int>]
+#   start|stop|update <Component>
+#   bind|unbind <A> <B>
+#   add|remove <Component>
+#   optional temporal constraint: ... within <int>
+#   groups are referenced with @groupName
+# end
+
+transaction start-backend deadline 260
+start @backend within 120
+bind Worker API within 160
+end
+
+transaction api-hot-update deadline 220
+update API within 90
+start API within 140
+end
+
+transaction rewire-frontend deadline 300
+unbind Proxy API within 120
+bind Proxy Worker within 170
+start Worker within 170
+end
+
+transaction add-cache-node deadline 320
+add CacheNode
+end

@@ -63,11 +63,11 @@ let handle_task : scheduler_state -> task -> unit =
                   Tempo_log.log ~task:t.t_id ~signal:s.s_id ctx "step"
                   "await present | task=#%d signal=#%d -> resume next instant" t.t_id s.s_id;
                 resume (Option.get s.value)
-            | Aggregate_signal _ -> s.awaiters <- resume :: s.awaiters
+            | Aggregate_signal _ -> Stack.push resume s.awaiters
           else begin
             Tempo_log.log ~task:t.t_id ~signal:s.s_id ctx "step"
               "await absent | task=#%d signal`#%d -> enqueue" t.t_id s.s_id;
-            s.awaiters <- resume :: s.awaiters
+            Stack.push resume s.awaiters
           end;
       | effect (Await_immediate s), k ->
           if s.present then
@@ -89,7 +89,7 @@ let handle_task : scheduler_state -> task -> unit =
             in
             Tempo_log.log ~task:t.t_id ~signal:s.s_id ctx "step"
                 "await immediate absent | task=#%d signal`#%d -> save continuation" t.t_id s.s_id;
-                s.awaiters <- resume :: s.awaiters;
+                Stack.push resume s.awaiters;
       | effect Pause, k ->
           let new_task =
             spawn_next st t.thread t.guards t.kills (fun () -> continue k ())

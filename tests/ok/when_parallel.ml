@@ -1,49 +1,47 @@
 open Tempo
 
-let log tag instant message =
-  Format.printf "[%s] instant %d: %s@.%!" tag instant message
+let observe_guard ~guard ~events ~st () =
+  for _ = 1 to events do
+    when_ guard (fun () -> modify_state st (fun x -> x + 1));
+    pause ()
+  done
 
-let observe_guard ~name ~guard ~events () =
-  let rec loop seen remaining =
-    if remaining = 0 then log name seen "done observing guard"
-    else (
-      when_ guard (fun () ->
-          log name seen "guard present, branch resumes in parallel");
-      pause ();
-      loop (seen + 1) (remaining - 1))
-  in
-  loop 0 events
-
-let combined_listener guard_a guard_b () =
-  when_ guard_a (fun () ->
-      when_ guard_b (fun () ->
-          log "combo" 1 "guard_a et guard_b présents dans le même instant"));
-  pause ();
-  log "combo" 2 "combo branch done"
+let combined_listener guard_a guard_b combo () =
+  when_ guard_a (fun () -> when_ guard_b (fun () -> modify_state combo (fun x -> x + 1)));
+  pause ()
 
 let driver guard_a guard_b () =
-  log "driver" 0 "emit guard_a to wake the first listener";
   emit guard_a ();
   pause ();
-  log "driver" 1 "emit guard_a and guard_b in the same instant";
   emit guard_a ();
   emit guard_b ();
   pause ();
-  log "driver" 2 "final emission of guard_a";
   emit guard_a ();
   pause ();
-  log "driver" 3 "all signals emitted"
+  pause ()
 
-let scenario () =
-  let guard_a = new_signal () in
-  let guard_b = new_signal () in
-  parallel
-    [
-      driver guard_a guard_b
-    ; observe_guard ~name:"listener/A" ~guard:guard_a ~events:3
-    ; observe_guard ~name:"listener/B" ~guard:guard_b ~events:1
-    ; combined_listener guard_a guard_b
-    ];
-  Format.printf "[scenario] all parallel branches completed@.%!"
-
-let () = execute (fun _ _ -> scenario ())
+let () =
+  let run ~swap =
+    execute_trace ~instants:16 ~inputs:[ None ] (fun _input output ->
+        let guard_a = new_signal () in
+        let guard_b = new_signal () in
+        let a_hits = new_state 0 in
+        let b_hits = new_state 0 in
+        let combo = new_state 0 in
+        let procs =
+          [
+            driver guard_a guard_b;
+            observe_guard ~guard:guard_a ~events:3 ~st:a_hits;
+            observe_guard ~guard:guard_b ~events:1 ~st:b_hits;
+            combined_listener guard_a guard_b combo;
+          ]
+        in
+        parallel (if swap then List.rev procs else procs);
+        emit output (get_state a_hits, get_state b_hits, get_state combo))
+  in
+  let a = run ~swap:false in
+  let b = run ~swap:true in
+  match (a, b) with
+  | [ (a1, b1, c1) ], [ (a2, b2, c2) ] ->
+      Printf.printf "tag=codee;a=(%d,%d,%d);b=(%d,%d,%d);eq=%b\n" a1 b1 c1 a2 b2 c2 (a = b)
+  | _ -> Printf.printf "unexpected\n"

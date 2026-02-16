@@ -34,3 +34,16 @@ setup.log
 
 # Local OPAM switch
 _opam/
+
+# Local/private artifacts not shipped in releases
+.DS_Store
+Tempo-Guide/
+bench/results/
+dist/
+run_and_record_macos.sh
+applications/advanced/refactor/applications/
+optimisation.md
+optimisation_steps.md
+tempo_conformance_report.md
+book/REVIEW_CRITIQUE_OUVRAGE.md
+book/REVIEW_ITERATION_*.md

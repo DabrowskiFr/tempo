@@ -1,0 +1,35 @@
+# system.concerto
+# component <Name> <running|stopped|updating>
+# group <GroupName> <Component1> <Component2> ...
+# depends <Child> <Parent>
+# bind <Child> <Parent>
+# policy <conservative|balanced|aggressive>        # preset
+# policy_profile <name>                            # nom libre
+# max_parallel <int>
+# tx_deadline <int>
+# auto_period <int>
+# rollback_on_failure <true|false>
+# scenario <baseline|lossy|partitioned>
+
+component Proxy running
+component API running
+component DB running
+component Worker stopped
+
+group frontend Proxy API
+group backend DB Worker
+
+depends API DB
+depends Worker API
+depends Proxy API
+
+bind API DB
+bind Proxy API
+
+policy balanced
+policy_profile lab_profile
+max_parallel 2
+tx_deadline 300
+auto_period 220
+rollback_on_failure true
+scenario baseline

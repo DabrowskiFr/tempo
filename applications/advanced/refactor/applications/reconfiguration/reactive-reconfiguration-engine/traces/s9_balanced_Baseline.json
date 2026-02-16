@@ -1,0 +1,15 @@
+{
+  "seed": 9,
+  "policy": "balanced",
+  "max_parallel": 2,
+  "tx_deadline": 320,
+  "auto_period": 240,
+  "rollback_on_failure": true,
+  "scenario": "Baseline",
+  "steps": 1000,
+  "commits": 0,
+  "aborts": 4,
+  "rollbacks": 4,
+  "violations": 4,
+  "invariant_ok": true
+}

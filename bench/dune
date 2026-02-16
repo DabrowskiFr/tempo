@@ -1,3 +1,7 @@
 (executable
  (name basic_bench)
  (libraries tempo))
+
+(executable
+ (name core_bench)
+ (libraries tempo unix))

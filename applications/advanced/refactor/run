@@ -1,0 +1,27 @@
+#!/bin/sh
+set -eu
+
+APP_SLUG="refactor"
+APP_DIR="applications/advanced/refactor"
+TARGET="./src/main.exe"
+
+if [ "${1:-}" = "help" ] || [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+  cat <<'EOT'
+Usage:
+  dune exec ./applications/run -- refactor [-- <app-args...>]
+  dune exec ./applications/advanced/refactor/run -- [<app-args...>]
+
+Notes:
+  - Additional arguments are forwarded to the app executable.
+  - Advanced options like --headless/--seed depend on each app.
+EOT
+  exit 0
+fi
+
+if [ -n "${DUNE_SOURCEROOT:-}" ]; then
+  cd "${DUNE_SOURCEROOT}/applications/advanced/refactor"
+else
+  cd "$(dirname "$0")"
+fi
+
+exec dune exec "./src/main.exe" -- "$@"

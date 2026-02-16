@@ -13,6 +13,9 @@ let program input output =
 let () =
   let timeline = execute_timeline ~inputs:[ Some 1; None; Some 2 ] program in
   let json =
-    Timeline_json.of_timeline string_of_int string_of_int timeline
+    Timeline_json.of_timeline_with
+      ~input_to_string:string_of_int
+      ~output_to_string:string_of_int
+      timeline
   in
   if not (String.length json > 8 && json.[0] = '[') then fail "invalid json timeline"

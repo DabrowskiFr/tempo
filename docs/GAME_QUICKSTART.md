@@ -4,14 +4,14 @@
 
 - Timers: `Tempo.Game.after_n`, `Tempo.Game.every_n`, `Tempo.Game.cooldown`
 - Dynamic entities: `Tempo.Dynamic`, `Tempo.Entity_set`
-- State cells: `Tempo.new_state` + `Tempo.await_state`
+- State cells: `Tempo.State.create` + `Tempo.State.await`
 - Scene transitions: `Tempo.Scene`
 
 ## Deterministic Testing
 
 - `Tempo.execute_trace` to capture outputs
 - `Tempo.execute_timeline` to inspect per-instant IO
-- `Tempo.Timeline_json.of_timeline` to export traces as JSON
+- `Tempo.Timeline_json.of_timeline_with` to export traces as JSON
 
 ## Debug & Profiling
 

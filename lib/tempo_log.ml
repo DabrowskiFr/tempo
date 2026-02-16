@@ -193,10 +193,9 @@ module Tempo_log = struct
     let waiting =
       List.filter_map
         (fun (Any s) ->
-          let awaits = s.awaiters in
-          if awaits = [] then None
+          let aw_count = Stack.length s.awaiters in
+          if aw_count = 0 then None
           else
-            let aw_count = List.length awaits in
             Some (s.s_id, aw_count))
         signals
     in
@@ -226,8 +225,9 @@ module Tempo_log = struct
     let present_msg = if s.present then "present" else "absent" in
     if brief then Format.fprintf fmt "[sig %d %s]" s.s_id present_msg
     else
+      let guards = Stack.fold (fun acc t -> t :: acc) [] s.guard_waiters in
       Format.fprintf fmt "[sig %d | %s, guards=[%a]]" s.s_id present_msg
-        pp_task_list_brief s.guard_waiters
+        pp_task_list_brief guards
 
   let pp_any_signal ?brief fmt (Any s) = pp_signal ?brief fmt s
   let pp_any_signal_list ?brief = Format.pp_print_list (pp_any_signal ?brief)
@@ -270,6 +270,11 @@ module Tempo_log = struct
     else Format.ifprintf Format.std_formatter fmt
 
   (* --- Duration metrics --------------------------------------------------- *)
+  let metrics_enabled =
+    match Sys.getenv_opt "RML_METRICS" with
+    | Some ("1" | "true" | "yes" | "on" | "TRUE" | "YES" | "ON") -> true
+    | _ -> false
+
   module Scope_metrics = struct
     type data = {
         mutable count : int
@@ -298,24 +303,26 @@ module Tempo_log = struct
     let iter f = Hashtbl.iter (fun scope data -> f scope data) table
   end
 
-  let record_duration scope span = Scope_metrics.record scope span
+  let record_duration scope span =
+    if metrics_enabled then Scope_metrics.record scope span
 
   let log_duration_summary () =
-    Scope_metrics.iter (fun scope data ->
-        let avg =
-          if data.count = 0 then Mtime.Span.zero
-          else
-            let avg_ns =
-              Mtime.Span.to_float_ns data.total /. float data.count
-            in
-            match Mtime.Span.of_float_ns avg_ns with
-            | Some span -> span
-            | None -> Mtime.Span.zero
-        in
-        log
-          (context ~instant:0 ~step:0)
-          "metrics" "[%s] count=%d total=%a avg=%a max=%a" scope data.count
-          pp_span data.total pp_span avg pp_span data.max)
+    if metrics_enabled then
+      Scope_metrics.iter (fun scope data ->
+          let avg =
+            if data.count = 0 then Mtime.Span.zero
+            else
+              let avg_ns =
+                Mtime.Span.to_float_ns data.total /. float data.count
+              in
+              match Mtime.Span.of_float_ns avg_ns with
+              | Some span -> span
+              | None -> Mtime.Span.zero
+          in
+          log
+            (context ~instant:0 ~step:0)
+            "metrics" "[%s] count=%d total=%a avg=%a max=%a" scope data.count
+            pp_span data.total pp_span avg pp_span data.max)
 
   (* --- Log-level selection / reporter init -------------------------------- *)
   type log_level = Quiet | Error | Warning | Info | Debug

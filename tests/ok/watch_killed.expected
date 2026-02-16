@@ -1,7 +1,1 @@
-[body] start
-[body] cycle 0
-[body] cycle 1
-[driver] emit trigger
-[body] cycle 2
-[body] end (killed)
-[driver] end
+tag=codee;a=(3,true);b=(3,true);eq=true

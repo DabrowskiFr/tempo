@@ -1,0 +1,28 @@
+#!/bin/sh
+set -eu
+
+if [ "${1:-}" = "" ] || [ "${1:-}" = "help" ] || [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+  cat <<'EOT'
+Usage:
+  dune exec ./applications/reconfiguration/run -- <app> [-- <args...>]
+
+Apps (compat):
+  reactive-reconfiguration-engine  -> refactor
+  refactor                         -> refactor
+EOT
+  exit 0
+fi
+
+APP="$1"
+shift
+
+case "$APP" in
+  reactive-reconfiguration-engine|refactor)
+    exec dune exec ./applications/run -- refactor -- "$@"
+    ;;
+  *)
+    echo "Unknown reconfiguration app: $APP" >&2
+    echo "Run: dune exec ./applications/reconfiguration/run -- help" >&2
+    exit 2
+    ;;
+esac

@@ -1,0 +1,27 @@
+#!/bin/sh
+set -eu
+
+if [ "${1:-}" = "help" ] || [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+  cat <<'EOT'
+Usage:
+  dune exec ./applications/run -- tempo-core-studio [-- <app-args...>]
+  dune exec ./applications/advanced/tempo-core-studio/run -- [<app-args...>]
+
+Options:
+  --headless            Run deterministic scenario and print timeline
+  --instants <n>        Number of logical instants (default: 16)
+EOT
+  exit 0
+fi
+
+if [ -n "${DUNE_SOURCEROOT:-}" ]; then
+  cd "${DUNE_SOURCEROOT}/applications/advanced/tempo-core-studio"
+else
+  cd "$(dirname "$0")"
+fi
+
+if [ "${1:-}" = "--" ]; then
+  shift
+fi
+
+exec dune exec ./src/main.exe -- "$@"

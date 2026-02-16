@@ -263,6 +263,38 @@ val execute_timeline :
 val present_then_else :
   ('emit, 'agg, 'mode) signal_core -> (unit -> unit) -> (unit -> unit) -> unit
 
+(** {1 Core API}
+
+    [Core] is the minimal synchronous kernel. It contains only execution,
+    signals, waiting, logical suspension, control guards, cancellation and
+    synchronous parallel composition. *)
+module Core : sig
+  type nonrec event = event
+  type nonrec aggregate = aggregate
+  type nonrec ('emit, 'agg, 'mode) signal_core = ('emit, 'agg, 'mode) signal_core
+  type nonrec 'a signal = 'a signal
+  type nonrec ('emit, 'agg) agg_signal = ('emit, 'agg) agg_signal
+
+  val new_signal : unit -> 'a signal
+  val new_signal_agg :
+    initial:'agg ->
+    combine:('agg -> 'emit -> 'agg) ->
+    ('emit, 'agg) agg_signal
+  val emit : ('emit, 'agg, 'mode) signal_core -> 'emit -> unit
+  val await : ('emit, 'agg, 'mode) signal_core -> 'agg
+  val await_immediate : 'a signal -> 'a
+  val pause : unit -> unit
+  val when_ : ('emit, 'agg, 'mode) signal_core -> (unit -> unit) -> unit
+  val watch : ('emit, 'agg, 'mode) signal_core -> (unit -> unit) -> unit
+  val parallel : (unit -> unit) list -> unit
+  val execute :
+    ?instants:int ->
+    ?input:(unit -> 'input option) ->
+    ?output:('output -> unit) ->
+    ('input signal -> 'output signal -> unit) ->
+    unit
+end
+
 
 (* [do_every s body] starts executing [body] immediately and restarts it
     whenever [s] is present. If [body] terminates normally, the next
@@ -323,10 +355,35 @@ val modify_state : 'a state -> ('a -> 'a) -> unit
 (** [await_state st] waits for the next state update and returns the new value. *)
 val await_state : 'a state -> 'a
 
+module State : sig
+  type 'a t = 'a state
+
+  (** Minimal state cell example:
+      {[
+        let score = State.create 0 in
+        State.modify score (fun s -> s + 10);
+        let now = State.get score in
+        Format.printf "score=%d@." now
+      ]} *)
+  val create : 'a -> 'a t
+  val get : 'a t -> 'a
+  val set : 'a t -> 'a -> unit
+  val modify : 'a t -> ('a -> 'a) -> unit
+  val await : 'a t -> 'a
+  val update_and_get : 'a t -> ('a -> 'a) -> 'a
+end
+
 module Dynamic : sig
   type handle
 
-  (** [spawn p] starts [p] as a managed process. *)
+  (** [spawn p] starts [p] as a managed process.
+      Example:
+      {[
+        let h = Dynamic.spawn (fun () -> while true do pause () done) in
+        (* ... later ... *)
+        Dynamic.stop h;
+        Dynamic.join h
+      ]} *)
   val spawn : (unit -> unit) -> handle
 
   (** [stop h] requests termination of [h]. *)
@@ -343,7 +400,12 @@ module Game : sig
   (** [after_n n body] executes [body] after [n] logical instants. *)
   val after_n : int -> (unit -> unit) -> unit
 
-  (** [every_n n body] executes [body] every [n] logical instants. *)
+  (** [every_n n body] executes [body] every [n] logical instants.
+      Example:
+      {[
+        Game.every_n 30 (fun () -> emit heartbeat ());
+        Game.after_n 120 (fun () -> emit end_round ())
+      ]} *)
   val every_n : int -> (unit -> unit) -> unit
 
   (** [timeout n ~on_timeout body] runs [body] with a timeout of [n] instants.
@@ -356,76 +418,89 @@ module Game : sig
     int -> ('emit, 'agg, 'mode) signal_core -> ('agg -> unit) -> unit
 end
 
-module Frp : sig
-  (** [map f s] forwards events from [s] through [f]. *)
-  val map : ('a -> 'b) -> 'a signal -> 'b signal
+module Reactive : sig
+  (** [rising_edge level input edge] emits [edge] when [level v] transitions from
+      [false] to [true] between two consecutive values received on [input]. *)
+  val rising_edge : ('a -> bool) -> 'a signal -> unit signal -> unit
 
-  (** [filter p s] forwards only values satisfying [p]. *)
-  val filter : ('a -> bool) -> 'a signal -> 'a signal
+  (** [falling_edge level input edge] emits [edge] when [level v] transitions
+      from [true] to [false] between two consecutive values on [input]. *)
+  val falling_edge : ('a -> bool) -> 'a signal -> unit signal -> unit
 
-  (** [fold ~initial f s] accumulates values from [s] in a state cell. *)
-  val fold : initial:'s -> ('s -> 'a -> 's) -> 'a signal -> 's state
+  (** [edge_by pred input edge] emits [edge] whenever [pred prev curr] holds for
+      two consecutive values read from [input]. *)
+  val edge_by : ('a -> 'a -> bool) -> 'a signal -> unit signal -> unit
 
-  (** [hold ~initial s] creates a state that always contains the latest value
-      observed on [s], starting at [initial]. *)
-  val hold : initial:'a -> 'a signal -> 'a state
+  (** [hold_last initial s] stores the latest value seen on [s] in a state cell,
+      initialized with [initial]. *)
+  val hold_last : 'a -> 'a signal -> 'a state
 
-  (** [sample st] reads the current value of a held state. *)
-  val sample : 'a state -> 'a
+  (** [sample_on st trigger] emits [(current_state, trigger_value)] whenever
+      [trigger] occurs. *)
+  val sample_on : 'a state -> 'b signal -> ('a * 'b) signal
 
-  (** [once s] forwards only the first occurrence of [s]. *)
-  val once : ('emit, 'agg, 'mode) signal_core -> 'agg signal
+  (** [toggle_on ?initial trigger] returns a boolean state that toggles on each
+      occurrence of [trigger]. *)
+  val toggle_on : ?initial:bool -> unit signal -> bool state
 
-  (** [edge b] emits [()] on rising edges (false -> true) of boolean event [b]. *)
-  val edge : bool signal -> unit signal
+  (** [pulse_n n] creates an event signal that emits [()] every [n] logical
+      instants.
+      Example:
+      {[
+        let tick = Reactive.pulse_n 10 in
+        while true do
+          let () = await tick in
+          emit spawn_enemy ()
+        done
+      ]} *)
+  val pulse_n : int -> unit signal
 
-  (** [throttle_n n s] forwards at most one event every [n] instants. *)
-  val throttle_n : int -> ('emit, 'agg, 'mode) signal_core -> 'agg signal
-
-  (** [debounce_n n s] forwards only stable events, waiting [n] instants
-      without a newer occurrence before emitting. *)
-  val debounce_n : int -> ('emit, 'agg, 'mode) signal_core -> 'agg signal
-
-  (** [switch_once trigger make] starts [make v] on the first value of [trigger]. *)
-  val switch_once : 'a signal -> ('a -> unit -> unit) -> unit
-
-  (** [switch_latest trigger make] runs the process built by [make v] for the
-      latest value [v] received on [trigger], preempting the previous one. *)
-  val switch_latest : 'a signal -> ('a -> unit -> unit) -> unit
-end
-
-module SF : sig
-  module Event : sig
-    type 'a t =
-      | NoEvent
-      | Event of 'a
-
-    val map : ('a -> 'b) -> 'a t -> 'b t
-    val is_event : 'a t -> bool
-  end
-
-  type ('a, 'b) t
-
-  val run : ('a, 'b) t -> 'a signal -> 'b signal
-  val arr : ('a -> 'b) -> ('a, 'b) t
-  val compose : ('a, 'b) t -> ('b, 'c) t -> ('a, 'c) t
-  val ( >>> ) : ('a, 'b) t -> ('b, 'c) t -> ('a, 'c) t
-  val fanout : ('a, 'b) t -> ('a, 'c) t -> ('a, 'b * 'c) t
-  val ( &&& ) : ('a, 'b) t -> ('a, 'c) t -> ('a, 'b * 'c) t
-  val hold : initial:'b -> ('a, 'b Event.t) t -> ('a, 'b) t
-  val edge : ('a, bool) t -> ('a, unit Event.t) t
-  val switch : ('a, 'b * 'c Event.t) t -> ('c -> ('a, 'b) t) -> ('a, 'b) t
-  val integral : ?initial:float -> dt:float -> unit -> (float, float) t
+  (** [supervise_until stop procs] runs [procs] in synchronous parallel and
+      aborts all of them when [stop] becomes present. *)
+  val supervise_until :
+    ('emit, 'agg, 'mode) signal_core -> (unit -> unit) list -> unit
 end
 
 module App : sig
   type 'msg dispatch = 'msg -> unit
   type 'msg command = dispatch:'msg dispatch -> unit
 
+  (** Example command pipeline:
+      {[
+        type msg = Boot | Tick | Click
+
+        let update model = function
+          | Boot -> (model, App.tick_every 30 ~tick:Tick)
+          | Tick -> ({ model with frame = model.frame + 1 }, App.none)
+          | Click -> (model, App.emit Tick)
+      ]} *)
   val none : 'msg command
   val emit : 'msg -> 'msg command
   val after_n : int -> 'msg -> 'msg command
+  val every_n : int -> 'msg -> 'msg command
+  val tick_every : int -> tick:'msg -> 'msg command
+  val tick_if : bool -> int -> tick:'msg -> 'msg command
+  val command_if : bool -> 'msg command -> 'msg command
+  val command_when : bool -> then_:'msg command -> else_:'msg command -> 'msg command
   val batch : 'msg command list -> 'msg command
+
+  (** [boot_once_input ~boot input] returns an input function that emits [boot]
+      exactly once on the first poll, then delegates to [input]. *)
+  val boot_once_input : boot:'msg -> (unit -> 'msg option) -> unit -> 'msg option
+
+  (** [input_union inputs] polls input producers in order and returns the first
+      available message. *)
+  val input_union : (unit -> 'msg option) list -> unit -> 'msg option
+
+  (** [with_boot_and_tick ~boot ~tick ~tick_every ~input] returns:
+      - an input function that injects [boot] exactly once,
+      - the command to schedule periodic [tick] messages after boot. *)
+  val with_boot_and_tick :
+    boot:'msg ->
+    tick:'msg ->
+    tick_every:int ->
+    input:(unit -> 'msg option) ->
+    (unit -> 'msg option) * 'msg command
 
   type ('model, 'msg) program = {
     init : 'model;
@@ -457,7 +532,21 @@ module Loop : sig
     output : 'output -> unit;
   }
 
-  (** Canonical fixed logical loop over Tempo instants. *)
+  (** Canonical fixed logical loop over Tempo instants.
+      Example:
+      {[
+        let cfg =
+          {
+            Loop.init = 0;
+            input = (fun () -> Some 1);
+            step = (fun st inp ->
+              let st' = st + Option.value inp ~default:0 in
+              (st', Some st'));
+            output = (fun n -> Format.printf "%d@." n);
+          }
+        in
+        Loop.run ~instants:5 cfg
+      ]} *)
   val run : ?instants:int -> ('input, 'output, 'state) config -> unit
 end
 
@@ -501,6 +590,19 @@ end
 module Event_bus : sig
   type 'a channel = ('a, 'a list) agg_signal
 
+  (** Batch event collection per logical instant.
+      {[
+        let bus = Event_bus.channel () in
+        parallel
+          [
+            (fun () -> emit frame_done ());
+            (fun () -> Event_bus.publish bus `Move_left);
+            (fun () -> Event_bus.publish bus `Jump);
+          ];
+        let intents = Event_bus.await_batch bus in
+        (* intents = [`Move_left; `Jump] at next instant *)
+        ignore intents
+      ]} *)
   val channel : unit -> 'a channel
   val publish : 'a channel -> 'a -> unit
   val await_batch : 'a channel -> 'a list
@@ -580,6 +682,22 @@ module Entity_set : sig
 end
 
 module Timeline_json : sig
+  type 'a serializer = 'a -> string
+
+  (** Serialize deterministic execution traces for tests and release reports.
+      {[
+        let json =
+          Timeline_json.of_timeline_with
+            ~input_to_string:string_of_int
+            ~output_to_string:string_of_int
+            timeline
+      ]} *)
+  val of_timeline_with :
+    input_to_string:'input serializer ->
+    output_to_string:'output serializer ->
+    ('input, 'output) timeline_instant list ->
+    string
+
   val of_timeline :
     ('input -> string) ->
     ('output -> string) ->
@@ -630,4 +748,30 @@ val require_api_level : int -> unit
 module Dev_hud : sig
   val to_lines : inspector_snapshot -> string list
   val to_string : inspector_snapshot -> string
+end
+
+(** {1 Layer 2 API}
+
+    [Layer2] groups all higher-level modules built on top of [Core]. *)
+module Layer2 : sig
+  module Dynamic = Dynamic
+  module Game = Game
+  module Reactive = Reactive
+  module App = App
+  module Loop = Loop
+  module Scene = Scene
+  module Resource = Resource
+  module Input_map = Input_map
+  module Event_bus = Event_bus
+  module Fixed_step = Fixed_step
+  module Rng = Rng
+  module Netcode = Netcode
+  module Profiler = Profiler
+  module Entity_set = Entity_set
+  module State = State
+  module Timeline_json = Timeline_json
+  module Tick_tags = Tick_tags
+  module Runtime_snapshot = Runtime_snapshot
+  module Error_bus = Error_bus
+  module Dev_hud = Dev_hud
 end

@@ -33,40 +33,176 @@ Deux familles de signaux:
 - `execute_timeline ~inputs main` : trace par instant (input/output)
 - `execute_inspect ~on_instant ...` : inspection runtime (tasks/signaux)
 
-## 3. Modules API principaux
-### 3.1 Noyau
-- `Tempo` : primitives synchrones, signaux, exécution
-- `Tempo.Low_level` : fork/join/kill (usage avancé)
+## 3. Architecture API: Core vs Layer2
+Le contrat de la librairie est maintenant explicite:
+- **Core** = sémantique synchrone minimale.
+- **Layer2** = abstractions construites sur Core.
 
-### 3.2 Outils état/processus
-- `new_state/get_state/set_state/modify_state/await_state`
-- `Tempo.Dynamic` : `spawn/stop/join/spawn_many`
+### 3.1 Tableau de séparation
+| Couche | Modules / primitives | Rôle |
+|---|---|---|
+| `Tempo.Core` | `execute`, `new_signal`, `new_signal_agg`, `emit`, `await`, `await_immediate`, `pause`, `when_`, `watch`, `parallel` | Noyau sémantique synchrone |
+| `Tempo` (top-level) | mêmes primitives aussi exposées au niveau racine | Compatibilité + ergonomie |
+| `Tempo.Layer2` | `Game`, `App`, `Reactive`, `Loop`, `Scene`, `Resource`, `Event_bus`, etc. | Outils d'ingénierie basés sur Core |
 
-### 3.3 Helpers gameplay
-- `Tempo.Game.after_n`
-- `Tempo.Game.every_n`
-- `Tempo.Game.timeout`
-- `Tempo.Game.cooldown`
+### 3.2 API Core (référence minimale)
+- `Tempo.Core.execute`
+- `Tempo.Core.new_signal`
+- `Tempo.Core.new_signal_agg`
+- `Tempo.Core.emit`
+- `Tempo.Core.await`
+- `Tempo.Core.await_immediate`
+- `Tempo.Core.pause`
+- `Tempo.Core.when_`
+- `Tempo.Core.watch`
+- `Tempo.Core.parallel`
 
-### 3.4 Modules game-dev ajoutés
-- `Tempo.Scene` : transitions de scènes
-- `Tempo.Resource` : cycle de vie ressources
-- `Tempo.Input_map` : mapping actions
-- `Tempo.Event_bus` : bus événementiel typé
-- `Tempo.Fixed_step` : boucle fixe / interpolation
-- `Tempo.Rng` : RNG déterministe
-- `Tempo.Netcode` : snapshots frame-tagged + rollback sur `state`
-- `Tempo.Profiler` : mesure temps d'exécution
-- `Tempo.Tick_tags` : tags d'instants
-- `Tempo.Runtime_snapshot` : capture/restore d'état runtime
-- `Tempo.Error_bus` : exécution sécurisée et remontée d'erreurs
-- `Tempo.Timeline_json` : export JSON de timeline
-- `Tempo.Dev_hud` : rendu texte d'un snapshot d'inspection
-- `Tempo.Entity_set` : spawn/despawn/broadcast d'entités dynamiques
+### 3.3 API Layer2 (exemples importants)
+- `Tempo.App.every_n` : tick périodique en architecture model/update.
+- `Tempo.App.tick_every` : alias intentionnel pour un tick périodique.
+- `Tempo.App.tick_if` : tick périodique conditionnel.
+- `Tempo.App.command_if` : activer/désactiver une commande sans boilerplate.
+- `Tempo.App.command_when` : choisir entre deux commandes selon une condition.
+- `Tempo.App.boot_once_input` : injecter un message de boot unique.
+- `Tempo.App.with_boot_and_tick` : setup standard boot + tick périodique.
+- `Tempo.App.input_union` : fusion de plusieurs sources d'input.
+- `Tempo.Reactive.rising_edge` : détecter un front montant.
+- `Tempo.Reactive.falling_edge` : détecter un front descendant.
+- `Tempo.Reactive.edge_by` : détecter une transition custom.
+- `Tempo.Reactive.hold_last` : mémoriser la dernière valeur d'un signal.
+- `Tempo.Reactive.sample_on` : échantillonner un état sur trigger.
+- `Tempo.Reactive.toggle_on` : état booléen qui bascule à chaque événement.
+- `Tempo.Reactive.pulse_n` : signal périodique de pulse.
+- `Tempo.Reactive.supervise_until` : supervision structurée jusqu'à un signal d'arrêt.
+- `Tempo.Game.after_n/every_n/timeout/cooldown` : temporalité gameplay.
+- `Tempo.State.create/get/set/modify/await/update_and_get` : état synchrone encapsulé (couche 2).
+- `Tempo.Timeline_json.of_timeline_with` : export JSON avec paramètres nommés et serializers explicites.
+
+### 3.4 Exemple minimal Core
+```ocaml
+open Tempo
+
+let () =
+  Core.execute (fun input output ->
+    let rec loop () =
+      Core.when_ input (fun () ->
+        let v = Core.await_immediate input in
+        Core.emit output (v + 1));
+      Core.pause ();
+      loop ()
+    in
+    loop ())
+```
+
+### 3.5 Exemple minimal Layer2 (`App`)
+```ocaml
+open Tempo
+
+type msg = Boot | Tick
+type model = { ticks : int }
+
+let update m = function
+  | Boot -> (m, App.every_n 1 Tick)
+  | Tick -> ({ ticks = m.ticks + 1 }, App.none)
+
+let () =
+  let input = App.boot_once_input ~boot:Boot (fun () -> None) in
+  App.run ~instants:10 ~input { App.init = { ticks = 0 }; update }
+```
+
+### 3.6 Exemple Layer2: fusion input + edges + sampling
+```ocaml
+open Tempo
+
+let key_input () = None
+let mouse_input () = None
+
+let merged = App.input_union [ key_input; mouse_input ]
+
+let main down_level _output =
+  let down_edge = Core.new_signal () in
+  let released_edge = Core.new_signal () in
+  let is_down = Reactive.hold_last false down_level in
+  let sampled = Reactive.sample_on is_down down_edge in
+  let _ = sampled in
+  Reactive.rising_edge (fun b -> b) down_level down_edge;
+  Reactive.falling_edge (fun b -> b) down_level released_edge
+```
+
+### 3.7 Exemple Layer2: `with_boot_and_tick` + `command_if`
+```ocaml
+open Tempo
+
+type msg = Boot | Tick | Pause
+type model = { running : bool; ticks : int }
+
+let boot_input, boot_tick_cmd =
+  App.with_boot_and_tick ~boot:Boot ~tick:Tick ~tick_every:1
+    ~input:(fun () -> None)
+
+let update m = function
+  | Boot -> (m, App.command_if m.running boot_tick_cmd)
+  | Tick -> ({ m with ticks = m.ticks + 1 }, App.none)
+  | Pause ->
+      let m' = { m with running = not m.running } in
+      (m', App.command_if m'.running (App.tick_every 1 ~tick:Tick))
+
+let () =
+  let program = { App.init = { running = true; ticks = 0 }; update } in
+  App.run ~instants:10 ~input:boot_input program
+```
+
+### 3.8 Exemple Layer2: `State` + timeline JSON typée
+```ocaml
+open Tempo
+
+let program input output =
+  let counter = State.create 0 in
+  let rec loop () =
+    when_ input (fun () ->
+      let v = await_immediate input in
+      let n = State.update_and_get counter (fun x -> x + v) in
+      emit output n);
+    pause ();
+    loop ()
+  in
+  loop ()
+
+let () =
+  let timeline = execute_timeline ~inputs:[ Some 1; None; Some 2 ] program in
+  let _json =
+    Timeline_json.of_timeline_with
+      ~input_to_string:string_of_int
+      ~output_to_string:string_of_int
+      timeline
+  in
+  ()
+```
 
 ## 4. Package `tempo.game`
 En plus de `tempo`, le repo expose la librairie `tempo.game` (module `Tempo_game`) qui ré-exporte les modules orientés jeu:
 - `Scene`, `Resource`, `Input_map`, `Event_bus`, `Fixed_step`, `Rng`, `Netcode`, `Profiler`, `Tick_tags`, `Runtime_snapshot`, `Entity_set`, `Dev_hud`, `Error_bus`, `Timeline_json`.
+
+## 4.bis Package `tempo-async`
+Le repo expose aussi `tempo-async` (module `Tempo_async`) pour connecter des producteurs asynchrones a un consommateur Tempo sans bloquer les instants:
+- mailbox bornee: `create`, `push_external`, `drain_tick`, `stats`;
+- injection synchrone dans un bus Tempo: `pump_to_bus`.
+
+Exemple minimal:
+```ocaml
+open Tempo
+open Tempo_async
+
+let mb = create ~capacity:128 ~overflow:`Drop_oldest ()
+let intents = Event_bus.channel ()
+
+let () =
+  ignore (push_external mb `Network_msg);
+  execute ~instants:4 (fun _ _ ->
+      ignore (pump_to_bus mb intents);
+      let batch = Event_bus.await_batch intents in
+      ignore batch)
+```
 
 ## 5. Dépendances
 ### 5.1 Dépendances de la librairie Tempo
@@ -108,8 +244,21 @@ dune runtest
 
 ### 7.3 Benchmarks
 ```bash
-dune exec bench/basic_bench.exe
+dune exec ./bench/basic_bench.exe
+./tools/bench/run_core_bench.sh --out-dir bench/results/core
+./tools/bench/run_core_bench.sh --sweep 0.5,1,2 --log-y --out-dir bench/results/core-sweep
+./tools/bench/run_core_bench.sh --out-dir bench/results/core-candidate \
+  --baseline-csv bench/results/core/core_bench.csv \
+  --fail-on-regression-pct 5
 ```
+
+Le bench core parametrique genere automatiquement:
+- CSV des mesures
+- graphes SVG par primitive
+- graphe SVG combine (cout normalise)
+- rapport Markdown
+
+Details: `bench/README_CORE_BENCH.md`
 
 ### 7.4 Documentation du repo
 - Quickstart game: `docs/GAME_QUICKSTART.md`
@@ -135,17 +284,17 @@ Dans votre code:
 open Tempo
 ```
 
-## 9. Exemple minimal
+## 9. Exemple minimal (Core)
 ```ocaml
 open Tempo
 
 let () =
-  execute (fun input output ->
+  Core.execute (fun input output ->
     let rec loop tick =
-      when_ input (fun () ->
-        let v = await_immediate input in
-        emit output (tick + v));
-      pause ();
+      Core.when_ input (fun () ->
+        let v = Core.await_immediate input in
+        Core.emit output (tick + v));
+      Core.pause ();
       loop (tick + 1)
     in
     loop 0)
@@ -164,7 +313,7 @@ Architecture type:
 Bonnes pratiques:
 - garder la logique gameplay dans Tempo, pas dans l'adaptateur rendu;
 - utiliser `Event_bus` pour découpler gameplay/UI/audio;
-- utiliser `execute_timeline` + `Timeline_json` pour débogage déterministe;
+- utiliser `execute_timeline` + `Timeline_json.of_timeline_with` pour débogage déterministe;
 - utiliser `Dynamic`/`Entity_set` pour spawn/despawn runtime.
 
 ## 11. Gestion des erreurs
@@ -194,15 +343,105 @@ Bonnes pratiques:
 - Implémentation: `lib/tempo.ml`
 - Module game re-export: `lib/tempo_game.mli`, `lib/tempo_game.ml`
 - Tests: `tests/ok`
-- Exemple jeu utilisant Tempo: `applications/games/game-univ/`
+- Exemple jeu utilisant Tempo: `applications/advanced/game-univ/`
+- Architecture applications: `applications/ARCHITECTURE.md`
+- Matrice smoke release: `applications/SMOKE_MATRIX.md`
+- Politique de compatibilité: `docs/COMPATIBILITY_POLICY.md`
+- Notes de release/migration: `RELEASE_NOTES.md`
 
-## 16. Lancer les jeux depuis la racine (sans `cd`, sans `.exe`)
-Depuis `/Users/fredericdabrowski/Repos/tempo`:
+## 16. Lancer les applications depuis la racine (sans `cd`, sans `.exe`)
+Depuis `/Users/fredericdabrowski/Repos/tempo`.
+
+Méthode recommandée (lanceur unifié):
 
 ```bash
-dune exec ./applications/games/boids-raylib/run
-dune exec ./applications/games/ca-continuous-raylib/run
-dune exec ./applications/games/snake-raylib/run
-dune exec ./applications/games/solar-system-raylib/run
-dune exec ./applications/games/game-univ/run
+dune exec ./applications/run -- help
+dune exec ./applications/run -- <app>
+```
+
+Identifiants `<app>` disponibles:
+
+```text
+game-univ
+boids-raylib
+ca-continuous-raylib
+lenia-raylib
+snake-raylib
+solar-system-raylib
+logicgroove
+temporalsim
+refactor
+```
+
+Exemples:
+
+```bash
+dune exec ./applications/run -- game-univ
+dune exec ./applications/run -- temporalsim
+dune exec ./applications/run -- refactor
+```
+
+Alternative (lancement direct d'un jeu):
+
+```bash
+dune exec ./applications/advanced/game-univ/run
+dune exec ./applications/simple-demos/boids-raylib/run
+dune exec ./applications/simple-demos/ca-continuous-raylib/run
+dune exec ./applications/simple-demos/lenia-raylib/run
+dune exec ./applications/simple-demos/snake-raylib/run
+dune exec ./applications/simple-demos/solar-system-raylib/run
+dune exec ./applications/simple-demos/logicgroove/run
+dune exec ./applications/simple-demos/temporalsim/run
+dune exec ./applications/advanced/refactor/run
+```
+
+## 17. Validation pre-release des applications
+Depuis `/Users/fredericdabrowski/Repos/tempo`.
+
+Commande officielle de gate release:
+
+```bash
+./tools/release/validate_apps.sh
+```
+
+Le script verifie:
+- routeurs de lancement;
+- presence/structure des README applications;
+- build des executables applications;
+- contrat `run --help` de chaque application;
+- smoke test headless de `refactor`.
+
+## 18. Enregistrer des videos de demo (macOS)
+Depuis `/Users/fredericdabrowski/Repos/tempo`.
+
+Prerequis:
+
+```bash
+brew install ffmpeg
+```
+
+Lister les peripheriques AVFoundation (index video/audio):
+
+```bash
+./tools/demo/list_avfoundation_devices_macos.sh
+```
+
+Si aucun device video n'apparait, autoriser d'abord l'app terminal dans:
+`System Settings -> Privacy & Security -> Screen Recording`, puis relancer le terminal.
+
+Enregistrer automatiquement une session (lance le jeu + capture):
+
+```bash
+./tools/demo/run_and_record_macos.sh game-univ 30 demos/game-univ-demo.mp4 "1:none" 30 8
+```
+
+Si la video est noire:
+- verifier que l'index device est correct (`list_avfoundation_devices_macos.sh`);
+- augmenter `startup_delay_sec` (ex: `12` ou `15`);
+- lancer une premiere fois le jeu pour chauffer le build Dune.
+
+Compresser une video:
+
+```bash
+./tools/demo/compress_mp4.sh demos/game-univ-demo.mp4 demos/game-univ-demo-small.mp4
 ```

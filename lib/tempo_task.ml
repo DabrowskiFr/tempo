@@ -19,15 +19,22 @@
 open Tempo_types
 
 let kills_alive kills = List.for_all (fun k -> !(k.alive)) kills
+let task_kills_alive t = if t.has_kills then kills_alive t.kills else true
+
+let guard_ok guards = List.for_all (fun (Any g) -> g.present) guards
+let task_guard_ok t =
+  match t.guard_single with
+  | Some (Any g) -> g.present
+  | None -> guard_ok t.guards
 
 let enqueue_now st t =
-  if (not t.queued) && kills_alive t.kills then (
+  if (not t.queued) && task_kills_alive t then (
     t.queued <- true;
     t.blocked <- false;
     Queue.add t st.current)
 
 let enqueue_next st t =
-  if kills_alive t.kills then st.next_instant <- t :: st.next_instant
+  if task_kills_alive t then st.next_instant <- t :: st.next_instant
 
 let create_task st thread guards kills run =
   let state = Tempo_thread.ensure st.threads thread in
@@ -35,7 +42,22 @@ let create_task st thread guards kills run =
   state.active <- state.active + 1;
   let t_id = st.debug.task_counter in
   st.debug.task_counter <- st.debug.task_counter + 1;
-  { t_id; thread; guards; kills; run; queued = false; blocked = false }
+  let guard_single =
+    match guards with
+    | [ g ] -> Some g
+    | _ -> None
+  in
+  { t_id
+  ; thread
+  ; thread_state = state
+  ; guards
+  ; guard_single
+  ; kills
+  ; has_kills = (kills <> [])
+  ; run
+  ; queued = false
+  ; blocked = false
+  }
 
 let spawn_now st thread guards kills run =
   let t = create_task st thread guards kills run in
@@ -48,7 +70,7 @@ let spawn_next st thread guards kills run =
   t
 
 let block_on_guards st t =
-  assert (kills_alive t.kills);
+  assert (task_kills_alive t);
   if not t.blocked then (
     t.blocked <- true;
     st.blocked <- t :: st.blocked);
@@ -57,12 +79,11 @@ let block_on_guards st t =
   in
   let miss = missing_guards t.guards in
   List.iter
-    (fun (Tempo_types.Any s) -> s.guard_waiters <- t :: s.guard_waiters)
+    (fun (Tempo_types.Any s) -> Stack.push t s.guard_waiters)
     miss
 
 let wake_guard_waiters st s =
-  let guard_ok guards = List.for_all (fun (Any g) -> g.present) guards in
-  List.iter
-    (fun t -> if guard_ok t.guards && kills_alive t.kills then enqueue_now st t)
-    s.guard_waiters;
-  s.guard_waiters <- []
+  while not (Stack.is_empty s.guard_waiters) do
+    let t = Stack.pop s.guard_waiters in
+    if task_guard_ok t && task_kills_alive t then enqueue_now st t
+  done

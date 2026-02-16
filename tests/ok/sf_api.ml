@@ -1,4 +1,5 @@
 open Tempo
+open Tempo_frp
 
 let fail msg = failwith msg
 

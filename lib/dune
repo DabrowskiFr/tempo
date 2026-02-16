@@ -5,9 +5,6 @@
   tempo_types
   tempo_log
   tempo_thread
-  tempo_signal
-  tempo_task
-  tempo_engine
   tempo)
  (libraries logs mtime mtime.clock))
 
@@ -15,4 +12,22 @@
  (name tempo_game)
  (public_name tempo.game)
  (modules tempo_game)
+ (libraries tempo))
+
+(library
+ (name tempo_game_raylib)
+ (public_name tempo-raylib)
+ (modules tempo_game_raylib)
+ (libraries tempo.game raylib))
+
+(library
+ (name tempo_frp)
+ (public_name tempo-frp)
+ (modules tempo_frp)
+ (libraries tempo))
+
+(library
+ (name tempo_async)
+ (public_name tempo-async)
+ (modules tempo_async)
  (libraries tempo))

@@ -34,8 +34,8 @@ let fresh_event_signal (st : Tempo_types.scheduler_state) :
         s_id = fresh_signal_id st
       ; present = false
       ; value = None
-      ; awaiters = []
-      ; guard_waiters = []
+      ; awaiters = Stack.create ()
+      ; guard_waiters = Stack.create ()
       ; kind = Tempo_types.Event_signal
       }
   in
@@ -50,8 +50,8 @@ let fresh_aggregate_signal (st : Tempo_types.scheduler_state) ~initial ~combine
         s_id = fresh_signal_id st
       ; present = false
       ; value = None
-      ; awaiters = []
-      ; guard_waiters = []
+      ; awaiters = Stack.create ()
+      ; guard_waiters = Stack.create ()
       ; kind = Tempo_types.Aggregate_signal { combine; initial }
       }
   in
@@ -70,11 +70,12 @@ let update_signal : type emit agg mode.
   (match s.kind with
   | Event_signal ->
       if s.present then invalid_arg "Emit : multiple emission";
-      let resumes = s.awaiters in
       s.present <- true;
       s.value <- Some v;
-      s.awaiters <- [];
-      List.iter (fun resume -> resume v) resumes
+      while not (Stack.is_empty s.awaiters) do
+        let resume = Stack.pop s.awaiters in
+        resume v
+      done
   | Aggregate_signal { combine; initial } ->
       s.present <- true;
       let acc =
@@ -93,9 +94,10 @@ let emit_event_from_host : type a.
   if s.present then invalid_arg "Emit : multiple emission";
   s.present <- true;
   s.value <- Some value;
-  let resumes = s.awaiters in
-  s.awaiters <- [];
-  List.iter (fun resume -> resume value) resumes;
+  while not (Stack.is_empty s.awaiters) do
+    let resume = Stack.pop s.awaiters in
+    resume value
+  done;
   Tempo_task.wake_guard_waiters st s
 
 let finalize_signals (st : Tempo_types.scheduler_state) =
@@ -108,11 +110,12 @@ let finalize_signals (st : Tempo_types.scheduler_state) =
             | Some value -> value
             | None -> failwith "aggregate signal flagged present but no value"
           in
-          let resumes = s.awaiters in
-          s.awaiters <- [];
-          List.iter (fun resume -> resume delivered) resumes
+          while not (Stack.is_empty s.awaiters) do
+            let resume = Stack.pop s.awaiters in
+            resume delivered
+          done
       | _ -> ());
       s.present <- false;
       s.value <- None;
-      s.guard_waiters <- [])
+      Stack.clear s.guard_waiters)
     st.signals

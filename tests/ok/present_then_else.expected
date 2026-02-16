@@ -1,5 +1,1 @@
-[driver] instant 0: signal absent
-[present] ELSE executes at instant 1
-[driver] instant 1: emit trigger before present
-[present] THEN executes in instant 1
-[driver] done
+tag=codee;a=(1,1);b=(1,1);eq=true

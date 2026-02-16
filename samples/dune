@@ -1,3 +1,0 @@
-(executables
- (names emit_twice when_emit_parallel awaiters_log all_effects_log)
- (libraries tempo))
