@@ -37,8 +37,17 @@ type timeline_row = {
   output : string option;
 }
 
+type parallel_branch =
+  | Branch_left
+  | Branch_right
+
+type selection_target =
+  | Target_main
+  | Target_block of int
+  | Target_parallel_branch of int * parallel_branch
+
 type row = {
-  id : int;
+  target : selection_target;
   depth : int;
   text : string;
   signal : signal_name option;
@@ -138,12 +147,8 @@ let block_label b =
   | K_await -> "await"
   | K_await_imm -> "await_immediate"
   | K_pause -> "pause"
-  | K_when ->
-      Printf.sprintf "when do body1[%d]"
-        (List.length b.body1)
-  | K_watch ->
-      Printf.sprintf "watch do body1[%d]"
-        (List.length b.body1)
+  | K_when -> "when do"
+  | K_watch -> "watch do"
   | K_parallel ->
       Printf.sprintf "parallel body1[%d] || body2[%d]"
         (List.length b.body1)
@@ -227,36 +232,67 @@ let rec insert_after_in_list (target_id : int) (new_block : block) (blocks : blo
   in
   loop [] blocks
 
-let append_block ~selected_id ~program block =
-  if selected_id = 0 then program @ [ block ]
-  else
-    match find_by_id_in_list selected_id program with
-    | Some b when b.kind = K_when || b.kind = K_watch ->
-        b.body1 <- b.body1 @ [ block ];
-        program
-    | Some b when b.kind = K_parallel ->
-        if List.length b.body1 <= List.length b.body2 then b.body1 <- b.body1 @ [ block ]
-        else b.body2 <- b.body2 @ [ block ];
-        program
-    | Some _ ->
-        let program', inserted = insert_after_in_list selected_id block program in
-        if inserted then program' else program @ [ block ]
-    | None -> program @ [ block ]
+let append_to_parallel_branch ~(parallel_id : int) ~(branch : parallel_branch) ~(program : block list)
+    (block : block) : block list option =
+  match find_by_id_in_list parallel_id program with
+  | Some b when b.kind = K_parallel ->
+      begin
+        match branch with
+        | Branch_left -> b.body1 <- b.body1 @ [ block ]
+        | Branch_right -> b.body2 <- b.body2 @ [ block ]
+      end;
+      Some program
+  | _ -> None
+
+let append_block ~(selected_target : selection_target) ~(program : block list) (block : block) =
+  match selected_target with
+  | Target_main -> program @ [ block ]
+  | Target_parallel_branch (pid, branch) -> (
+      match append_to_parallel_branch ~parallel_id:pid ~branch ~program block with
+      | Some updated -> updated
+      | None -> program @ [ block ])
+  | Target_block sid -> (
+      match find_by_id_in_list sid program with
+      | Some b when b.kind = K_when || b.kind = K_watch ->
+          b.body1 <- b.body1 @ [ block ];
+          program
+      | Some b when b.kind = K_parallel ->
+          if List.length b.body1 <= List.length b.body2 then b.body1 <- b.body1 @ [ block ]
+          else b.body2 <- b.body2 @ [ block ];
+          program
+      | Some _ ->
+          let program', inserted = insert_after_in_list sid block program in
+          if inserted then program' else program @ [ block ]
+      | None -> program @ [ block ])
 
 let rec flatten_blocks (depth : int) (blocks : block list) : row list =
   List.concat
     (List.map
        (fun (b : block) ->
          let me =
-           [ { id = b.id; depth; text = block_label b; signal = if kind_uses_signal b.kind then Some b.s1 else None } ]
+           [ { target = Target_block b.id
+             ; depth
+             ; text = block_label b
+             ; signal = if kind_uses_signal b.kind then Some b.s1 else None
+             }
+           ]
          in
-         let c1 = flatten_blocks (depth + 1) b.body1 in
-         let c2 = flatten_blocks (depth + 1) b.body2 in
-         me @ c1 @ c2)
+         if b.kind = K_parallel then
+           let left_begin = { target = Target_parallel_branch (b.id, Branch_left); depth = depth + 1; text = "begin"; signal = None } in
+           let left_body = flatten_blocks (depth + 2) b.body1 in
+           let left_end = { target = Target_parallel_branch (b.id, Branch_left); depth = depth + 1; text = "end"; signal = None } in
+           let right_begin = { target = Target_parallel_branch (b.id, Branch_right); depth = depth + 1; text = "begin"; signal = None } in
+           let right_body = flatten_blocks (depth + 2) b.body2 in
+           let right_end = { target = Target_parallel_branch (b.id, Branch_right); depth = depth + 1; text = "end"; signal = None } in
+           me @ [ left_begin ] @ left_body @ [ left_end; right_begin ] @ right_body @ [ right_end ]
+         else
+           let c1 = flatten_blocks (depth + 1) b.body1 in
+           let c2 = flatten_blocks (depth + 1) b.body2 in
+           me @ c1 @ c2)
        blocks)
 
 let flatten_tree (blocks : block list) : row list =
-  { id = 0; depth = 0; text = "main"; signal = None } :: flatten_blocks 1 blocks
+  { target = Target_main; depth = 0; text = "main"; signal = None } :: flatten_blocks 1 blocks
 
 let signal_of_name sa sb sc sd = function
   | Sig_a -> sa
@@ -406,7 +442,7 @@ let () =
     in
 
     let script = ref (sample_program ()) in
-    let selected_id = ref 0 in
+    let selected_target = ref Target_main in
     let input_cells = Array.make instants None in
     if instants > 0 then input_cells.(0) <- Some { red = false; blue = true; green = false; yellow = false };
     if instants > 2 then input_cells.(2) <- Some { red = false; blue = true; green = false; yellow = false };
@@ -442,9 +478,6 @@ let () =
       clear_background (Color.create 20 31 48 255);
 
       draw_text "Tempo Core Studio" 24 16 36 (Color.create 235 240 255 255);
-      draw_text
-        "Hierarchical core playground: blocks with nested bodies (Scratch-like)"
-        24 58 18 (Color.create 176 198 224 255);
 
       let palette_x = 24 in
       let palette_y = 100 in
@@ -455,13 +488,29 @@ let () =
       List.iteri
         (fun i (label, kind) ->
           let y = palette_y + 50 + (i * 54) in
-          draw_button (palette_x + 12) y 336 44 label false;
+          draw_button (palette_x + 12) y 336 44 "" false;
           if kind_uses_signal kind then (
-            draw_circle (palette_x + 328) (y + 22) 8.0 Color.raywhite;
-            draw_circle_lines (palette_x + 328) (y + 22) 8.0 (Color.create 215 232 250 255));
+            let prefix, suffix =
+              match kind with
+              | K_emit -> ("emit", "")
+              | K_await -> ("await", "")
+              | K_await_imm -> ("await_immediate", "")
+              | K_when -> ("when", "do")
+              | K_watch -> ("watch", "do")
+              | _ -> ("", "")
+            in
+            let tx = palette_x + 26 in
+            let ty = y + 9 in
+            draw_text prefix tx ty 18 Color.raywhite;
+            let px = tx + measure_text prefix 18 + 12 in
+            draw_circle px (y + 22) 6.5 (signal_color Sig_b);
+            draw_circle_lines px (y + 22) 6.5 (Color.create 225 236 248 255);
+            if suffix <> "" then draw_text suffix (px + 12) ty 18 Color.raywhite)
+          else
+            draw_text label (palette_x + 22) (y + 9) 18 Color.raywhite;
           if click && point_in_rect mouse_x mouse_y (palette_x + 12) y 336 44 then (
             let b = mk_block kind Sig_a in
-            script := append_block ~selected_id:!selected_id ~program:!script b;
+            script := append_block ~selected_target:!selected_target ~program:!script b;
             run_simulation ()))
         palette;
 
@@ -476,7 +525,7 @@ let () =
         (fun i r ->
           if i < 16 then
             let y = script_y + 48 + (i * 30) in
-            let selected = r.id = !selected_id in
+            let selected = r.target = !selected_target in
             let bg = if selected then Color.create 74 116 163 255 else Color.create 45 80 120 255 in
             let row_rect = Rectangle.create (float_of_int (script_x + 12)) (float_of_int y) 590.0 26.0 in
             draw_rectangle_rec row_rect bg;
@@ -498,7 +547,7 @@ let () =
               16
               Color.raywhite;
             if click && point_in_rect mouse_x mouse_y (script_x + 12) y 590 26 then
-              selected_id := r.id)
+              selected_target := r.target)
         rows;
 
       let panel_x = 1050 in
@@ -517,23 +566,31 @@ let () =
       if click && point_in_rect mouse_x mouse_y (panel_x + 16) (panel_y + 54) 292 46 then run_simulation ();
       if click && point_in_rect mouse_x mouse_y (panel_x + 16) (panel_y + 108) 292 42 then (
         script := [];
-        selected_id := 0;
+        selected_target := Target_main;
         run_simulation ());
       if click && point_in_rect mouse_x mouse_y (panel_x + 16) (panel_y + 156) 292 42 then (
         Array.fill input_cells 0 instants None;
         run_simulation ());
       if click && point_in_rect mouse_x mouse_y (panel_x + 16) (panel_y + 204) 292 42 then (
         script := sample_program ();
-        selected_id := 0;
+        selected_target := Target_main;
         run_simulation ());
 
       draw_text "Selected block editor" (panel_x + 16) (panel_y + 262) 18 Color.raywhite;
       begin
-        if !selected_id = 0 then
-          draw_text "main selected: insertions go to top-level"
-            (panel_x + 16) (panel_y + 286) 16 (Color.create 170 192 220 255)
-        else
-          match find_by_id_in_list !selected_id !script with
+        match !selected_target with
+        | Target_main ->
+            draw_text "main selected: insertions go to top-level"
+              (panel_x + 16) (panel_y + 286) 16 (Color.create 170 192 220 255)
+        | Target_parallel_branch (_, branch) ->
+            let txt =
+              match branch with
+              | Branch_left -> "parallel branch selected: insertions go to left branch"
+              | Branch_right -> "parallel branch selected: insertions go to right branch"
+            in
+            draw_text txt (panel_x + 16) (panel_y + 286) 16 (Color.create 170 192 220 255)
+        | Target_block sid -> (
+            match find_by_id_in_list sid !script with
             | None -> draw_text "Selection lost" (panel_x + 16) (panel_y + 362) 16 (Color.create 220 120 120 255)
             | Some b ->
                 draw_text (Printf.sprintf "id=%d  kind=%s" b.id (kind_to_string b.kind))
@@ -553,8 +610,8 @@ let () =
                   run_simulation ());
                 if click && point_in_rect mouse_x mouse_y (panel_x + 16) (panel_y + 374) 292 36 then (
                   script := fst (remove_by_id_from_list b.id !script);
-                  selected_id := 0;
-                  run_simulation ())
+                  selected_target := Target_main;
+                  run_simulation ()))
       end;
 
       draw_text "Tick input editor (toggle red/blue/green/yellow per instant)" 24 600 20 Color.raywhite;
