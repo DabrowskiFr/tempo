@@ -149,6 +149,13 @@ let mk_button ~id ~x ~y ~w ~h ~label =
 let logical_width = 1280
 let logical_height = 768
 
+let c_bg_top = Color.create 23 36 54 255
+let c_bg_bottom = Color.create 14 22 34 255
+let c_topbar = Color.create 10 27 45 220
+let c_topline = Color.create 88 140 188 200
+let c_seq_box = Color.create 19 33 49 220
+let c_seq_border = Color.create 90 138 182 230
+
 let dim_signal_color = function
   | Sig_a -> Color.create 104 63 63 255
   | Sig_b -> Color.create 57 76 103 255
@@ -344,6 +351,10 @@ let extract_output_signals (s : string) : signal_name list =
         match signal_of_token color with
         | Some sig_name when not (List.mem sig_name acc) -> collect rest (acc @ [ sig_name ])
         | _ -> collect rest acc)
+    | "input" :: color :: rest -> (
+        match signal_of_token color with
+        | Some sig_name when not (List.mem sig_name acc) -> collect rest (acc @ [ sig_name ])
+        | _ -> collect rest acc)
     | _ :: rest -> collect rest acc
     | [] -> acc
   in
@@ -502,6 +513,13 @@ let () =
     let results = ref [] in
     let run_count = ref 0 in
     let status = ref "Ready" in
+    let notice = ref "Ready." in
+    let notice_ttl = ref 0 in
+
+    let set_notice msg =
+      notice := msg;
+      notice_ttl := 140
+    in
 
     let run_simulation () =
       let inputs = Array.to_list input_cells in
@@ -554,9 +572,13 @@ let () =
       let click = interaction.pressed in
       let mouse_x = int_of_float interaction.pointer.x in
       let mouse_y = int_of_float interaction.pointer.y in
+      if !notice_ttl > 0 then decr notice_ttl;
 
       begin_texture_mode canvas;
-      clear_background (Color.create 20 31 48 255);
+      clear_background c_bg_bottom;
+      draw_rectangle_gradient_v 0 0 logical_width logical_height c_bg_top c_bg_bottom;
+      draw_rectangle 0 0 logical_width 72 c_topbar;
+      draw_line 0 72 logical_width 72 c_topline;
 
       draw_text "Tempo Core Studio" 24 16 36 (Color.create 235 240 255 255);
 
@@ -574,6 +596,7 @@ let () =
           if Ui.button_pressed interaction btn then (
             let b = mk_block kind Sig_a in
             script := append_block ~selected_target:!selected_target ~program:!script b;
+            set_notice (Printf.sprintf "Added block: %s" label);
             run_simulation ()))
         palette;
 
@@ -634,13 +657,16 @@ let () =
       if Ui.button_pressed interaction clear_prog_btn then (
         script := [];
         selected_target := Target_main;
+        set_notice "Program cleared.";
         run_simulation ());
       if Ui.button_pressed interaction clear_inputs_btn then (
         Array.fill input_cells 0 instants None;
+        set_notice "Input sequence cleared.";
         run_simulation ());
       if Ui.button_pressed interaction load_sample_btn then (
         script := sample_program ();
         selected_target := Target_main;
+        set_notice "Sample program loaded.";
         run_simulation ());
 
       draw_text "Selected block editor" (panel_x + 16) (panel_y + 262) 18 Color.raywhite;
@@ -684,15 +710,19 @@ let () =
                   let yx, yy, yw, yh = yellow_rect in
                   if click && point_in_rect mouse_x mouse_y rx ry rw rh && b.s1 <> Sig_a then (
                     b.s1 <- Sig_a;
+                    set_notice "Signal set to red.";
                     run_simulation ());
                   if click && point_in_rect mouse_x mouse_y bx by bw bh && b.s1 <> Sig_b then (
                     b.s1 <- Sig_b;
+                    set_notice "Signal set to blue.";
                     run_simulation ());
                   if click && point_in_rect mouse_x mouse_y gx gy gw gh && b.s1 <> Sig_c then (
                     b.s1 <- Sig_c;
+                    set_notice "Signal set to green.";
                     run_simulation ());
                   if click && point_in_rect mouse_x mouse_y yx yy yw yh && b.s1 <> Sig_d then (
                     b.s1 <- Sig_d;
+                    set_notice "Signal set to yellow.";
                     run_simulation ()))
                 else
                   draw_text "no signal selector for this kind" (panel_x + 168) (panel_y + 342) 13
@@ -702,13 +732,17 @@ let () =
                   b.kind <- cycle_kind b.kind;
                   if not (has_body1 b.kind) then b.body1 <- [];
                   if not (has_body2 b.kind) then b.body2 <- [];
+                  set_notice (Printf.sprintf "Primitive changed to %s." (kind_to_string b.kind));
                   run_simulation ());
                 if Ui.button_pressed interaction remove_btn then (
                   script := fst (remove_by_id_from_list b.id !script);
                   selected_target := Target_main;
+                  set_notice "Selected block removed.";
                   run_simulation ()))
       end;
 
+      draw_rectangle 20 556 1240 94 c_seq_box;
+      draw_rectangle_lines 20 556 1240 94 c_seq_border;
       draw_text "Input sequencer (click quadrants)" 24 560 20 Color.raywhite;
       for i = 0 to instants - 1 do
         let x = 24 + (i * 84) in
@@ -732,18 +766,24 @@ let () =
 
         if click && point_in_rect mouse_x mouse_y rx ry rw rh then (
           input_cells.(i) <- toggle_input_signal Sig_a cell;
+          set_notice (Printf.sprintf "Input t=%02d toggled red." i);
           run_simulation ());
         if click && point_in_rect mouse_x mouse_y bx by bw bh then (
           input_cells.(i) <- toggle_input_signal Sig_b cell;
+          set_notice (Printf.sprintf "Input t=%02d toggled blue." i);
           run_simulation ());
         if click && point_in_rect mouse_x mouse_y gx gy gw gh then (
           input_cells.(i) <- toggle_input_signal Sig_c cell;
+          set_notice (Printf.sprintf "Input t=%02d toggled green." i);
           run_simulation ());
         if click && point_in_rect mouse_x mouse_y yx yy yw yh then (
           input_cells.(i) <- toggle_input_signal Sig_d cell;
+          set_notice (Printf.sprintf "Input t=%02d toggled yellow." i);
           run_simulation ())
       done;
 
+      draw_rectangle 20 648 1240 94 c_seq_box;
+      draw_rectangle_lines 20 648 1240 94 c_seq_border;
       draw_text "Output sequencer" 24 652 20 Color.raywhite;
       draw_text "Tip: edit tree + pads, simulation refreshes immediately" 420 654 16
         (Color.create 180 205 230 255);
@@ -776,6 +816,10 @@ let () =
         "Core focus: hierarchical blocks compile to Tempo primitives; no FRP layer used."
         24 746 15 (Color.create 158 184 214 255);
       draw_text !status 720 746 14 (Color.create 210 225 245 255);
+      if !notice_ttl > 0 then (
+        let alpha = min 255 (80 + (!notice_ttl * 2)) in
+        draw_rectangle 24 44 640 20 (Color.create 30 57 82 (alpha / 2));
+        draw_text !notice 30 46 14 (Color.create 220 238 255 alpha));
 
       end_texture_mode ();
 
