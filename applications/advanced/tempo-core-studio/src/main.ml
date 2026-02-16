@@ -160,6 +160,7 @@ let c_text_section = Color.create 222 236 252 255
 let c_text_body = Color.create 204 224 246 255
 let c_text_meta = Color.create 168 198 228 255
 let c_text_warn = Color.create 231 136 120 255
+let c_text_shadow = Color.create 8 14 22 180
 
 type loaded_font = {
   font : Font.t;
@@ -167,7 +168,8 @@ type loaded_font = {
 }
 
 let font_candidates =
-  [ "applications/advanced/tempo-core-studio/assets/fonts/AndaleMono.ttf"
+  [ "applications/advanced/tempo-core-studio/assets/fonts/Arial.ttf"
+  ; "applications/advanced/tempo-core-studio/assets/fonts/AndaleMono.ttf"
   ; "applications/advanced/tempo-core-studio/assets/fonts/CourierNew.ttf"
   ; "applications/advanced/tempo-core-studio/assets/fonts/JetBrainsMono-Regular.ttf"
   ; "applications/advanced/tempo-core-studio/assets/fonts/PressStart2P-Regular.ttf"
@@ -198,7 +200,10 @@ let load_ui_font () =
   try_paths font_candidates
 
 let draw_text_ui (f : loaded_font) text x y size color =
-  draw_text_ex f.font text (Vector2.create (float_of_int x) (float_of_int y)) (float_of_int size) 1.0 color
+  let p = Vector2.create (float_of_int x) (float_of_int y) in
+  let ps = Vector2.create (float_of_int (x + 1)) (float_of_int (y + 1)) in
+  draw_text_ex f.font text ps (float_of_int size) 0.5 c_text_shadow;
+  draw_text_ex f.font text p (float_of_int size) 0.5 color
 
 let measure_text_ui (f : loaded_font) text size =
   int_of_float (Vector2.x (measure_text_ex f.font text (float_of_int size) 1.0))
@@ -657,14 +662,14 @@ let () =
       draw_rectangle 0 0 logical_width 72 c_topbar;
       draw_line 0 72 logical_width 72 c_topline;
 
-      draw_text "Tempo Core Studio" 24 14 36 c_text_title;
-      draw_text "Synchronous block editor powered by Tempo" 26 48 14 c_text_meta;
+      draw_text "Tempo Core Studio" 24 14 38 c_text_title;
+      draw_text "Synchronous block editor powered by Tempo" 26 50 15 c_text_meta;
 
       let palette_x = 24 in
       let palette_y = 100 in
       draw_rectangle palette_x palette_y 360 450 (Color.create 24 44 69 255);
       draw_rectangle_lines palette_x palette_y 360 450 (Color.create 105 145 187 255);
-      draw_text "Palette (click to insert)" (palette_x + 14) (palette_y + 10) 18 c_text_section;
+      draw_text "Palette (click to insert)" (palette_x + 14) (palette_y + 10) 19 c_text_section;
 
       List.iteri
         (fun i (label, kind) ->
@@ -685,7 +690,7 @@ let () =
       let script_w = 560 in
       draw_rectangle script_x script_y script_w 450 (Color.create 26 47 73 255);
       draw_rectangle_lines script_x script_y script_w 450 (Color.create 105 145 187 255);
-      draw_text "Program Tree" (script_x + 14) (script_y + 10) 18 c_text_section;
+      draw_text "Program Tree" (script_x + 14) (script_y + 10) 19 c_text_section;
 
       let rows = flatten_tree !script in
       List.iteri
@@ -728,7 +733,7 @@ let () =
           ~title:"Actions"
       in
       Tempo_game_raylib.Hud.draw_panel panel;
-      draw_text (Printf.sprintf "Runs: %d" !run_count) (panel_x + 214) (panel_y + 14) 16
+      draw_text (Printf.sprintf "Runs: %d" !run_count) (panel_x + 214) (panel_y + 14) 17
         (Color.create 255 220 130 255);
 
       let clear_prog_btn = mk_button ~id:"clear_program" ~x:(panel_x + 16) ~y:(panel_y + 54) ~w:292 ~h:42 ~label:"Clear Program" in
@@ -753,27 +758,27 @@ let () =
         set_notice "Sample program loaded.";
         run_simulation ());
 
-      draw_text "Selected block editor" (panel_x + 16) (panel_y + 220) 17 c_text_section;
+      draw_text "Selected block editor" (panel_x + 16) (panel_y + 220) 18 c_text_section;
       begin
         match !selected_target with
         | Target_main ->
             draw_text "main selected: insertions go to top-level"
-              (panel_x + 16) (panel_y + 244) 14 c_text_body
+              (panel_x + 16) (panel_y + 244) 15 c_text_body
         | Target_parallel_branch (_, branch) ->
             let txt =
               match branch with
               | Branch_left -> "parallel branch selected: insertions go to left branch"
               | Branch_right -> "parallel branch selected: insertions go to right branch"
             in
-            draw_text txt (panel_x + 16) (panel_y + 244) 14 c_text_body
+            draw_text txt (panel_x + 16) (panel_y + 244) 15 c_text_body
         | Target_block sid -> (
             match find_by_id_in_list sid !script with
-            | None -> draw_text "Selection lost" (panel_x + 16) (panel_y + 320) 14 c_text_warn
+            | None -> draw_text "Selection lost" (panel_x + 16) (panel_y + 320) 15 c_text_warn
             | Some b ->
                 draw_text (Printf.sprintf "id=%d  kind=%s" b.id (kind_to_string b.kind))
-                  (panel_x + 16) (panel_y + 244) 14 c_text_body;
+                  (panel_x + 16) (panel_y + 244) 15 c_text_body;
                 draw_text (Printf.sprintf "signal=%s" (signal_name_to_string b.s1))
-                  (panel_x + 16) (panel_y + 264) 14 c_text_body;
+                  (panel_x + 16) (panel_y + 264) 15 c_text_body;
                 let remove_btn = mk_button ~id:"remove_selected" ~x:(panel_x + 16) ~y:(panel_y + 336) ~w:292 ~h:32 ~label:"Remove Selected" in
                 let change_primitive_btn =
                   mk_button ~id:"change_primitive" ~x:(panel_x + 16) ~y:(panel_y + 374) ~w:292 ~h:32 ~label:"Change Primitive"
@@ -809,7 +814,7 @@ let () =
                     set_notice "Signal set to yellow.";
                     run_simulation ()))
                 else
-                  draw_text "no signal selector for this kind" (panel_x + 168) (panel_y + 300) 12
+                  draw_text "no signal selector for this kind" (panel_x + 168) (panel_y + 300) 13
                     c_text_meta;
 
                 if Ui.button_pressed interaction change_primitive_btn then (
@@ -827,7 +832,7 @@ let () =
 
       draw_rectangle 20 556 1240 94 c_seq_box;
       draw_rectangle_lines 20 556 1240 94 c_seq_border;
-      draw_text "Input sequencer (click quadrants)" 24 560 18 c_text_section;
+      draw_text "Input sequencer (click quadrants)" 24 560 19 c_text_section;
       let seq_x = 24 in
       let seq_w = 1240 in
       let step = max 1 (seq_w / max 1 instants) in
@@ -841,7 +846,7 @@ let () =
         let cell = input_cells.(i) in
         draw_rectangle_rec rect (Color.create 23 34 48 255);
         draw_rectangle_lines_ex rect 1.5 (Color.create 190 214 239 255);
-        draw_text (Printf.sprintf "%02d" i) (x + 6) (y + 4) 11 c_text_meta;
+        draw_text (Printf.sprintf "%02d" i) (x + 6) (y + 4) 12 c_text_meta;
 
         let pad_x = x + 6 in
         let pad_y = y + 15 in
@@ -876,8 +881,8 @@ let () =
 
       draw_rectangle 20 648 1240 94 c_seq_box;
       draw_rectangle_lines 20 648 1240 94 c_seq_border;
-      draw_text "Output sequencer" 24 652 18 c_text_section;
-      draw_text "Tip: edit tree + pads, simulation refreshes immediately" 420 654 16
+      draw_text "Output sequencer" 24 652 19 c_text_section;
+      draw_text "Tip: edit tree + pads, simulation refreshes immediately" 420 654 15
         c_text_meta;
       let seq_x = 24 in
       let seq_w = 1240 in
@@ -891,7 +896,7 @@ let () =
         let rect = Rectangle.create (float_of_int x) (float_of_int y) (float_of_int w) (float_of_int h) in
         draw_rectangle_rec rect (Color.create 23 34 48 255);
         draw_rectangle_lines_ex rect 1.5 (Color.create 190 214 239 255);
-        draw_text (Printf.sprintf "%02d" i) (x + 6) (y + 4) 11 c_text_meta;
+        draw_text (Printf.sprintf "%02d" i) (x + 6) (y + 4) 12 c_text_meta;
 
         let out_signals =
           let out_i = i + 1 in
@@ -914,12 +919,12 @@ let () =
 
       draw_text
         "Core focus: hierarchical blocks compile to Tempo primitives; no FRP layer used."
-        24 746 13 c_text_meta;
-      draw_text !status 720 746 13 c_text_body;
+        24 746 14 c_text_meta;
+      draw_text !status 720 746 14 c_text_body;
       if !notice_ttl > 0 then (
         let alpha = min 255 (80 + (!notice_ttl * 2)) in
         draw_rectangle 24 44 640 20 (Color.create 30 57 82 (alpha / 2));
-        draw_text !notice 30 46 13 (Color.create 220 238 255 alpha));
+        draw_text !notice 30 46 14 (Color.create 220 238 255 alpha));
 
       end_texture_mode ();
 
