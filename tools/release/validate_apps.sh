@@ -6,7 +6,7 @@ cd "$ROOT"
 
 PROFILE="${DUNE_PROFILE:-release}"
 
-ADVANCED_APPS="game-univ refactor"
+ADVANCED_APPS="game-univ refactor tempo-core-studio"
 SIMPLE_APPS="snake-raylib boids-raylib ca-continuous-raylib lenia-raylib solar-system-raylib logicgroove temporalsim"
 ALL_APPS="$ADVANCED_APPS $SIMPLE_APPS"
 
@@ -29,7 +29,7 @@ What it validates:
   2) README presence + required section headers for all apps.
   3) Build of all app executables.
   4) Launcher help contract for all app run scripts.
-  5) Headless smoke run for advanced app "refactor".
+  5) Headless smoke runs for advanced apps with deterministic modes.
 EOF
 }
 
@@ -104,5 +104,6 @@ done
 log "[5/5] Headless smoke checks"
 # Keep smoke deterministic and short.
 dune exec ./applications/run -- refactor -- --headless --steps 120 --seed 1 >/dev/null
+dune exec ./applications/run -- tempo-core-studio -- --headless --instants 12 >/dev/null
 
 log "Validation OK"

@@ -16,6 +16,7 @@ Categories:
   advanced:
     game-univ
     refactor
+    tempo-core-studio
   simple-demos:
     snake-raylib
     boids-raylib
@@ -37,6 +38,9 @@ case "$APP" in
     ;;
   refactor|reactive-reconfiguration-engine)
     TARGET="$ROOT_DIR/advanced/refactor/run"
+    ;;
+  tempo-core-studio)
+    TARGET="$ROOT_DIR/advanced/tempo-core-studio/run"
     ;;
   snake-raylib|boids-raylib|ca-continuous-raylib|lenia-raylib|solar-system-raylib|logicgroove|temporalsim)
     TARGET="$ROOT_DIR/simple-demos/$APP/run"

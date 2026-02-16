@@ -10,6 +10,7 @@ This matrix defines release smoke checks for all app slugs exposed by:
 |---|---|---|---|---|
 | `game-univ` | yes | yes | no | automated (partial) |
 | `refactor` | yes | yes | yes (`--headless --steps 120 --seed 1`) | automated |
+| `tempo-core-studio` | yes | yes | yes (`--headless --instants 12`) | automated |
 | `snake-raylib` | yes | yes | no | automated (partial) |
 | `boids-raylib` | yes | yes | no | automated (partial) |
 | `ca-continuous-raylib` | yes | yes | no | automated (partial) |
@@ -24,7 +25,8 @@ Run interactively before release:
 
 1. `dune exec ./applications/run -- game-univ`
 2. `dune exec ./applications/run -- refactor`
-3. at least one demo per visual family:
+3. `dune exec ./applications/run -- tempo-core-studio`
+4. at least one demo per visual family:
    - `dune exec ./applications/run -- boids-raylib`
    - `dune exec ./applications/run -- lenia-raylib`
    - `dune exec ./applications/run -- logicgroove`

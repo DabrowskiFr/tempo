@@ -5,7 +5,7 @@ This document describes the architecture of applications under `/Users/fredericd
 ## Directory model
 
 - `advanced/`
-  - applications with higher product/research expectations (`game-univ`, `refactor`).
+  - applications with higher product/research expectations (`game-univ`, `refactor`, `tempo-core-studio`).
 - `simple-demos/`
   - focused demonstrations of one concept/runtime pattern.
 
