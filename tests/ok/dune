@@ -42,5 +42,6 @@
   runtime_instant_observable_order
   runtime_instant_current_empty
   low_level_with_kill_abort
-  low_level_with_kill_inherit)
- (libraries tempo tempo-frp))
+  low_level_with_kill_inherit
+  async_mailbox_api)
+ (libraries tempo tempo-frp tempo-async))

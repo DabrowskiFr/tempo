@@ -183,6 +183,27 @@ let () =
 En plus de `tempo`, le repo expose la librairie `tempo.game` (module `Tempo_game`) qui ré-exporte les modules orientés jeu:
 - `Scene`, `Resource`, `Input_map`, `Event_bus`, `Fixed_step`, `Rng`, `Netcode`, `Profiler`, `Tick_tags`, `Runtime_snapshot`, `Entity_set`, `Dev_hud`, `Error_bus`, `Timeline_json`.
 
+## 4.bis Package `tempo-async`
+Le repo expose aussi `tempo-async` (module `Tempo_async`) pour connecter des producteurs asynchrones a un consommateur Tempo sans bloquer les instants:
+- mailbox bornee: `create`, `push_external`, `drain_tick`, `stats`;
+- injection synchrone dans un bus Tempo: `pump_to_bus`.
+
+Exemple minimal:
+```ocaml
+open Tempo
+open Tempo_async
+
+let mb = create ~capacity:128 ~overflow:`Drop_oldest ()
+let intents = Event_bus.channel ()
+
+let () =
+  ignore (push_external mb `Network_msg);
+  execute ~instants:4 (fun _ _ ->
+      ignore (pump_to_bus mb intents);
+      let batch = Event_bus.await_batch intents in
+      ignore batch)
+```
+
 ## 5. Dépendances
 ### 5.1 Dépendances de la librairie Tempo
 - OCaml >= 5.3.0

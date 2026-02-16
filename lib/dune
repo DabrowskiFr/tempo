@@ -25,3 +25,9 @@
  (public_name tempo-frp)
  (modules tempo_frp)
  (libraries tempo))
+
+(library
+ (name tempo_async)
+ (public_name tempo-async)
+ (modules tempo_async)
+ (libraries tempo))
