@@ -219,6 +219,10 @@ let () =
 
     let script = ref [ Emit Sig_a; Pause_block; Await Sig_b ] in
     let input_cells = Array.make instants None in
+    if instants > 0 then input_cells.(0) <- Some In_b;
+    if instants > 2 then input_cells.(2) <- Some In_b;
+    if instants > 3 then input_cells.(3) <- Some In_a;
+    if instants > 5 then input_cells.(5) <- Some In_b;
     let results = ref [] in
     let run_count = ref 0 in
     let status = ref "Ready" in
@@ -300,6 +304,8 @@ let () =
       draw_rectangle panel_x panel_y 326 540 (Color.create 24 44 69 255);
       draw_rectangle_lines panel_x panel_y 326 540 (Color.create 105 145 187 255);
       draw_text "Actions" (panel_x + 14) (panel_y + 10) 20 Color.raywhite;
+      draw_text (Printf.sprintf "Runs: %d" !run_count) (panel_x + 220) (panel_y + 14) 18
+        (Color.create 255 220 130 255);
 
       let bx = panel_x + 16 in
       let bw = 292 in
@@ -354,17 +360,24 @@ let () =
       done;
 
       draw_text "Timeline output (per logical instant)" 24 745 20 Color.raywhite;
-      let max_rows = 6 in
+      draw_text "Tip: click timeline input cells, result refreshes immediately" 400 747 16
+        (Color.create 180 205 230 255);
+      let max_rows = min instants 10 in
       List.iteri
         (fun i row ->
           if i < max_rows then
-            let y = 772 + (i * 20) in
+            let y = 772 + (i * 18) in
+            let bg =
+              if i mod 2 = 0 then Color.create 28 46 70 255
+              else Color.create 33 53 80 255
+            in
+            draw_rectangle 24 (y - 2) 1320 18 bg;
             draw_text
               (Printf.sprintf "t=%02d in=%s out=%s"
                  row.instant
                  (ext_input_to_string row.input)
                  (match row.output with None -> "-" | Some s -> s))
-              24 y 18 (Color.create 230 238 249 255))
+              28 y 16 (Color.create 236 244 255 255))
         !results;
 
       draw_text
