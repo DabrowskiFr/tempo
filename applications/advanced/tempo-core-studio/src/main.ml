@@ -326,23 +326,28 @@ let extract_output_signals (s : string) : signal_name list =
   let is_alpha c =
     (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
   in
-  let rec consume i acc =
-    if i >= len then acc
+  let rec tokenize i acc =
+    if i >= len then List.rev acc
     else if is_alpha s.[i] then
       let j = ref (i + 1) in
       while !j < len && is_alpha s.[!j] do
         incr j
       done;
       let tok = String.lowercase_ascii (String.sub s i (!j - i)) in
-      let acc' =
-        match signal_of_token tok with
-        | Some sig_name when not (List.mem sig_name acc) -> acc @ [ sig_name ]
-        | _ -> acc
-      in
-      consume !j acc'
-    else consume (i + 1) acc
+      tokenize !j (tok :: acc)
+    else tokenize (i + 1) acc
   in
-  consume 0 []
+  let tokens = tokenize 0 [] in
+  let rec collect toks acc =
+    match toks with
+    | "emit" :: color :: rest -> (
+        match signal_of_token color with
+        | Some sig_name when not (List.mem sig_name acc) -> collect rest (acc @ [ sig_name ])
+        | _ -> collect rest acc)
+    | _ :: rest -> collect rest acc
+    | [] -> acc
+  in
+  collect tokens []
 
 (* -------------------------------------------------------------------------- *)
 (* Part 2: Synchronous execution (Tempo primitives and instants)              *)
@@ -473,7 +478,7 @@ let () =
     set_window_state [ ConfigFlags.Window_resizable ];
     set_target_fps 60;
     let canvas = load_render_texture logical_width logical_height in
-    set_texture_filter (RenderTexture.texture canvas) TextureFilter.Bilinear;
+    set_texture_filter (RenderTexture.texture canvas) TextureFilter.Point;
 
     let palette : (string * block_kind) list =
       [ ("emit", K_emit)
@@ -519,7 +524,7 @@ let () =
       let win_h = get_screen_height () in
       let sx = float_of_int win_w /. float_of_int logical_width in
       let sy = float_of_int win_h /. float_of_int logical_height in
-      let scale = min sx sy in
+      let scale = max 1.0 (floor (min sx sy)) in
       let dst_w = int_of_float (float_of_int logical_width *. scale) in
       let dst_h = int_of_float (float_of_int logical_height *. scale) in
       let dst_x = (win_w - dst_w) / 2 in
@@ -557,8 +562,8 @@ let () =
 
       let palette_x = 24 in
       let palette_y = 100 in
-      draw_rectangle palette_x palette_y 360 490 (Color.create 24 44 69 255);
-      draw_rectangle_lines palette_x palette_y 360 490 (Color.create 105 145 187 255);
+      draw_rectangle palette_x palette_y 360 450 (Color.create 24 44 69 255);
+      draw_rectangle_lines palette_x palette_y 360 450 (Color.create 105 145 187 255);
       draw_text "Palette (click to insert)" (palette_x + 14) (palette_y + 10) 20 Color.raywhite;
 
       List.iteri
@@ -574,14 +579,14 @@ let () =
 
       let script_x = 410 in
       let script_y = 100 in
-      draw_rectangle script_x script_y 620 490 (Color.create 26 47 73 255);
-      draw_rectangle_lines script_x script_y 620 490 (Color.create 105 145 187 255);
+      draw_rectangle script_x script_y 620 450 (Color.create 26 47 73 255);
+      draw_rectangle_lines script_x script_y 620 450 (Color.create 105 145 187 255);
       draw_text "Program Tree" (script_x + 14) (script_y + 10) 20 Color.raywhite;
 
       let rows = flatten_tree !script in
       List.iteri
         (fun i r ->
-          if i < 14 then
+          if i < 13 then
             let y = script_y + 48 + (i * 30) in
             let selected = r.target = !selected_target in
             let bg = if selected then Color.create 74 116 163 255 else Color.create 45 80 120 255 in
@@ -612,7 +617,7 @@ let () =
       let panel_y = 100 in
       let panel =
         Hud.panel
-          ~rect:{ Ui.x = float_of_int panel_x; y = float_of_int panel_y; w = 326.0; h = 490.0 }
+          ~rect:{ Ui.x = float_of_int panel_x; y = float_of_int panel_y; w = 326.0; h = 450.0 }
           ~title:"Actions"
       in
       Tempo_game_raylib.Hud.draw_panel panel;
@@ -704,10 +709,10 @@ let () =
                   run_simulation ()))
       end;
 
-      draw_text "Input sequencer (click quadrants)" 24 600 20 Color.raywhite;
+      draw_text "Input sequencer (click quadrants)" 24 560 20 Color.raywhite;
       for i = 0 to instants - 1 do
         let x = 24 + (i * 84) in
-        let y = 628 in
+        let y = 588 in
         let w = 78 in
         let h = 62 in
         let rect = Rectangle.create (float_of_int x) (float_of_int y) (float_of_int w) (float_of_int h) in
@@ -717,7 +722,7 @@ let () =
         draw_text (Printf.sprintf "%02d" i) (x + 6) 633 12 (Color.create 190 214 239 255);
 
         let red_rect, blue_rect, green_rect, yellow_rect =
-          draw_signal_quad ~x:(x + 9) ~y:(y + 19) ~cell_w:28 ~cell_h:18 ~gap:4
+          draw_signal_quad ~x:(x + 9) ~y:(y + 15) ~cell_w:28 ~cell_h:18 ~gap:4
             ~is_on:(fun signal -> signal_active_in_input signal cell)
         in
         let rx, ry, rw, rh = red_rect in
@@ -739,12 +744,12 @@ let () =
           run_simulation ())
       done;
 
-      draw_text "Output sequencer" 24 700 20 Color.raywhite;
-      draw_text "Tip: edit tree + pads, simulation refreshes immediately" 420 702 16
+      draw_text "Output sequencer" 24 652 20 Color.raywhite;
+      draw_text "Tip: edit tree + pads, simulation refreshes immediately" 420 654 16
         (Color.create 180 205 230 255);
       for i = 0 to instants - 1 do
         let x = 24 + (i * 84) in
-        let y = 728 in
+        let y = 680 in
         let w = 78 in
         let h = 62 in
         let rect = Rectangle.create (float_of_int x) (float_of_int y) (float_of_int w) (float_of_int h) in
@@ -753,14 +758,15 @@ let () =
         draw_text (Printf.sprintf "%02d" i) (x + 6) 733 12 (Color.create 190 214 239 255);
 
         let out_signals =
-          if i < List.length !results then
-            match (List.nth !results i).output with
+          let out_i = i + 1 in
+          if out_i < List.length !results then
+            match (List.nth !results out_i).output with
             | None -> []
             | Some s -> extract_output_signals s
           else []
         in
         let _ =
-          draw_signal_quad ~x:(x + 9) ~y:(y + 19) ~cell_w:28 ~cell_h:18 ~gap:4
+          draw_signal_quad ~x:(x + 9) ~y:(y + 15) ~cell_w:28 ~cell_h:18 ~gap:4
             ~is_on:(fun signal -> List.mem signal out_signals)
         in
         ()
@@ -768,8 +774,8 @@ let () =
 
       draw_text
         "Core focus: hierarchical blocks compile to Tempo primitives; no FRP layer used."
-        24 868 17 (Color.create 158 184 214 255);
-      draw_text !status 720 868 15 (Color.create 210 225 245 255);
+        24 746 15 (Color.create 158 184 214 255);
+      draw_text !status 720 746 14 (Color.create 210 225 245 255);
 
       end_texture_mode ();
 
