@@ -205,27 +205,27 @@ let step_once s =
   }
 
 let main input output =
-  let sim = new_state (initial_sim ()) in
+  let sim = State.create (initial_sim ()) in
 
   let input_proc () =
     let rec loop () =
       let i = await input in
-      if i.toggle_run then modify_state sim (fun s -> { s with running = not s.running });
-      if i.step then modify_state sim step_once;
-      if i.reset then set_state sim (initial_sim ());
-      if i.cycle_formula then modify_state sim cycle_formula;
+      if i.toggle_run then State.modify sim (fun s -> { s with running = not s.running });
+      if i.step then State.modify sim step_once;
+      if i.reset then State.set sim (initial_sim ());
+      if i.cycle_formula then State.modify sim cycle_formula;
       loop ()
     in
     loop ()
   in
 
   let run_proc () =
-    Game.every_n 8 (fun () -> if (get_state sim).running then modify_state sim step_once)
+    Game.every_n 8 (fun () -> if (State.get sim).running then State.modify sim step_once)
   in
 
   let render_proc () =
     let rec loop () =
-      emit output (get_state sim);
+      emit output (State.get sim);
       pause ();
       loop ()
     in

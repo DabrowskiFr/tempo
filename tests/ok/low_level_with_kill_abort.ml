@@ -4,18 +4,18 @@ let () =
   let run () =
     execute_trace ~instants:8 ~inputs:[ None ] (fun _input output ->
         let kill = Low_level.new_kill () in
-        let body_steps = new_state 0 in
-        let continued = new_state false in
+        let body_steps = State.create 0 in
+        let continued = State.create false in
         let body () =
           Low_level.with_kill kill (fun () ->
-              modify_state body_steps (fun x -> x + 1);
+              State.modify body_steps (fun x -> x + 1);
               pause ();
-              modify_state body_steps (fun x -> x + 1000));
-          set_state continued true
+              State.modify body_steps (fun x -> x + 1000));
+          State.set continued true
         in
         let driver () = Low_level.abort_kill kill in
         parallel [ body; driver ];
-        emit output (get_state body_steps, get_state continued))
+        emit output (State.get body_steps, State.get continued))
   in
   let a = run () in
   let b = run () in

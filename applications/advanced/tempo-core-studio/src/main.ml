@@ -483,7 +483,7 @@ module Sync = struct
       let sd = new_signal () in
       let trace = new_signal_agg ~initial:[] ~combine:(fun acc msg -> msg :: acc) in
       let emit_once sigv name =
-        if is_present sigv then
+        if Low_level.is_present sigv then
           emit trace (Printf.sprintf "emit %s skipped (already present this instant)" name)
         else (
           emit sigv ();
@@ -493,16 +493,16 @@ module Sync = struct
         when_ input (fun () ->
             let frame = await_immediate input in
             if frame.red then (
-              if not (is_present sa) then emit sa ();
+              if not (Low_level.is_present sa) then emit sa ();
               emit trace "input red");
             if frame.blue then (
-              if not (is_present sb) then emit sb ();
+              if not (Low_level.is_present sb) then emit sb ();
               emit trace "input blue");
             if frame.green then (
-              if not (is_present sc) then emit sc ();
+              if not (Low_level.is_present sc) then emit sc ();
               emit trace "input green");
             if frame.yellow then (
-              if not (is_present sd) then emit sd ();
+              if not (Low_level.is_present sd) then emit sd ();
               emit trace "input yellow"));
         pause ();
         input_pump ()

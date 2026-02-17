@@ -149,13 +149,6 @@ val await : ('emit, 'agg, 'mode) signal_core -> 'agg
 *)
 val await_immediate : 'a signal -> 'a
 
-(** [is_present s] returns whether [s] is present in the current instant. *)
-val is_present : ('emit, 'agg, 'mode) signal_core -> bool
-
-(** [peek s] returns [Some v] when event signal [s] is present in the current
-    instant with value [v], and [None] otherwise. *)
-val peek : 'a signal -> 'a option
-
 (** {2 Suspension } *)
 
 (** [pause ()] suspends the current task until the next instant.
@@ -252,16 +245,7 @@ val execute_timeline :
     These primitives expose the raw scheduling machinery (kills, threads, manual
     joins, etc.). They are intentionally low level and can break causal ordering
     if misused. Their purpose is to build higher-level combinators such as
-    {!val:watch}, {!val:present_then_else}, or {!val:parallel}. *)
-
-(** {1 Derived operators } *)
-
-(** [present_then s then_branch else_branch] implements the classic Boussinot
-    [present] statement. If [s] is present in the current instant,
-    [then_branch] runs immediately within the same instant; otherwise,
-    [else_branch] is scheduled in the next instant. *)
-val present_then_else :
-  ('emit, 'agg, 'mode) signal_core -> (unit -> unit) -> (unit -> unit) -> unit
+    {!val:watch}, {!val:parallel}, and {!val:App.present_then_else}. *)
 
 (** {1 Core API}
 
@@ -336,24 +320,16 @@ module Low_level : sig
 
   val fork : (unit -> unit) -> thread
   val join : thread -> unit
+
+  (** [is_present s] returns whether [s] is present in the current instant. *)
+  val is_present : ('emit, 'agg, 'mode) signal_core -> bool
+
+  (** [peek s] returns [Some v] when event signal [s] is present in the current
+      instant with value [v], and [None] otherwise. *)
+  val peek : 'a signal -> 'a option
 end
 
 type 'a state
-
-(** [new_state initial] creates a mutable synchronous state cell. *)
-val new_state : 'a -> 'a state
-
-(** [get_state st] reads the current value. *)
-val get_state : 'a state -> 'a
-
-(** [set_state st v] updates the current value and emits an update event. *)
-val set_state : 'a state -> 'a -> unit
-
-(** [modify_state st f] applies [f] to the current value and stores the result. *)
-val modify_state : 'a state -> ('a -> 'a) -> unit
-
-(** [await_state st] waits for the next state update and returns the new value. *)
-val await_state : 'a state -> 'a
 
 module State : sig
   type 'a t = 'a state
@@ -365,6 +341,17 @@ module State : sig
         let now = State.get score in
         Format.printf "score=%d@." now
       ]} *)
+  val create : 'a -> 'a t
+  val get : 'a t -> 'a
+  val set : 'a t -> 'a -> unit
+  val modify : 'a t -> ('a -> 'a) -> unit
+  val await : 'a t -> 'a
+  val update_and_get : 'a t -> ('a -> 'a) -> 'a
+end
+
+module State_cell : sig
+  type 'a t = 'a state
+
   val create : 'a -> 'a t
   val get : 'a t -> 'a
   val set : 'a t -> 'a -> unit
@@ -483,6 +470,16 @@ module App : sig
   val command_if : bool -> 'msg command -> 'msg command
   val command_when : bool -> then_:'msg command -> else_:'msg command -> 'msg command
   val batch : 'msg command list -> 'msg command
+
+  (** [App.present_then_else s then_branch else_branch] implements the classic
+      Boussinot [present] statement. If [s] is present in the current instant,
+      [then_branch] runs immediately within the same instant; otherwise,
+      [else_branch] is scheduled in the next instant. *)
+  val present_then_else :
+    ('emit, 'agg, 'mode) signal_core ->
+    (unit -> unit) ->
+    (unit -> unit) ->
+    unit
 
   (** [boot_once_input ~boot input] returns an input function that emits [boot]
       exactly once on the first poll, then delegates to [input]. *)
@@ -750,10 +747,40 @@ module Dev_hud : sig
   val to_string : inspector_snapshot -> string
 end
 
-(** {1 Layer 2 API}
+(** {1 Extensions API}
 
-    [Layer2] groups all higher-level modules built on top of [Core]. *)
-module Layer2 : sig
+    [Extensions] groups all higher-level modules built on top of [Core]. *)
+module Extensions : sig
+  module Application : sig
+    module App = App
+    module Loop = Loop
+    module Scene = Scene
+    module Resource = Resource
+    module Input_map = Input_map
+  end
+
+  module Temporal : sig
+    module Game = Game
+    module Reactive = Reactive
+    module Fixed_step = Fixed_step
+    module Rng = Rng
+    module Netcode = Netcode
+  end
+
+  module Runtime : sig
+    module Dynamic = Dynamic
+    module State_cell = State_cell
+    module State = State
+    module Event_bus = Event_bus
+    module Profiler = Profiler
+    module Entity_set = Entity_set
+    module Timeline_json = Timeline_json
+    module Tick_tags = Tick_tags
+    module Runtime_snapshot = Runtime_snapshot
+    module Error_bus = Error_bus
+    module Dev_hud = Dev_hud
+  end
+
   module Dynamic = Dynamic
   module Game = Game
   module Reactive = Reactive
@@ -769,9 +796,13 @@ module Layer2 : sig
   module Profiler = Profiler
   module Entity_set = Entity_set
   module State = State
+  module State_cell = State_cell
   module Timeline_json = Timeline_json
   module Tick_tags = Tick_tags
   module Runtime_snapshot = Runtime_snapshot
   module Error_bus = Error_bus
   module Dev_hud = Dev_hud
 end
+
+(** Backward-compatible alias of {!module:Extensions}. *)
+module Layer2 = Extensions

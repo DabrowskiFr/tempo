@@ -22,26 +22,26 @@ module Frp = struct
     out
 
   let fold ~initial f s =
-    let st = new_state initial in
+    let st = State.create initial in
     let rec loop () =
       let v = await s in
-      modify_state st (fun acc -> f acc v);
+      State.modify st (fun acc -> f acc v);
       loop ()
     in
     ignore (Low_level.fork loop);
     st
 
   let hold ~initial s =
-    let st = new_state initial in
+    let st = State.create initial in
     let rec loop () =
       let v = await s in
-      set_state st v;
+      State.set st v;
       loop ()
     in
     ignore (Low_level.fork loop);
     st
 
-  let sample st = get_state st
+  let sample st = State.get st
 
   let once s =
     let out = new_signal () in
@@ -89,11 +89,11 @@ module Frp = struct
     if n < 0 then invalid_arg "Tempo_frp.Frp.debounce_n: n must be >= 0";
     let out = new_signal () in
     let restart = new_signal () in
-    let latest = new_state None in
+    let latest = State.create None in
     let collector () =
       let rec loop () =
         let v = await s in
-        set_state latest (Some v);
+        State.set latest (Some v);
         emit restart ();
         loop ()
       in
@@ -106,7 +106,7 @@ module Frp = struct
           (Low_level.fork (fun () ->
                watch restart (fun () ->
                    Game.after_n n (fun () ->
-                       match get_state latest with Some v -> emit out v | None -> ()))));
+                       match State.get latest with Some v -> emit out v | None -> ()))));
         loop ()
       in
       loop ()

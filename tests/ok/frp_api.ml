@@ -23,7 +23,7 @@ let test_map_filter_fold () =
     let b = await even in
     if b <> 4 then fail "map/filter second mismatch";
     pause ();
-    if get_state sum <> 6 then fail "fold mismatch"
+    if State.get sum <> 6 then fail "fold mismatch"
   in
   parallel [ producer; consumer ]
 
@@ -51,7 +51,7 @@ let test_once_edge () =
   let b = new_signal () in
   let edges = Frp.edge b in
   let first = Frp.once edges in
-  let count = new_state 0 in
+  let count = State.create 0 in
   let producer () =
     emit b false;
     pause ();
@@ -65,20 +65,20 @@ let test_once_edge () =
   in
   let consumer () =
     let _ = await first in
-    modify_state count (fun x -> x + 1);
-    Game.after_n 4 (fun () -> if get_state count <> 1 then fail "once should emit once")
+    State.modify count (fun x -> x + 1);
+    Game.after_n 4 (fun () -> if State.get count <> 1 then fail "once should emit once")
   in
   parallel [ producer; consumer ]
 
 let test_switch_once () =
   let trigger = new_signal () in
-  let st = new_state 0 in
+  let st = State.create 0 in
   let switcher () =
     Frp.switch_once trigger (fun v () ->
-        modify_state st (fun x -> x + v);
+        State.modify st (fun x -> x + v);
         let rec loop () =
           pause ();
-          modify_state st (fun x -> x + 1);
+          State.modify st (fun x -> x + 1);
           loop ()
         in
         loop ())
@@ -91,7 +91,7 @@ let test_switch_once () =
   in
   let checker () =
     Game.after_n 6 (fun () ->
-        let v = get_state st in
+        let v = State.get st in
         if v < 8 || v > 12 then fail "switch_once range mismatch")
   in
   parallel [ switcher; producer; checker ]

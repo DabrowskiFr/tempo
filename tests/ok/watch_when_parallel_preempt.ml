@@ -5,7 +5,7 @@ let () =
     execute_trace ~instants:12 ~inputs:[ None ] (fun _input output ->
         let gate = new_signal () in
         let stop = new_signal () in
-        let count = new_state 0 in
+        let count = State.create 0 in
         parallel
           [
             (fun () ->
@@ -18,9 +18,9 @@ let () =
               watch stop (fun () ->
                   for _ = 1 to 10 do
                     pause ();
-                    when_ gate (fun () -> modify_state count (fun x -> x + 1))
+                    when_ gate (fun () -> State.modify count (fun x -> x + 1))
                   done);
-              emit output (get_state count));
+              emit output (State.get count));
           ])
   in
   match outputs with

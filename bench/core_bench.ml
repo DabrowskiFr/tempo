@@ -114,7 +114,7 @@ let run_await_immediate n =
 let run_when_guard n =
   execute ~instants:(n + 4) (fun _input _output ->
       let g = new_signal () in
-      let count = new_state 0 in
+      let count = State.create 0 in
       parallel
         [
           (fun () ->
@@ -124,7 +124,7 @@ let run_when_guard n =
             done);
           (fun () ->
             for _ = 1 to n do
-              when_ g (fun () -> modify_state count (fun x -> x + 1));
+              when_ g (fun () -> State.modify count (fun x -> x + 1));
               pause ()
             done);
         ])
@@ -162,7 +162,7 @@ let run_combined_core n =
       let tick = new_signal () in
       let gate = new_signal () in
       let stop = new_signal () in
-      let counter = new_state 0 in
+      let counter = State.create 0 in
       parallel
         [
           (fun () ->
@@ -180,7 +180,7 @@ let run_combined_core n =
                 done));
           (fun () ->
             for _ = 1 to n do
-              when_ gate (fun () -> modify_state counter (fun x -> x + 1));
+              when_ gate (fun () -> State.modify counter (fun x -> x + 1));
               pause ()
             done);
         ])

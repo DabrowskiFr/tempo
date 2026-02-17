@@ -55,7 +55,7 @@ let main input output =
   let toggle_level = new_signal () in
   let toggle_edge = Frp.edge toggle_level in
   let first_toggle = Frp.once toggle_edge in
-  let show_hint = new_state true in
+  let show_hint = State.create true in
 
   let quit_watcher () =
     let rec loop () =
@@ -76,7 +76,7 @@ let main input output =
 
   let first_toggle_watcher () =
     let _ = await first_toggle in
-    set_state show_hint false;
+    State.set show_hint false;
     let rec idle () =
       pause ();
       idle ()
@@ -117,7 +117,7 @@ let main input output =
             let nx = clamp (x +. dx) ~min:60.0 ~max:730.0 in
             emit x_target nx;
             let msg =
-              if get_state show_hint then "First TAB detected with once()" else "Switch scenes anytime with TAB"
+              if State.get show_hint then "First TAB detected with once()" else "Switch scenes anytime with TAB"
             in
             emit output (Play_frame (nx, msg));
             loop ()

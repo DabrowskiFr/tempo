@@ -2,12 +2,12 @@ open Tempo
 
 let observe_guard ~guard ~events ~st () =
   for _ = 1 to events do
-    when_ guard (fun () -> modify_state st (fun x -> x + 1));
+    when_ guard (fun () -> State.modify st (fun x -> x + 1));
     pause ()
   done
 
 let combined_listener guard_a guard_b combo () =
-  when_ guard_a (fun () -> when_ guard_b (fun () -> modify_state combo (fun x -> x + 1)));
+  when_ guard_a (fun () -> when_ guard_b (fun () -> State.modify combo (fun x -> x + 1)));
   pause ()
 
 let driver guard_a guard_b () =
@@ -25,9 +25,9 @@ let () =
     execute_trace ~instants:16 ~inputs:[ None ] (fun _input output ->
         let guard_a = new_signal () in
         let guard_b = new_signal () in
-        let a_hits = new_state 0 in
-        let b_hits = new_state 0 in
-        let combo = new_state 0 in
+        let a_hits = State.create 0 in
+        let b_hits = State.create 0 in
+        let combo = State.create 0 in
         let procs =
           [
             driver guard_a guard_b;
@@ -37,7 +37,7 @@ let () =
           ]
         in
         parallel (if swap then List.rev procs else procs);
-        emit output (get_state a_hits, get_state b_hits, get_state combo))
+        emit output (State.get a_hits, State.get b_hits, State.get combo))
   in
   let a = run ~swap:false in
   let b = run ~swap:true in

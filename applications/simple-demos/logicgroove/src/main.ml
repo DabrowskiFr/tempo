@@ -113,7 +113,7 @@ let render s =
 let main input output =
   let rng = Rng.create 8080 in
   let state =
-    new_state
+    State.create
       {
         pat = random_pattern rng;
         step = 0;
@@ -127,7 +127,7 @@ let main input output =
   let repairs = Event_bus.channel () in
 
   let apply_suggestion (sug : suggestion) =
-    modify_state state (fun s ->
+    State.modify state (fun s ->
         let p = copy_pat s.pat in
         p.snare.(sug.step) <- true;
         { s with pat = p; suggestions = [] })
@@ -136,11 +136,11 @@ let main input output =
   let input_proc () =
     let rec loop () =
       let i = await input in
-      if i.toggle_run then modify_state state (fun s -> { s with running = not s.running });
-      if i.cycle_mode then modify_state state (fun s -> { s with mode = next_mode s.mode });
-      if i.randomize then modify_state state (fun s -> { s with pat = random_pattern rng; violations = 0; verdict = "?"; suggestions = [] });
+      if i.toggle_run then State.modify state (fun s -> { s with running = not s.running });
+      if i.cycle_mode then State.modify state (fun s -> { s with mode = next_mode s.mode });
+      if i.randomize then State.modify state (fun s -> { s with pat = random_pattern rng; violations = 0; verdict = "?"; suggestions = [] });
       if i.apply_fix then
-        match (get_state state).suggestions with
+        match (State.get state).suggestions with
         | sug :: _ -> apply_suggestion sug
         | [] -> ();
       loop ()
@@ -150,14 +150,14 @@ let main input output =
 
   let sequencer () =
     Game.every_n 4 (fun () ->
-        let s = get_state state in
+        let s = State.get state in
         if s.running then (
           let step = (s.step + 1) mod steps in
           let ok, r1_ok, r2_ok = eval_rules s.pat step in
           let suggestions = if ok then [] else (match mk_suggestion s.pat step with Some x -> [ x ] | None -> []) in
           let verdict = if ok then "?" else "False" in
           let violations = if ok then s.violations else s.violations + 1 in
-          set_state state { s with step; verdict; violations; suggestions };
+          State.set state { s with step; verdict; violations; suggestions };
           if not r1_ok then Event_bus.publish repairs "NeedSnare";
           if not r2_ok then Event_bus.publish repairs "NoDoubleSnare"))
   in
@@ -165,7 +165,7 @@ let main input output =
   let repair_engine () =
     let rec loop () =
       let _events = Event_bus.await_batch repairs in
-      let s = get_state state in
+      let s = State.get state in
       match (s.mode, s.suggestions) with
       | Strict, sug :: _ -> apply_suggestion sug
       | _ -> ();
@@ -176,7 +176,7 @@ let main input output =
 
   let renderer () =
     let rec loop () =
-      emit output (get_state state);
+      emit output (State.get state);
       pause ();
       loop ()
     in

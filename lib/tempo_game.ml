@@ -23,7 +23,7 @@ module Sync = struct
   let await_batch = Event_bus.await_batch
 
   let rec pump_input decode input_signal bus =
-    (match Tempo.peek input_signal with
+    (match Tempo.Low_level.peek input_signal with
     | Some raw -> List.iter (publish bus) (decode raw)
     | None -> ());
     Tempo.pause ();
@@ -305,7 +305,7 @@ module Store = struct
     let last_view : 'view option ref = ref None in
     Tempo.execute ?instants ~input ~output (fun input_signal output_signal ->
         let rec loop () =
-          (match Tempo.peek input_signal with
+          (match Tempo.Low_level.peek input_signal with
           | Some msg -> model := app.update !model msg
           | None -> ());
           let v = app.view !model in

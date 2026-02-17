@@ -1099,6 +1099,8 @@ module Low_level = struct
 
   let fork = fork
   let join = join
+  let is_present = is_present
+  let peek = peek
 end
 
 module Tick_tags = struct
@@ -1173,6 +1175,8 @@ module State = struct
     modify st f;
     get st
 end
+
+module State_cell = State
 
 module Runtime_snapshot = struct
   type t = {
@@ -1375,6 +1379,7 @@ module App = struct
   let command_when cond ~then_ ~else_ = if cond then then_ else else_
 
   let batch cmds ~dispatch = List.iter (fun cmd -> cmd ~dispatch) cmds
+  let present_then_else = present_then_else
 
   let boot_once_input ~boot input =
     let boot_sent = ref false in
@@ -1734,7 +1739,37 @@ module Dev_hud = struct
   let to_string snap = String.concat "\n" (to_lines snap)
 end
 
-module Layer2 = struct
+module Extensions = struct
+  module Application = struct
+    module App = App
+    module Loop = Loop
+    module Scene = Scene
+    module Resource = Resource
+    module Input_map = Input_map
+  end
+
+  module Temporal = struct
+    module Game = Game
+    module Reactive = Reactive
+    module Fixed_step = Fixed_step
+    module Rng = Rng
+    module Netcode = Netcode
+  end
+
+  module Runtime = struct
+    module Dynamic = Dynamic
+    module State_cell = State_cell
+    module State = State
+    module Event_bus = Event_bus
+    module Profiler = Profiler
+    module Entity_set = Entity_set
+    module Timeline_json = Timeline_json
+    module Tick_tags = Tick_tags
+    module Runtime_snapshot = Runtime_snapshot
+    module Error_bus = Error_bus
+    module Dev_hud = Dev_hud
+  end
+
   module Dynamic = Dynamic
   module Game = Game
   module Reactive = Reactive
@@ -1750,9 +1785,12 @@ module Layer2 = struct
   module Profiler = Profiler
   module Entity_set = Entity_set
   module State = State
+  module State_cell = State_cell
   module Timeline_json = Timeline_json
   module Tick_tags = Tick_tags
   module Runtime_snapshot = Runtime_snapshot
   module Error_bus = Error_bus
   module Dev_hud = Dev_hud
 end
+
+module Layer2 = Extensions
