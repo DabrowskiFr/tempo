@@ -1033,7 +1033,7 @@ let abort_kill k =
 
 let with_kill k body = perform (With_kill (k, body))
 
- let watch :
+let watch :
     type emit agg mode. (emit, agg, mode) signal_core -> (unit -> unit) -> unit =
   fun s body ->
     let shared_k = new_kill () in
@@ -1041,7 +1041,14 @@ let with_kill k body = perform (With_kill (k, body))
     let guardian () =
       with_kill shared_k (fun () ->
           with_kill guardian_k (fun () ->
-              when_ s (fun () -> abort_kill shared_k)))
+              let fired : unit signal = new_signal () in
+              (* Weak preemption:
+                 - detect [s] in current instant via [when_]
+                 - publish [fired] immediately
+                 - [await fired] resumes at next instant boundary *)
+              when_ s (fun () -> emit fired ());
+              ignore (await fired);
+              abort_kill shared_k))
     in
     let _ = fork guardian in
     with_kill shared_k (fun () ->

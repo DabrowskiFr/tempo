@@ -21,6 +21,7 @@
   watch_nested
   watch_when_complete
   watch_when_killed
+  watch_weak_preemption_minimal
   when_await_imm_next_instant
   when_await_imm_same_instant
   when_await_nested
