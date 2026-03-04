@@ -14,10 +14,13 @@
   professor
   student
   movement
+  control
+  clock
   suspicion
   flag_counter
   question
   action_feedback
+  audio_logic
   render)
  (libraries tempo))
 
@@ -25,7 +28,7 @@
  (name main)
  (public_name cheat_detector_game)
  (modules main raylib_adapter raylib_platform)
- (libraries game_univ_core tempo tempo-raylib raylib))
+ (libraries game_univ_core tempo tempo-raylib raylib unix))
 
 (executable
  (name headless_runner)

@@ -1,6 +1,7 @@
 open Types
 
 let interaction_radius_sq = 55.0 *. 55.0
+let combo_window_frames = 5 * 60
 
 let difficulty_factor = function
   | 0 -> 0.75
@@ -36,6 +37,7 @@ let reset_world (world : world) =
   world.combo_window_left <- 0;
   world.game_over <- false;
   world.message <- "Appuyez sur Entree ou Espace pour demarrer";
+  world.pending_audio <- [];
   Array.iter
     (fun s ->
       s.cheating <- false;
@@ -58,6 +60,52 @@ let nearest_student (world : world) =
     world.students;
   (!best_id, !best_d2)
 
+let zone_of_x x =
+  if x < 320.0 then 0
+  else if x < 480.0 then 1
+  else 2
+
+let zone_label = function
+  | 0 -> "Gauche"
+  | 1 -> "Centre"
+  | _ -> "Droite"
+
+let profile_label = function
+  | Prudent -> "prudent"
+  | Opportunist -> "opportuniste"
+  | Chaotic -> "chaotique"
+
+let profile_capture_bonus = function
+  | Prudent -> 4
+  | Opportunist -> 2
+  | Chaotic -> 1
+
+let profile_energy_cost = function
+  | Prudent -> 1.0
+  | Opportunist -> 1.2
+  | Chaotic -> 1.4
+
+let caught_cooldown_frames profile difficulty =
+  match (difficulty, profile) with
+  | 0, Prudent -> 10 * 60
+  | 0, Opportunist -> 8 * 60
+  | 0, Chaotic -> 7 * 60
+  | 1, Prudent -> 7 * 60
+  | 1, Opportunist -> 6 * 60
+  | 1, Chaotic -> 5 * 60
+  | _, Prudent -> 5 * 60
+  | _, Opportunist -> 4 * 60
+  | _, Chaotic -> 3 * 60
+
+let reset_combo world =
+  world.combo <- 0;
+  world.combo_window_left <- 0
+
+let register_combo world =
+  if world.combo_window_left > 0 then world.combo <- world.combo + 1 else world.combo <- 1;
+  world.combo_window_left <- combo_window_frames;
+  if world.combo > world.combo_best then world.combo_best <- world.combo
+
 let process (bus : Bus.t) (world : world) =
   let rec loop () =
     let input = Tempo.await bus.input in
@@ -73,24 +121,64 @@ let process (bus : Bus.t) (world : world) =
       | Some id when d2 <= interaction_radius_sq ->
         let s = world.students.(id) in
         if s.cheating then (
-          world.score <- world.score + 10;
-          world.energy <- Time_helpers.clamp (world.energy -. 1.2) ~min:0.0 ~max:100.0;
+          register_combo world;
+          let combo_bonus = min 12 ((world.combo - 1) * 2) in
+          let zone_bonus = if zone_of_x s.pos.x = world.hot_zone then 2 else 0 in
+          let points = 8 + profile_capture_bonus s.profile + combo_bonus + zone_bonus in
+          world.score <- world.score + points;
+          world.energy <-
+            Time_helpers.clamp
+              (world.energy -. profile_energy_cost s.profile)
+              ~min:0.0 ~max:100.0;
           world.catches <- world.catches + 1;
-          world.message <- Printf.sprintf "Etudiant %d pris en flagrant delit" id;
+          s.cheating <- false;
+          s.cheat_hold <- 0;
+          s.caught_cooldown <- caught_cooldown_frames s.profile world.difficulty;
+          s.tell <- 0.0;
+          world.message <-
+            Printf.sprintf
+              "Flagrant delit S%d (%s) : +%d | combo x%d | zone %s"
+              id (profile_label s.profile) points world.combo
+              (zone_label world.hot_zone);
+          let combo_suffix =
+            if world.combo > 1 then Printf.sprintf " Combo x%d" world.combo else ""
+          in
             Tempo.emit bus.evt
-              [ Ask_success id; Ask_feedback ({ x = s.pos.x; y = s.pos.y }, true, "+10 Flagrant delit") ])
+              [
+                Ask_success id;
+                Ask_feedback
+                  ( { x = s.pos.x; y = s.pos.y },
+                    true,
+                    Printf.sprintf "+%d Flagrant%s" points combo_suffix );
+              ])
         else (
-          world.score <- world.score - 4;
+          let penalty = 4 + min 3 (world.combo / 2) in
+          world.score <- world.score - penalty;
           world.energy <- Time_helpers.clamp (world.energy -. 1.8) ~min:0.0 ~max:100.0;
           world.false_positives <- world.false_positives + 1;
-            world.message <- Printf.sprintf "Faux positif sur l'etudiant %d" id;
+          let had_combo = world.combo > 0 in
+          reset_combo world;
+          world.message <-
+            if had_combo then
+              Printf.sprintf "Faux positif sur S%d: combo casse" id
+            else Printf.sprintf "Faux positif sur l'etudiant %d" id;
             Tempo.emit bus.evt
-              [ Ask_miss (Some id); Ask_feedback ({ x = s.pos.x; y = s.pos.y }, false, "-4 Faux positif") ])
+              [
+                Ask_miss (Some id);
+                Ask_feedback
+                  ( { x = s.pos.x; y = s.pos.y },
+                    false,
+                    Printf.sprintf "-%d Faux positif" penalty );
+              ])
       | _ ->
           world.score <- world.score - 1;
           world.energy <- Time_helpers.clamp (world.energy -. 0.8) ~min:0.0 ~max:100.0;
           world.empty_checks <- world.empty_checks + 1;
-          world.message <- "Personne a interroger a proximite";
+          let had_combo = world.combo > 0 in
+          reset_combo world;
+          world.message <-
+            if had_combo then "Verification vide: combo casse"
+            else "Personne a interroger a proximite";
           Tempo.emit bus.evt
             [
               Ask_miss None;

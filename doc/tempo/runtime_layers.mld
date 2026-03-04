@@ -4,7 +4,9 @@ Tempo is organized as follows:
 
 - the shared signal substrate in {!module-Tempo}
 - the recommended programming surface in {!module-Tempo.Core}
-- higher-level application helpers in {!module-Tempo.App}, {!module-Tempo.Loop} and {!module-Tempo.Scene}
+- higher-level reactive operators in {!module-Tempo.Constructs}
+- observation and instrumentation helpers in {!module-Tempo.Observe}
+- metadata in {!module-Tempo.Meta}
 - advanced primitives in {!module-Tempo.Low_level}
 - additional packages such as `tempo-app`, `tempo-jobs`, `tempo-frp`,
   `tempo-raylib` and `tempo-fluidsynth`

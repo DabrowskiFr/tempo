@@ -141,4 +141,5 @@ type world = {
   mutable combo_window_left : int;
   mutable game_over : bool;
   mutable message : string;
+  mutable pending_audio : audio_cmd list;
 }

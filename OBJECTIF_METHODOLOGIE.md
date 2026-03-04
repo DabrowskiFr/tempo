@@ -50,6 +50,10 @@ en priorité sur :
 9. lors d'un port progressif d'API runtime, ne pas déléguer les primitives
    centrales (`execute`) à une implémentation plus simple tant que l'équivalence
    sémantique n'est pas prouvée par les tests
+10. pour les applications vitrines, préférer une orchestration explicite de
+    plusieurs processus Tempo plutôt qu'une grosse boucle unique mutable, même
+    si une petite quantité d'état partagé reste nécessaire pour composer la
+    frame finale
 
 ## Points d'attention
 

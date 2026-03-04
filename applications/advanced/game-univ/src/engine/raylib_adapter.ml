@@ -689,5 +689,6 @@ let spec : (input_state, frame) Raylib_platform.spec =
     on_init = init_audio_assets;
     on_shutdown = shutdown_audio_assets;
     read_input;
+    wait_input = None;
     render = render_frame;
   }

@@ -175,3 +175,46 @@ Le `cheat_detector_game` réintroduit :
 
 Ce n'est pas la restauration bit-à-bit de l'ancien `game-univ`, mais c'est une
 reconstruction locale cohérente de la vitrine réactive recherchée.
+
+### Refactorisation de `game-univ` comme vitrine Tempo
+
+- objectif : rendre `applications/advanced/game-univ` plus démonstratif du
+  coeur Tempo, en réduisant le poids de la boucle monolithique de
+  `src/game.ml`
+- décision retenue :
+  - conserver `Game.initial_world`
+  - transformer `Game.process` en simple orchestration de processus Tempo
+  - déplacer les responsabilités vers des sous-systèmes explicites :
+    - `systems/control.ml`
+    - `systems/clock.ml`
+    - `systems/audio_logic.ml`
+    - `systems/question.ml`
+    - `systems/render.ml`
+    - `entities/professor.ml`
+    - `entities/student.ml`
+    - `systems/suspicion.ml`
+    - `systems/action_feedback.ml`
+    - `systems/flag_counter.ml`
+- amélioration importante :
+  - `engine/tempo_runtime.ml` utilise maintenant `Tempo.run_interactive`
+    quand aucun nombre d'instants n'est imposé
+  - `engine/game_io.ml` a reçu un champ `wait_input`
+  - `engine/raylib_platform.ml` utilise ce champ et dort jusqu'au prochain
+    frame au lieu de boucler activement
+- tentative partiellement échouée :
+  - faire transiter l'audio du jeu par un signal agrégé, puis le relire dans
+    `render.flush`
+  - échec : sur l'API historique de `develop`, les champs internes des signaux
+    agrégés ne sont pas accessibles proprement depuis les applications, et
+    `Tempo.Low_level.peek` ne fonctionne que sur les signaux événementiels
+- correction retenue :
+  - garder l'ordonnancement audio comme processus Tempo dans
+    `systems/audio_logic.ml`
+  - utiliser un tampon de frame `world.pending_audio` vidé dans
+    `systems/render.ml`
+  - cela garde la structure réactive globale tout en évitant de forcer une
+    refonte plus profonde du runtime historique
+- validation :
+  - `dune build applications/advanced/game-univ/src/main.exe applications/advanced/game-univ/src/headless_runner.exe`
+  - `dune exec ./applications/advanced/game-univ/src/headless_runner.exe`
+  - `dune build && dune runtest && dune build @doc`

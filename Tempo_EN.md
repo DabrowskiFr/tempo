@@ -1,198 +1,174 @@
 # Tempo
 
 ## 1. Overview
-Tempo is an OCaml synchronous reactive programming library built on algebraic effects (OCaml 5). It runs concurrent processes over a sequence of **logical instants**.
 
-Core idea:
-- execution advances instant by instant;
-- signals emitted during an instant are observed depending on primitives (`await`, `await_immediate`, `when_`, `watch`);
-- signal absence is decided at the end of the instant, which supports deterministic behavior.
+Tempo is an OCaml synchronous reactive programming library built around logical instants.
 
-## 2. Execution model
-### 2.1 Instants
-An instant is one synchronous logical frame of computation.
+Its core model is:
+- processes communicate through signals;
+- each instant is one synchronous reaction step;
+- signal absence is decided only at the end of the instant;
+- concurrency stays deterministic as long as execution remains inside that model.
 
-### 2.2 Signals
-Two signal families:
-- `new_signal ()`: event signal (at most one emission per instant)
-- `new_signal_agg ~initial ~combine`: aggregate signal (multiple emissions per instant, folded with `combine`)
+## 2. Main surface
 
-### 2.3 High-level primitives
-- `emit s v`
-- `await s`
-- `await_immediate s`
-- `pause ()`
-- `parallel [ ... ]`
-- `when_ g body`
-- `watch s body`
-- `present_then_else s t e`
+### 2.1 Recommended modules
 
-### 2.4 Execution
-- `execute ?instants ?input ?output main`
-- `execute_trace ~inputs main`: capture outputs
-- `execute_timeline ~inputs main`: per-instant input/output trace
-- `execute_inspect ~on_instant ...`: runtime inspection snapshots (tasks/signals)
+The recommended public surface is:
+- `Tempo.Core` for synchronous primitives;
+- `Tempo.Constructs` for higher-level derived operators;
+- `Tempo.Observe` for tracing and inspection;
+- `Tempo.Meta` for version and API-level metadata.
 
-## 3. Main API modules
-### 3.1 Core
-- `Tempo`: synchronous primitives, signals, execution
-- `Tempo.Low_level`: fork/join/kill (advanced usage)
+The same primitives are also available at the top level of `Tempo` for compatibility.
 
-### 3.2 State/process tools
-- `new_state/get_state/set_state/modify_state/await_state`
-- `Tempo.State.create/get/set/modify/await/update_and_get`
-- `Tempo.Dynamic`: `spawn/stop/join/spawn_many`
+### 2.2 `Tempo.Core`
 
-### 3.3 Gameplay helpers
-- `Tempo.Game.after_n`
-- `Tempo.Game.every_n`
-- `Tempo.Game.timeout`
-- `Tempo.Game.cooldown`
+`Tempo.Core` is the canonical programming surface:
+- `new_signal`
+- `new_signal_agg`
+- `emit`
+- `await`
+- `await_immediate`
+- `pause`
+- `loop`
+- `when_`
+- `watch`
+- `parallel`
+- `execute`
+- `run_interactive`
 
-### 3.4 Game-dev modules
-- `Tempo.Scene`: scene transitions
-- `Tempo.Resource`: resource lifecycle
-- `Tempo.Input_map`: action mapping
-- `Tempo.Event_bus`: typed event bus
-- `Tempo.Fixed_step`: fixed-step loop / interpolation
-- `Tempo.Rng`: deterministic RNG
-- `Tempo.Netcode`: frame-tagged snapshots + rollback on `state`
-- `Tempo.Profiler`: timing measurements
-- `Tempo.Tick_tags`: instant tags
-- `Tempo.Runtime_snapshot`: runtime state capture/restore
-- `Tempo.Error_bus`: safe execution and structured error reporting
-- `Tempo.Timeline_json.of_timeline_with`: named-argument JSON timeline export
-- `Tempo.Dev_hud`: text rendering of inspection snapshots
-- `Tempo.Entity_set`: dynamic entity spawn/despawn/broadcast
+### 2.3 `Tempo.Constructs`
 
-## 4. `tempo.game` package
-In addition to `tempo`, this repository exposes `tempo.game` (module `Tempo_game`) that re-exports game-oriented modules:
-- `Scene`, `Resource`, `Input_map`, `Event_bus`, `Fixed_step`, `Rng`, `Netcode`, `Profiler`, `Tick_tags`, `Runtime_snapshot`, `Entity_set`, `Dev_hud`, `Error_bus`, `Timeline_json`.
+`Tempo.Constructs` gathers higher-level reactive operators:
+- `present_then_else`
+- `after_n`
+- `every_n`
+- `timeout`
+- `cooldown`
+- `rising_edge`
+- `falling_edge`
+- `edge_by`
+- `pulse_n`
+- `supervise_until`
 
-## 5. Dependencies
-### 5.1 Tempo library dependencies
-- OCaml >= 5.3.0
-- dune >= 3.19
-- logs >= 0.10.0
-- mtime >= 2.1.0
+### 2.4 `Tempo.Low_level`
 
-### 5.2 Optional dependencies for graphical games (example)
-Tempo does not require a rendering engine. For a 2D game like `game-univ`, you can add:
-- `raylib` (OCaml bindings)
-- optional audio/assets stack depending on your setup
+`Tempo.Low_level` is meant for extension authors and advanced runtime work:
+- `with_guard`
+- `new_kill`
+- `with_kill`
+- `abort_kill`
+- `abort_kill_next`
+- `fork`
+- `join`
+- `peek`
+- `is_present`
 
-## 6. Installation
-### 6.1 From this repository (local pin)
-```bash
-opam switch create 5.4.0   # or 5.3.x+
-eval $(opam env)
-opam install dune logs mtime
-opam pin add tempo /Users/fredericdabrowski/Repos/tempo
-```
+### 2.5 `Tempo.Observe`
 
-### 6.2 From GitHub
-```bash
-opam pin add tempo https://github.com/DabrowskiFr/tempo.git
-```
+`Tempo.Observe` contains runtime observation helpers:
+- `execute_trace`
+- `execute_timeline`
+- `execute_inspect`
 
-## 7. Build, tests, benchmarks, docs
-### 7.1 Build
-```bash
-cd /Users/fredericdabrowski/Repos/tempo
-dune build
-```
+### 2.6 `Tempo.Meta`
 
-### 7.2 Tests
-```bash
-dune runtest
-```
+`Tempo.Meta` exposes:
+- `version_string`
+- `api_level`
+- `require_api_level`
 
-### 7.3 Benchmarks
-```bash
-dune exec bench/basic_bench.exe
-```
+## 3. Execution
 
-### 7.4 Repository docs
-- Game quickstart: `docs/GAME_QUICKSTART.md`
-- Main README: `README.md`
+Tempo exposes two execution styles:
+- `execute` for batch/scripted runs;
+- `run_interactive` for long-lived applications.
 
-## 8. Using Tempo in a Dune project
-Example `dune`:
-```lisp
-(executable
- (name main)
- (libraries tempo))
-```
+The interactive runtime uses a hybrid model:
+- `push` wakes the runtime up;
+- `poll` imports external data at a controlled inter-instant boundary.
 
-If you want game-oriented modules:
-```lisp
-(executable
- (name main)
- (libraries tempo tempo.game))
-```
+This matters for host inputs and `tempo-jobs`:
+- external producers do not mutate the runtime directly;
+- they notify wakeups;
+- data is imported when the runtime opens the next logical instant.
 
-In your code:
-```ocaml
-open Tempo
-```
+## 4. Companion packages
 
-## 9. Minimal example
+### 4.1 `tempo-app`
+
+`tempo-app` provides lightweight application structuring:
+- `Tempo_app.App`
+- `Tempo_app.Loop`
+- `Tempo_app.Scene`
+
+### 4.2 `tempo-jobs`
+
+`tempo-jobs` runs external jobs on OCaml domains and bridges their progress/completion back into Tempo.
+
+It is useful when you need:
+- real parallelism;
+- a disciplined bridge back into the synchronous runtime;
+- cooperative cancellation.
+
+### 4.3 `tempo-raylib`
+
+`tempo-raylib` provides Raylib helpers for demos and graphical applications.
+
+### 4.4 `tempo-fluidsynth`
+
+`tempo-fluidsynth` provides a FluidSynth backend for:
+- better sounding musical demos;
+- MIDI import;
+- SoundFont-based playback.
+
+### 4.5 `tempo-frp`
+
+`tempo-frp` remains available as an FRP/SF encoding on top of Tempo. It is not the main recommended entry point for learning the library.
+
+## 5. Minimal example
+
 ```ocaml
 open Tempo
 
 let () =
-  execute (fun input output ->
-    let rec loop tick =
-      when_ input (fun () ->
-        let v = await_immediate input in
-        emit output (tick + v));
-      pause ();
-      loop (tick + 1)
+  Core.execute (fun input output ->
+    let rec loop () =
+      Core.when_ input (fun () ->
+        let v = Core.await_immediate input in
+        Core.emit output (v + 1));
+      Core.pause ();
+      loop ()
     in
-    loop 0)
+    loop ())
 ```
 
-## 10. Recommended game architecture
-Typical structure:
-- one platform adapter (raylib/headless/etc.)
-- `execute ~input ~output`
-- parallel Tempo processes for:
-  - input mapping
-  - gameplay/entities
-  - UI/HUD
-  - audio/events
+## 6. Demo applications
 
-Best practices:
-- keep gameplay logic in Tempo, not in rendering adapters;
-- use `Event_bus` to decouple gameplay/UI/audio;
-- use `execute_timeline` + `Timeline_json.of_timeline_with` for deterministic debugging;
-- use `Dynamic`/`Entity_set` for runtime spawn/despawn.
+Important advanced applications in this repository:
+- `applications/advanced/game-univ`
+- `applications/advanced/music_score_player`
+- `applications/advanced/refactor`
+- `applications/advanced/tempo-core-studio`
 
-## 11. Error handling
-- Wrap unsafe code with `Error_bus.safe`.
-- Use `Error_bus.execute_safe` for top-level safe execution and structured error publication on a dedicated signal.
+Simple demos:
+- `applications/simple-demos/score-player-raylib`
+- `applications/simple-demos/snake-raylib`
+- `applications/simple-demos/boids-raylib`
 
-## 12. Runtime inspection and debugging
-- `execute_inspect` provides, per instant:
-  - `instant`
-  - `current_tasks`
-  - `blocked_tasks`
-  - `next_tasks`
-  - `signal_count`
-- `Dev_hud.to_string` converts snapshots into text suitable for in-game debug overlays.
+## 7. Build and test
 
-## 13. Version/API
-- `Tempo.version_string`
-- `Tempo.api_level`
-- `Tempo.require_api_level n`
+```bash
+cd /Users/fredericdabrowski/Repos/tempo/tempo-dev/tempo
+dune build
+dune runtest
+dune build @doc
+```
 
-## 14. Current limits (v1)
-- Runtime snapshots currently rely on registered `state` cells (not full scheduler serialization).
-- `tempo.game` is practical utility surface; some APIs may evolve.
+## 8. Useful references
 
-## 15. Repository references
 - Public API: `lib/tempo.mli`
-- Implementation: `lib/tempo.ml`
-- Game re-export module: `lib/tempo_game.mli`, `lib/tempo_game.ml`
+- Main implementation: `lib/tempo.ml`
 - Tests: `tests/ok`
-- Tempo-based game example: `applications/advanced/game-univ/`
+- Odoc pages: `doc/`

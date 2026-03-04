@@ -10,6 +10,18 @@ let profile_base profile frame id factor =
       wave > (-0.04 -. ((factor -. 1.0) *. 0.3))
 
 let process (bus : Bus.t) (world : world) (student : student) =
+  let caught_cooldown_frames profile difficulty =
+    match (difficulty, profile) with
+    | 0, Prudent -> 10 * 60
+    | 0, Opportunist -> 8 * 60
+    | 0, Chaotic -> 7 * 60
+    | 1, Prudent -> 7 * 60
+    | 1, Opportunist -> 6 * 60
+    | 1, Chaotic -> 5 * 60
+    | _, Prudent -> 5 * 60
+    | _, Opportunist -> 4 * 60
+    | _, Chaotic -> 3 * 60
+  in
   let rec loop frame =
     let _ = Tempo.await bus.input in
     let radius_sq = world.detection_radius *. world.detection_radius in
@@ -24,6 +36,7 @@ let process (bus : Bus.t) (world : world) (student : student) =
     in
     let cheating_now =
       if world.game_over || not world.started || world.paused then false
+      else if student.caught_cooldown > 0 then false
       else
         match student.profile with
         | Prudent -> base && not in_range
@@ -41,6 +54,9 @@ let process (bus : Bus.t) (world : world) (student : student) =
       Tempo.emit bus.evt
         [ if cheating_now then Cheating_start student.id else Cheating_stop student.id ];
     student.cheating <- cheating_now;
+    if student.caught_cooldown > 0 then student.caught_cooldown <- student.caught_cooldown - 1;
+    if cheating_now && in_range && base then
+      student.cheat_hold <- caught_cooldown_frames student.profile world.difficulty;
     loop (frame + 1)
   in
   loop 0

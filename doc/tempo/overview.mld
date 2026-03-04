@@ -4,9 +4,9 @@ Tempo is a synchronous runtime for OCaml.
 
 The intended reading order is:
 1. {!module-Tempo.Core}
-2. {!module-Tempo.App}
-3. {!module-Tempo.Loop}
-4. {!module-Tempo.Scene}
+2. {!module-Tempo.Constructs}
+3. {!module-Tempo.Observe}
+4. {!module-Tempo.Meta}
 5. {!module-Tempo.Low_level}
 
 Primary companion packages:

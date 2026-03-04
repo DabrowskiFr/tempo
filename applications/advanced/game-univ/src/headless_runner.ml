@@ -43,7 +43,7 @@ let build_script instants =
 let run_simulation instants =
   let world = Game.initial_world () in
   let adapter = Headless_adapter.create (build_script instants) in
-  Tempo_runtime.run ~io:adapter.io (fun input output ->
+  Tempo_runtime.run ~instants:(instants + 1) ~io:adapter.io (fun input output ->
       let bus = Bus.create ~input ~output in
       let stop = Tempo.new_signal () in
       let quit_watcher () =

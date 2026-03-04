@@ -1,5 +1,10 @@
 open Types
 
+let zone_label = function
+  | 0 -> "Gauche"
+  | 1 -> "Centre"
+  | _ -> "Droite"
+
 let frame_process (bus : Bus.t) (world : world) =
   let rec loop () =
     let _ = Tempo.await bus.input in
@@ -16,6 +21,7 @@ let frame_process (bus : Bus.t) (world : world) =
     Tempo.emit bus.draw
       [
         Draw_room;
+        Draw_hot_zone world.hot_zone;
         Draw_hud
           {
             score = world.score;
@@ -30,8 +36,8 @@ let frame_process (bus : Bus.t) (world : world) =
             energy = world.energy;
             focus_left = world.focus_left;
             cheat_window_factor = world.cheat_window_factor;
-            hot_zone_label = "N/A";
-            hot_zone_left = 0;
+            hot_zone_label = zone_label world.hot_zone;
+            hot_zone_left = world.hot_zone_left;
             catches = world.catches;
             false_positives = world.false_positives;
             empty_checks = world.empty_checks;
@@ -50,10 +56,12 @@ let frame_process (bus : Bus.t) (world : world) =
 let flush (bus : Bus.t) (world : world) =
   let rec loop () =
     let cmds = Tempo.await bus.draw in
+    let audio = List.rev world.pending_audio in
+    world.pending_audio <- [];
     let frame =
       {
         draw = List.rev cmds;
-        audio = [];
+        audio;
         score = world.score;
         flagged = world.flagged;
         message = world.message;
