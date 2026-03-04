@@ -84,6 +84,7 @@ let process (bus : Bus.t) (world : world) =
     [
       (fun () -> Control.process bus world);
       (fun () -> Clock.process bus world);
+      (fun () -> Score.process bus world);
       (fun () -> Professor.process bus world);
       (fun () -> Suspicion.process bus world);
       (fun () -> Flag_counter.process bus world);
