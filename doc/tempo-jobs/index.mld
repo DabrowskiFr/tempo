@@ -1,0 +1,12 @@
+{0 tempo-jobs}
+
+`tempo-jobs` runs external jobs on OCaml domains and bridges their updates into
+Tempo.
+
+Guarantees:
+- updates are imported into Tempo at inter-instant boundaries
+- jobs can wake an interactive runtime without busy waiting
+
+Non-guarantees:
+- the arrival time of external updates is not deterministic in the same sense
+  as the pure Tempo core

@@ -1,0 +1,17 @@
+{0 Tempo}
+
+Tempo is the primary package of the project.
+
+It exposes:
+- {!module-Tempo.Core}: the canonical synchronous programming API
+- {!module-Tempo.App}: the higher-level application loop
+- {!module-Tempo.Loop}: a simpler state-loop helper
+- {!module-Tempo.Scene}: scene transition helper
+- {!module-Tempo.Low_level}: advanced scheduler primitives for extension authors
+
+See also:
+- {!page-overview}
+- {!page-runtime_layers}
+- the dedicated `tempo-app` package for the application helpers as a standalone package
+- the dedicated `tempo-jobs` package for external jobs on domains
+- the dedicated `tempo-fluidsynth` package for musical demos

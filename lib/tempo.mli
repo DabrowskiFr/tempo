@@ -237,7 +237,7 @@ val register_wakeup_poller : wakeup -> (unit -> bool) -> unit
 
 (** [emit_from_host signal value] injects an event from host code while a Tempo
     runtime is active. *)
-val emit_from_host : ('a, 'a, event) signal_core -> 'a -> unit
+val emit_from_host : ('emit, 'agg, 'mode) signal_core -> 'emit -> unit
 
 (** [run_interactive ~input ?output main] executes [main] in interactive mode.
     The runtime calls [input.poll] at instant boundaries and only calls

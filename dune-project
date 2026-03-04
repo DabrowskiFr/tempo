@@ -43,6 +43,15 @@
   (tempo (= :version))))
 
 (package
+ (name tempo-app)
+ (synopsis "Application-oriented helpers for Tempo")
+ (description "tempo-app provides App, Loop and Scene helpers built on top of the Tempo runtime.")
+ (depends
+  (ocaml (>= 5.3.0))
+  (dune (>= 3.0))
+  (tempo (= :version))))
+
+(package
  (name tempo-async)
  (synopsis "Optional async bridge utilities for Tempo")
  (description "Optional async mailbox bridge for Tempo. Keeps asynchronous producers outside Tempo and injects events synchronously at tick boundaries.")
@@ -50,6 +59,16 @@
   (ocaml (>= 5.3.0))
   (dune (>= 3.0))
   (tempo (= :version))))
+
+(package
+ (name tempo-jobs)
+ (synopsis "Parallel external jobs bridged into Tempo")
+ (description "tempo-jobs runs external jobs on OCaml domains and imports their progress and completion into Tempo at inter-instant boundaries.")
+ (depends
+  (ocaml (>= 5.3.0))
+  (dune (>= 3.0))
+  (tempo (= :version))
+  threads))
 
 (package
  (name tempo-fluidsynth)

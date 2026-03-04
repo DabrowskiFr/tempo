@@ -44,5 +44,6 @@
   runtime_instant_current_empty
   low_level_with_kill_abort
   low_level_with_kill_inherit
-  async_mailbox_api)
- (libraries tempo tempo-frp tempo-async))
+  async_mailbox_api
+  jobs_api)
+ (libraries tempo tempo-frp tempo-async tempo-jobs))

@@ -1,0 +1,8 @@
+{0 tempo-app}
+
+`tempo-app` provides small application-oriented helpers built on top of
+Tempo:
+
+- {!module-Tempo_app.App}
+- {!module-Tempo_app.Loop}
+- {!module-Tempo_app.Scene}

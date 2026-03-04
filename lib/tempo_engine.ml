@@ -83,7 +83,7 @@ let emit_from_host signal value =
   match !current_host_runtime with
   | None -> invalid_arg "emit_from_host requires an active Tempo runtime"
   | Some runtime ->
-      emit_event_from_host runtime.scheduler signal value;
+      update_signal runtime.scheduler signal value;
       (match runtime.wakeup with
       | None -> ()
       | Some wakeup -> notify_wakeup wakeup)
@@ -387,7 +387,22 @@ let create_scheduler_state () =
   }
 
 let has_live_tasks st =
-  Hashtbl.fold (fun _ state acc -> acc || state.active > 0) st.threads false
+  let has_active_threads =
+    Hashtbl.fold (fun _ state acc -> acc || state.active > 0) st.threads false
+  in
+  let has_signal_waiters =
+    List.exists
+      (fun (Any signal) ->
+        (not (Stack.is_empty signal.awaiters))
+        || not (Stack.is_empty signal.guard_waiters))
+      st.signals
+  in
+  has_active_threads
+  || not (Queue.is_empty st.current)
+  || st.next_instant <> []
+  || st.blocked <> []
+  || st.waiting <> []
+  || has_signal_waiters
 
 let run_one_instant before_step after_step st =
   run_instant before_step after_step st (Some 1);

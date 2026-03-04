@@ -1,0 +1,10 @@
+{0 Runtime Layers}
+
+Tempo is organized as follows:
+
+- the shared signal substrate in {!module-Tempo}
+- the recommended programming surface in {!module-Tempo.Core}
+- higher-level application helpers in {!module-Tempo.App}, {!module-Tempo.Loop} and {!module-Tempo.Scene}
+- advanced primitives in {!module-Tempo.Low_level}
+- additional packages such as `tempo-app`, `tempo-jobs`, `tempo-frp`,
+  `tempo-async`, `tempo-raylib` and `tempo-fluidsynth`
