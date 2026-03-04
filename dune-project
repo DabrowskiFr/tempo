@@ -73,3 +73,12 @@
   ctypes
   ctypes-foreign
   unix))
+
+(package
+ (name tempo-score)
+ (synopsis "Tempo-native musical score model and MIDI conversion")
+ (description "Converts MIDI files into a Tempo logical score representation (units, note spans, voices) for scheduling notes with Tempo processes.")
+ (depends
+  (ocaml (>= 5.3.0))
+  (dune (>= 3.0))
+  (tempo-fluidsynth (= :version))))

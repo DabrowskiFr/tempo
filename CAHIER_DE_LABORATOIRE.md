@@ -2,6 +2,33 @@
 
 ## 2026-03-04
 
+### Format musical Tempo (`tempo-score`)
+
+- objectif du lot: sortir du binaire `music_score_player` la logique de
+  représentation/chargement de partition pour obtenir un format musical
+  réutilisable, orienté instants Tempo
+- réalisation:
+  - ajout du package `tempo-score` dans `lib/score/`
+  - ajout de `Tempo_score.t` (voix, notes en unités logiques, métrique,
+    tempo initial)
+  - extraction de la conversion MIDI -> score logique dans
+    `Tempo_score.of_midi_file`
+  - conservation d'une partition de repli (`Tempo_score.default`)
+  - recâblage de `applications/advanced/music_score_player/src/main.ml`
+    pour consommer `Tempo_score` au lieu du parser local
+- documentation:
+  - ajout de `doc/tempo-score/index.mld`
+  - ajout des références à `tempo-score` dans la vue d'ensemble odoc
+- tentative échouée:
+  - commande `dune build --only-packages tempo-score @install`
+  - échec attendu car `tempo-score` dépend de `tempo-fluidsynth`, exclu par
+    `--only-packages`
+  - correction: validation par build réel de l'application dépendante
+    (`music_score_player`)
+- validation:
+  - `dune build ./applications/advanced/music_score_player/src/main.exe`
+    passe avec la nouvelle extraction
+
 ### Objectif
 
 Repartir du dernier commit restauré après suppression accidentelle et reconstruire
@@ -595,3 +622,16 @@ reconstruction locale cohérente de la vitrine réactive recherchée.
   - même avec les garde-fous de chargement, ils restaient source de confusion
     pour l'utilisateur et n'apportaient pas une démonstration stable du modèle
     Tempo
+
+### 2026-03-04 - music_score_player : suppression du contrôle tempo +/- 
+
+- demande :
+  - retirer le changement de rythme au clavier (`+` / `-`) dans la vitrine
+    musicale
+- modifications :
+  - suppression des événements `Tempo_up` / `Tempo_down`
+  - suppression de la capture clavier `Key.Equal` / `Key.Minus`
+  - suppression du traitement associé dans `control_process`
+  - mise à jour de l'aide affichée à l'écran
+- validation :
+  - `dune build applications/advanced/music_score_player/src/main.exe`

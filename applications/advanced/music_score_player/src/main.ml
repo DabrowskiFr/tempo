@@ -2,44 +2,18 @@ open Tempo
 open Raylib
 
 module Synth = Tempo_fluidsynth
+module Score = Tempo_score
+open Score
 
-type note = {
-  start_unit : int;
-  duration_units : int;
-  midi : int;
-  volume : float;
-}
-
-type instrument = {
-  channel : int;
-  bank : int;
-  preset : int;
-}
-
-type score_voice = {
-  name : string;
-  color : Color.t;
-  instrument : instrument;
-  notes : note array;
-}
-
-type score_data = {
-  title : string;
-  voices : score_voice array;
-  total_units : int;
-  unit_label : string;
-  time_signature_num : int;
-  time_signature_den : int;
-  units_per_bar : int;
-  initial_bpm : int;
-}
+type note = Score.note
+type instrument = Score.instrument
+type score_voice = Score.voice
+type score_data = Score.t
 
 type host_event =
   | Pulse
   | Toggle_play
   | Restart
-  | Tempo_up
-  | Tempo_down
   | Select_score of int
   | Quit
 
@@ -58,21 +32,14 @@ type viewport = {
 
 type transport = {
   mutable playing : bool;
-  mutable bpm : int;
+  bpm : int;
   mutable current_unit : int;
 }
 
 type metronome_source = {
   mutable next_pulse_at : float;
-  mutable unit_ms : int;
+  unit_ms : int;
   mutable pending_pulses : int;
-}
-
-type started_note = {
-  start_tick : int;
-  velocity : int;
-  bank : int;
-  program : int;
 }
 
 type score_choice = {
@@ -103,9 +70,6 @@ type host_bridge = {
 exception Quit_request
 exception Reload_score_request of int
 
-let min_bpm = 50
-let max_bpm = 180
-let default_bpm = 108
 let grid_cell_h = 44
 let grid_left = 180
 let grid_top = 120
@@ -114,70 +78,6 @@ let grid_right_margin = 40
 let default_cell_w = 24
 
 let mk_color r g b = Color.create r g b 255
-
-let default_score =
-  let voices =
-    [|
-      {
-        name = "Lead";
-        color = mk_color 240 124 92;
-        instrument = { channel = 0; bank = 0; preset = 0 };
-        notes =
-          [|
-            { start_unit = 0; duration_units = 2; midi = 72; volume = 0.22 };
-            { start_unit = 2; duration_units = 2; midi = 74; volume = 0.22 };
-            { start_unit = 4; duration_units = 4; midi = 76; volume = 0.24 };
-            { start_unit = 8; duration_units = 2; midi = 79; volume = 0.24 };
-            { start_unit = 10; duration_units = 2; midi = 76; volume = 0.22 };
-            { start_unit = 12; duration_units = 4; midi = 74; volume = 0.22 };
-            { start_unit = 16; duration_units = 2; midi = 72; volume = 0.22 };
-            { start_unit = 18; duration_units = 2; midi = 74; volume = 0.22 };
-            { start_unit = 20; duration_units = 4; midi = 79; volume = 0.24 };
-            { start_unit = 24; duration_units = 2; midi = 81; volume = 0.24 };
-            { start_unit = 26; duration_units = 2; midi = 79; volume = 0.23 };
-            { start_unit = 28; duration_units = 4; midi = 76; volume = 0.22 };
-          |];
-      };
-      {
-        name = "Counter";
-        color = mk_color 94 191 161;
-        instrument = { channel = 1; bank = 0; preset = 48 };
-        notes =
-          [|
-            { start_unit = 0; duration_units = 4; midi = 64; volume = 0.18 };
-            { start_unit = 4; duration_units = 4; midi = 67; volume = 0.18 };
-            { start_unit = 8; duration_units = 4; midi = 69; volume = 0.18 };
-            { start_unit = 12; duration_units = 4; midi = 67; volume = 0.18 };
-            { start_unit = 16; duration_units = 4; midi = 65; volume = 0.18 };
-            { start_unit = 20; duration_units = 4; midi = 69; volume = 0.18 };
-            { start_unit = 24; duration_units = 4; midi = 67; volume = 0.18 };
-            { start_unit = 28; duration_units = 4; midi = 64; volume = 0.18 };
-          |];
-      };
-      {
-        name = "Bass";
-        color = mk_color 102 152 236;
-        instrument = { channel = 2; bank = 0; preset = 32 };
-        notes =
-          [|
-            { start_unit = 0; duration_units = 8; midi = 48; volume = 0.3 };
-            { start_unit = 8; duration_units = 8; midi = 43; volume = 0.3 };
-            { start_unit = 16; duration_units = 8; midi = 45; volume = 0.3 };
-            { start_unit = 24; duration_units = 8; midi = 41; volume = 0.3 };
-          |];
-      };
-    |]
-  in
-  {
-    title = "Built-in score";
-    voices;
-    total_units = 32;
-    unit_label = "sixteenth note";
-    time_signature_num = 4;
-    time_signature_den = 4;
-    units_per_bar = 16;
-    initial_bpm = default_bpm;
-  }
 
 let unit_ms_of_bpm bpm =
   max 25 (int_of_float (15000.0 /. float_of_int bpm))
@@ -189,23 +89,6 @@ let draw_text_centered text x y size color =
 let velocity_of_volume volume =
   let scaled = int_of_float (volume *. 127.0) in
   max 1 (min 127 scaled)
-
-let gcd a b =
-  let rec loop x y =
-    if y = 0 then abs x else loop y (x mod y)
-  in
-  loop a b
-
-let gcd_list values =
-  let rec loop acc = function
-    | [] -> acc
-    | x :: xs ->
-        let x = abs x in
-        if x = 0 then loop acc xs
-        else if acc = 0 then loop x xs
-        else loop (gcd acc x) xs
-  in
-  loop 0 values
 
 let color_of_index idx =
   let palette =
@@ -248,197 +131,6 @@ let midi_asset_paths () =
     |> List.sort String.compare
     |> List.map (Filename.concat root)
 
-let describe_unit unit_ticks division =
-  if unit_ticks <= 0 || division <= 0 then "logical unit"
-  else if division mod unit_ticks <> 0 then Printf.sprintf "%d MIDI ticks" unit_ticks
-  else
-    match division / unit_ticks with
-    | 1 -> "quarter note"
-    | 2 -> "eighth note"
-    | 4 -> "sixteenth note"
-    | 8 -> "thirty-second note"
-    | n -> Printf.sprintf "1/%d of a quarter note" n
-
-let units_per_bar ~division ~unit_ticks ~numerator ~denominator =
-  let bar_ticks = (numerator * division * 4) / max 1 denominator in
-  max 1 (bar_ticks / max 1 unit_ticks)
-
-let choose_unit_ticks values division max_tick =
-  let raw_gcd =
-    match gcd_list values with
-    | 0 -> max 1 (division / 4)
-    | n -> n
-  in
-  let candidate_denominators = [ 64; 48; 32; 24; 16; 12; 8; 6; 4; 3; 2; 1 ] in
-  let exact_candidates =
-    candidate_denominators
-    |> List.filter_map (fun denom ->
-           if division mod denom <> 0 then None
-           else
-             let ticks = division / denom in
-             if ticks < raw_gcd then None
-             else if List.for_all (fun value -> value mod ticks = 0) values then Some ticks
-             else None)
-  in
-  match exact_candidates with
-  | ticks :: _ -> ticks
-  | [] ->
-      let rec coarsen ticks =
-        if ticks <= 0 then max 1 raw_gcd
-        else
-          let total_units = max 1 (max_tick / ticks) in
-          if total_units <= 1024 then ticks else coarsen (ticks * 2)
-      in
-      coarsen raw_gcd
-
-let score_of_midi_file path =
-  let midi = Synth.import_midi_file path in
-  let bank_msb = Array.make 16 0 in
-  let bank_lsb = Array.make 16 0 in
-  let programs = Array.make 16 0 in
-  let active = Hashtbl.create 64 in
-  let groups = Hashtbl.create 32 in
-  let register_note channel bank program start_tick duration_tick key velocity =
-    let group_key = (channel, bank, program) in
-    let bucket =
-      match Hashtbl.find_opt groups group_key with
-      | Some bucket -> bucket
-      | None ->
-          let bucket = ref [] in
-          Hashtbl.add groups group_key bucket;
-          bucket
-    in
-    bucket := (start_tick, duration_tick, key, velocity) :: !bucket
-  in
-  let push_active channel key started =
-    let slot = (channel, key) in
-    let current = Option.value ~default:[] (Hashtbl.find_opt active slot) in
-    Hashtbl.replace active slot (started :: current)
-  in
-  let pop_active channel key =
-    let slot = (channel, key) in
-    match Hashtbl.find_opt active slot with
-    | Some (started :: rest) ->
-        if rest = [] then Hashtbl.remove active slot
-        else Hashtbl.replace active slot rest;
-        Some started
-    | _ -> None
-  in
-  List.iter
-    (fun (tick, event) ->
-      match event with
-      | Synth.Control_change (channel, control, value) ->
-          if control = 0 then bank_msb.(channel) <- value
-          else if control = 32 then bank_lsb.(channel) <- value
-      | Synth.Program_change (channel, program) ->
-          programs.(channel) <- program
-      | Synth.Note_on (channel, key, velocity) ->
-          if velocity = 0 then (
-            match pop_active channel key with
-            | Some started ->
-                register_note channel started.bank started.program started.start_tick
-                  (max 1 (tick - started.start_tick)) key started.velocity
-            | None -> ())
-          else
-            let bank = (bank_msb.(channel) * 128) + bank_lsb.(channel) in
-            push_active channel key
-              { start_tick = tick; velocity; bank; program = programs.(channel) }
-      | Synth.Note_off (channel, key) -> (
-          match pop_active channel key with
-          | Some started ->
-              register_note channel started.bank started.program started.start_tick
-                (max 1 (tick - started.start_tick)) key started.velocity
-          | None -> ()))
-    midi.events;
-  let raw_groups =
-    Hashtbl.to_seq groups |> List.of_seq
-    |> List.sort (fun ((ca, ba, pa), _) ((cb, bb, pb), _) ->
-           match compare ca cb with
-           | 0 -> (
-               match compare ba bb with
-               | 0 -> compare pa pb
-               | n -> n)
-           | n -> n)
-  in
-  let max_tick =
-    List.fold_left
-      (fun acc (_, bucket) ->
-        List.fold_left
-          (fun acc (start_tick, duration_tick, _, _) ->
-            max acc (start_tick + duration_tick))
-          acc !bucket)
-      0 raw_groups
-  in
-  let unit_ticks =
-    let values =
-      List.concat_map
-        (fun (_, bucket) ->
-          List.concat_map
-            (fun (start_tick, duration_tick, _, _) -> [ start_tick; duration_tick ])
-            !bucket)
-        raw_groups
-    in
-    choose_unit_ticks values midi.division max_tick
-  in
-  let voices =
-    Array.of_list
-      (List.mapi
-         (fun idx ((channel, bank, program), bucket) ->
-           let notes =
-             !bucket
-             |> List.sort (fun (ta, _, ka, _) (tb, _, kb, _) ->
-                    match compare ta tb with
-                    | 0 -> compare ka kb
-                    | n -> n)
-             |> List.map (fun (start_tick, duration_tick, key, velocity) ->
-                    {
-                      start_unit = start_tick / unit_ticks;
-                      duration_units = max 1 (duration_tick / unit_ticks);
-                      midi = key;
-                      volume = float_of_int velocity /. 127.0;
-                    })
-             |> Array.of_list
-           in
-           {
-             name = Printf.sprintf "Ch %d P %d" (channel + 1) program;
-             color = color_of_index idx;
-             instrument = { channel; bank; preset = program };
-             notes;
-           })
-         raw_groups)
-  in
-  let total_units =
-    Array.fold_left
-      (fun acc (voice : score_voice) ->
-        Array.fold_left
-          (fun acc (note : note) -> max acc (note.start_unit + note.duration_units))
-          acc voice.notes)
-      0 voices
-  in
-  let initial_bpm =
-    let bpm =
-      int_of_float (60000000.0 /. float_of_int (max 1 midi.tempo_us_per_quarter))
-    in
-    max min_bpm (min max_bpm bpm)
-  in
-  let time_signature_num, time_signature_den =
-    match midi.time_signature with
-    | Some (num, den) -> (max 1 num, max 1 den)
-    | None -> (4, 4)
-  in
-  {
-    title = Filename.basename path;
-    voices;
-    total_units = max 1 total_units;
-    unit_label = describe_unit unit_ticks midi.division;
-    time_signature_num;
-    time_signature_den;
-    units_per_bar =
-      units_per_bar ~division:midi.division ~unit_ticks ~numerator:time_signature_num
-        ~denominator:time_signature_den;
-    initial_bpm;
-  }
-
 let score_choices () =
   let file_choices =
     midi_asset_paths ()
@@ -448,12 +140,11 @@ let score_choices () =
 
 let score_of_choice (choice : score_choice) =
   match choice.path with
-  | None -> default_score
-  | Some path -> score_of_midi_file path
+  | None -> Score.default
+  | Some path -> Score.of_midi_file path
 
 let score_note_count (score : score_data) =
-  Array.fold_left (fun acc (voice : score_voice) -> acc + Array.length voice.notes) 0
-    score.voices
+  Score.note_count score
 
 let acceptable_score (score : score_data) =
   Array.length score.voices <= 12
@@ -472,11 +163,11 @@ let load_score (choice : score_choice) =
            %!"
           choice.label (Array.length score.voices) (score_note_count score)
           score.total_units score.units_per_bar;
-        default_score)
+        Score.default)
   with exn ->
     Printf.eprintf "failed to load score %s: %s\n%!" choice.label
       (Printexc.to_string exn);
-    default_score
+    Score.default
 
 let initial_selected_index choices =
   match Sys.argv |> Array.to_list |> List.tl with
@@ -571,8 +262,6 @@ let poll_events source (ui : ui_state) =
   if window_should_close () || is_key_pressed Key.Escape then push Quit;
   if is_key_pressed Key.Space then push Toggle_play;
   if is_key_pressed Key.R then push Restart;
-  if is_key_pressed Key.Equal then push Tempo_up;
-  if is_key_pressed Key.Minus then push Tempo_down;
   let now = Unix.gettimeofday () in
   while now >= source.next_pulse_at do
     source.pending_pulses <- source.pending_pulses + 1;
@@ -667,12 +356,6 @@ let render_process render_request transport output () =
   loop ()
 
 let control_process score pulse restart render_request note_events transport source input () =
-  let set_bpm bpm =
-    let bpm = max min_bpm (min max_bpm bpm) in
-    transport.bpm <- bpm;
-    source.unit_ms <- unit_ms_of_bpm bpm;
-    reset_metronome_clock source
-  in
   let advance_one_unit () =
     let next_unit =
       if transport.current_unit + 1 >= score.total_units then 0
@@ -694,12 +377,6 @@ let control_process score pulse restart render_request note_events transport sou
         reset_transport transport source;
         emit note_events Panic;
         emit restart ();
-        true
-    | Tempo_up ->
-        set_bpm (transport.bpm + 6);
-        true
-    | Tempo_down ->
-        set_bpm (transport.bpm - 6);
         true
     | Select_score idx ->
         emit note_events Panic;
@@ -833,7 +510,7 @@ let draw_header (score : score_data) height (frame : frame) (viewport : viewport
        score.time_signature_num score.time_signature_den viewport.visible_start
        (min score.total_units (viewport.visible_start + viewport.visible_units)))
     24 82 18 (mk_color 220 232 244);
-  draw_text "SPACE play/pause | R restart | +/- tempo | ESC quit"
+  draw_text "SPACE play/pause | R restart | ESC quit"
     24 (height - 40) 18 (mk_color 198 216 234);
   draw_score_selector ui
 
@@ -841,8 +518,9 @@ let draw_voice_row (_score : score_data) (frame : frame) (viewport : viewport) r
     (spec : score_voice) =
   let cw = viewport.cell_w in
   let y = grid_top + (row * grid_cell_h) in
+  let color = color_of_index row in
   let visible_end = viewport.visible_start + viewport.visible_units in
-  draw_text spec.name 26 (y + 10) 20 spec.color;
+  draw_text spec.name 26 (y + 10) 20 color;
   draw_rectangle (grid_left - 8) y ((viewport.visible_units * cw) + 16) grid_cell_h
     (Color.create 255 255 255 10);
   Array.iter
@@ -854,10 +532,10 @@ let draw_voice_row (_score : score_data) (frame : frame) (viewport : viewport) r
         let x = grid_left + ((draw_start - viewport.visible_start) * cw) in
         let w = max 10 (((draw_end - draw_start) * cw) - 4) in
         let base =
-          Color.create (Color.r spec.color) (Color.g spec.color) (Color.b spec.color) 105
+          Color.create (Color.r color) (Color.g color) (Color.b color) 105
         in
         draw_rectangle x (y + 8) w (grid_cell_h - 16) base;
-        draw_rectangle_lines x (y + 8) w (grid_cell_h - 16) spec.color))
+        draw_rectangle_lines x (y + 8) w (grid_cell_h - 16) color))
     spec.notes;
   let active_notes =
     if frame.playing then
@@ -877,7 +555,7 @@ let draw_voice_row (_score : score_data) (frame : frame) (viewport : viewport) r
         let x = grid_left + ((draw_start - viewport.visible_start) * cw) in
         let w = max 10 (((draw_end - draw_start) * cw) - 4) in
         let offset = min 10 (idx * 4) in
-        draw_rectangle x (y + 8 + offset) w (grid_cell_h - 16 - offset) spec.color))
+        draw_rectangle x (y + 8 + offset) w (grid_cell_h - 16 - offset) color))
     active_notes;
   match active_notes with
   | [] -> ()

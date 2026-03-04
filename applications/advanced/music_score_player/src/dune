@@ -1,4 +1,4 @@
 (executable
  (name main)
  (modules main)
- (libraries tempo tempo-fluidsynth raylib unix))
+ (libraries tempo tempo-fluidsynth tempo-score raylib unix))

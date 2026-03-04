@@ -18,6 +18,7 @@ en priorité sur :
 - `tempo-jobs` : jobs externes parallèles réinjectés dans Tempo
 - `tempo-raylib` : backend et modèles de présentation spécialisés
 - `tempo-fluidsynth` : rendu SoundFont et import MIDI pour les démos musicales
+- `tempo-score` : modèle de partition logique (en unités Tempo) dérivé du MIDI
 
 ### Niveaux de l'API `tempo`
 
@@ -97,6 +98,14 @@ en priorité sur :
     ne sert qu'à peupler l'interface ; charger les métadonnées et partitions à
     la demande pour que l'utilisateur voie immédiatement la fenêtre et puisse
     interagir sans latence parasite
+22. limiter les contrôles interactifs exposés au strict besoin de la démo ;
+    lorsqu'une commande est jugée non essentielle (ex: variation de tempo en
+    direct), la retirer complètement de l'input map et de l'UI pour éviter une
+    surface inutilement complexe
+23. lorsqu'une logique métier de démonstration devient réutilisable (ex:
+    conversion MIDI -> score logique), l'extraire du binaire applicatif vers
+    un package dédié documenté, puis recâbler l'application comme simple
+    consommateur de ce package
 
 ## Points d'attention
 

@@ -1,3 +1,0 @@
-(executable
- (name main)
- (libraries tempo tempo-raylib raylib unix))
