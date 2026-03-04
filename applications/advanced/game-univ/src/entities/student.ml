@@ -57,6 +57,27 @@ let process (bus : Bus.t) (world : world) (student : student) =
           ~duration:(fun () ->
             int_of_float (max 18.0 (30.0 +. ((world.cheat_window_factor -. 1.0) *. 16.0))))
   in
+  let rec event_process () =
+    let events = Tempo.await bus.evt in
+    List.iter
+      (function
+        | Student_caught id when id = student.id ->
+            student.cheating <- false;
+            student.cheat_hold <- 0;
+            student.caught_cooldown <- caught_cooldown_frames student.profile world.difficulty;
+            student.tell <- 0.0
+        | _ -> ())
+      events;
+    event_process ()
+  in
+  let rec restart_process () =
+    let () = Tempo.await bus.restart in
+    student.cheating <- false;
+    student.cheat_hold <- 0;
+    student.caught_cooldown <- 0;
+    student.tell <- 0.0;
+    restart_process ()
+  in
   let rec behavior_process () =
     let _ = Tempo.await bus.input in
     let radius_sq = world.detection_radius *. world.detection_radius in
@@ -88,8 +109,6 @@ let process (bus : Bus.t) (world : world) (student : student) =
     student.cheating <- cheating_now;
     opportunist_phase := !opportunist_phase + 1;
     if student.caught_cooldown > 0 then student.caught_cooldown <- student.caught_cooldown - 1;
-    if cheating_now && in_range && base then
-      student.cheat_hold <- caught_cooldown_frames student.profile world.difficulty;
     behavior_process ()
   in
-  Tempo.parallel [ base_window_process; behavior_process ]
+  Tempo.parallel [ base_window_process; event_process; restart_process; behavior_process ]

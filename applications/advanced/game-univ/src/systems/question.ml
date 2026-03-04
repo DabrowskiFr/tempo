@@ -2,43 +2,6 @@ open Types
 
 let interaction_radius_sq = 55.0 *. 55.0
 
-let reset_world (world : world) =
-  world.professor.pos.x <- 76.0;
-  world.professor.pos.y <- 170.0;
-  world.detection_radius <- 110.0;
-  world.energy <- 100.0;
-  world.focus_left <- 0;
-  world.coffee_active <- Some 0;
-  world.coffee_ttl <- 14 * 60;
-  world.coffee_respawn <- 0;
-  world.coffee_cursor <- 1;
-  world.drink_progress <- 0.0;
-  world.started <- false;
-  world.paused <- false;
-  world.difficulty <- 1;
-  world.cheat_window_factor <- 1.0;
-  world.hot_zone <- 0;
-  world.hot_zone_left <- world.hot_zone_period;
-  world.round_index <- 0;
-  world.round_left <- world.round_frames;
-  world.score <- 0;
-  world.flagged <- 0;
-  world.catches <- 0;
-  world.false_positives <- 0;
-  world.empty_checks <- 0;
-  world.combo <- 0;
-  world.combo_best <- 0;
-  world.combo_window_left <- 0;
-  world.game_over <- false;
-  world.message <- "Appuyez sur Entree ou Espace pour demarrer";
-  Array.iter
-    (fun s ->
-      s.cheating <- false;
-      s.cheat_hold <- 0;
-      s.caught_cooldown <- 0;
-      s.tell <- 0.0)
-    world.students
-
 let nearest_student (world : world) =
   let best_id = ref None in
   let best_d2 = ref max_float in
@@ -74,12 +37,9 @@ let process (bus : Bus.t) (world : world) =
       | Some id when d2 <= interaction_radius_sq ->
         let s = world.students.(id) in
         if s.cheating then (
-          s.cheating <- false;
-          s.cheat_hold <- 0;
-          s.caught_cooldown <- caught_cooldown_frames s.profile world.difficulty;
-          s.tell <- 0.0;
           Tempo.emit bus.evt
             [
+              Student_caught id;
               Ask_success id;
               Ask_feedback ({ x = s.pos.x; y = s.pos.y }, true, "Flagrant");
             ])

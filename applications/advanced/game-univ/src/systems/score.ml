@@ -43,38 +43,33 @@ let apply_success world id =
   let zone_bonus = if zone_of_x s.pos.x = world.hot_zone then 2 else 0 in
   let points = 8 + profile_capture_bonus s.profile + combo_bonus + zone_bonus in
   world.score <- world.score + points;
-  world.energy <-
-    Time_helpers.clamp
-      (world.energy -. profile_energy_cost s.profile)
-      ~min:0.0 ~max:100.0;
   world.catches <- world.catches + 1;
-  world.message <-
+  ( points,
+    -.profile_energy_cost s.profile,
     Printf.sprintf
       "Flagrant delit S%d (%s) : +%d | combo x%d | zone %s"
       id (profile_label s.profile) points world.combo
-      (zone_label world.hot_zone)
+      (zone_label world.hot_zone) )
 
 let apply_false_positive world id =
   let penalty = 4 + min 3 (world.combo / 2) in
   let had_combo = world.combo > 0 in
   world.score <- world.score - penalty;
-  world.energy <- Time_helpers.clamp (world.energy -. 1.8) ~min:0.0 ~max:100.0;
   world.false_positives <- world.false_positives + 1;
   reset_combo world;
-  world.message <-
+  ( -.1.8,
     if had_combo then
       Printf.sprintf "Faux positif sur S%d: combo casse" id
-    else Printf.sprintf "Faux positif sur l'etudiant %d" id
+    else Printf.sprintf "Faux positif sur l'etudiant %d" id )
 
 let apply_empty_check world =
   let had_combo = world.combo > 0 in
   world.score <- world.score - 1;
-  world.energy <- Time_helpers.clamp (world.energy -. 0.8) ~min:0.0 ~max:100.0;
   world.empty_checks <- world.empty_checks + 1;
   reset_combo world;
-  world.message <-
+  ( -.0.8,
     if had_combo then "Verification vide: combo casse"
-    else "Personne a interroger a proximite"
+    else "Personne a interroger a proximite" )
 
 let process (bus : Bus.t) (world : world) =
   let rec combo_window_process () =
@@ -88,11 +83,31 @@ let process (bus : Bus.t) (world : world) =
     let events = Tempo.await bus.evt in
     List.iter
       (function
-        | Ask_success id -> apply_success world id
-        | Ask_miss (Some id) -> apply_false_positive world id
-        | Ask_miss None -> apply_empty_check world
+        | Ask_success id ->
+            let _, delta, msg = apply_success world id in
+            Tempo.emit bus.energy [ delta ];
+            Tempo.emit bus.status [ msg ]
+        | Ask_miss (Some id) ->
+            let delta, msg = apply_false_positive world id in
+            Tempo.emit bus.energy [ delta ];
+            Tempo.emit bus.status [ msg ]
+        | Ask_miss None ->
+            let delta, msg = apply_empty_check world in
+            Tempo.emit bus.energy [ delta ];
+            Tempo.emit bus.status [ msg ]
         | _ -> ())
       events;
     events_process ()
   in
-  Tempo.parallel [ combo_window_process; events_process ]
+  let rec restart_process () =
+    let () = Tempo.await bus.restart in
+    world.score <- 0;
+    world.catches <- 0;
+    world.false_positives <- 0;
+    world.empty_checks <- 0;
+    world.combo <- 0;
+    world.combo_best <- 0;
+    world.combo_window_left <- 0;
+    restart_process ()
+  in
+  Tempo.parallel [ combo_window_process; events_process; restart_process ]

@@ -65,6 +65,10 @@ en priorité sur :
 13. pour une application vitrine, n'introduire `Tempo_jobs` que si un besoin
     métier réel existe (calcul externe, import ou I/O parallélisable) ; ne pas
     l'utiliser comme simple démonstration décorative
+14. dans une application Tempo, `world` peut rester mutable si chaque sous-état
+    a un propriétaire explicite ; éviter les mutations croisées et préférer des
+    signaux dédiés (`restart`, statut, deltas) pour les transferts entre
+    processus
 
 ## Points d'attention
 

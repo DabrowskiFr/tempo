@@ -43,6 +43,14 @@ let process (bus : Bus.t) (world : world) =
       world.detection_radius <- recompute_detection_radius ());
     stamina_process ()
   in
+  let rec energy_event_process () =
+    let deltas = Tempo.await bus.energy in
+    let total = List.fold_left ( +. ) 0.0 deltas in
+    if total <> 0.0 then (
+      world.energy <- Time_helpers.clamp (world.energy +. total) ~min:0.0 ~max:100.0;
+      world.detection_radius <- recompute_detection_radius ());
+    energy_event_process ()
+  in
   let rec coffee_process () =
     let input = Tempo.await bus.input in
     if world.started && (not world.paused) && not world.game_over then (
@@ -65,17 +73,32 @@ let process (bus : Bus.t) (world : world) =
               world.coffee_active <- None;
               world.coffee_respawn <- 8 * 60;
               world.drink_progress <- 0.0;
-              world.message <- "Cafe avale: energie rechargee et focus actif"))
+              world.detection_radius <- recompute_detection_radius ();
+              Tempo.emit bus.status [ "Cafe avale: energie rechargee et focus actif" ]))
           else world.drink_progress <- max 0.0 (world.drink_progress -. 0.05);
           if world.coffee_ttl = 0 then (
             world.coffee_active <- None;
             world.coffee_respawn <- 6 * 60;
             world.drink_progress <- 0.0;
-            world.message <- "Le cafe a refroidi...")
+            Tempo.emit bus.status [ "Le cafe a refroidi..." ])
       | None ->
           world.coffee_respawn <- max 0 (world.coffee_respawn - 1);
           if world.coffee_respawn = 0 then activate_next_coffee ());
     coffee_process ()
+  in
+  let rec restart_process () =
+    let () = Tempo.await bus.restart in
+    world.professor.pos.x <- 76.0;
+    world.professor.pos.y <- 170.0;
+    world.detection_radius <- 110.0;
+    world.energy <- 100.0;
+    world.focus_left <- 0;
+    world.coffee_active <- Some 0;
+    world.coffee_ttl <- 14 * 60;
+    world.coffee_respawn <- 0;
+    world.coffee_cursor <- 1;
+    world.drink_progress <- 0.0;
+    restart_process ()
   in
   let rec draw_process () =
     let _ = Tempo.await bus.input in
@@ -86,4 +109,5 @@ let process (bus : Bus.t) (world : world) =
     | None -> ());
     draw_process ()
   in
-  Tempo.parallel [ movement_process; stamina_process; coffee_process; draw_process ]
+  Tempo.parallel
+    [ movement_process; stamina_process; energy_event_process; coffee_process; restart_process; draw_process ]

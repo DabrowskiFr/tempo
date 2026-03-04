@@ -340,3 +340,38 @@ reconstruction locale cohérente de la vitrine réactive recherchée.
   - `dune build applications/advanced/game-univ/src/main.exe applications/advanced/game-univ/src/headless_runner.exe`
   - `dune exec ./applications/advanced/game-univ/src/headless_runner.exe`
   - `dune build @install @runtest @doc`
+
+### 2026-03-04 - game-univ : ownership explicite du monde mutable
+
+- objectif : conserver `world` mutable sans retomber dans un protocole implicite
+  de mémoire partagée entre processus
+- refactoring réalisé :
+  - ajout de signaux dédiés dans le bus :
+    - `restart`
+    - `status`
+    - `energy`
+  - ajout de `Status.process` comme propriétaire unique de `world.message`
+  - `Score.process` ne modifie plus directement `world.energy` ni
+    `world.message` ; il émet maintenant des deltas d'énergie et des messages
+  - `Professor.process` devient propriétaire effectif de l'énergie et de la
+    zone café
+  - `Question.process` n'écrit plus l'état interne des étudiants ; il émet
+    `Student_caught`
+  - `Student.process` redevient propriétaire des champs mutables de chaque
+    étudiant
+  - le restart passe par un fanout explicite sur `bus.restart` au lieu d'une
+    fonction de reset transversale
+- tentative évitée :
+  - réécrire tout `world` en état immuable global
+  - raison : ce n'est pas nécessaire tant que l'ownership reste clair et que la
+    coordination passe par signaux ; cela aurait alourdi inutilement la
+    vitrine
+- résultat :
+  - `world` reste mutable, mais la mutation est mieux partitionnée par
+    propriétaire
+  - les croisements encore présents deviennent des lectures, plus rarement des
+    écritures croisées
+- validation :
+  - `dune build applications/advanced/game-univ/src/main.exe applications/advanced/game-univ/src/headless_runner.exe`
+  - `dune exec ./applications/advanced/game-univ/src/headless_runner.exe`
+  - `dune build @install @runtest @doc`

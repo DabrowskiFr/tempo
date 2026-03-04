@@ -17,6 +17,7 @@
   control
   clock
   score
+  status
   suspicion
   flag_counter
   question
