@@ -47,6 +47,9 @@ en priorité sur :
    travail local reconstruit sur une branche dédiée, puis reporter
    sélectivement sur la branche cible sans régression pour les applications
    déjà présentes
+9. lors d'un port progressif d'API runtime, ne pas déléguer les primitives
+   centrales (`execute`) à une implémentation plus simple tant que l'équivalence
+   sémantique n'est pas prouvée par les tests
 
 ## Points d'attention
 

@@ -874,6 +874,22 @@ let execute ?instants ?(input = fun () -> None) ?(output = fun _ -> ()) initial 
   run_instant ~before_step ~after_step st instants;
   Tempo_log.log_duration_summary ()
 
+type wakeup = Tempo_engine.wakeup
+
+type 'input interactive_source = 'input Tempo_engine.interactive_source = {
+  poll : unit -> 'input option;
+  wait : unit -> unit;
+}
+
+let current_wakeup = Tempo_engine.current_wakeup
+let notify_wakeup = Tempo_engine.notify_wakeup
+let register_wakeup_poller = Tempo_engine.register_wakeup_poller
+let emit_from_host = Tempo_engine.emit_from_host
+let run_interactive ?output ~input initial =
+  match output with
+  | None -> Tempo_engine.run_interactive ~input initial
+  | Some output -> Tempo_engine.run_interactive ~output ~input initial
+
 type inspector_snapshot = {
   instant : int;
   current_tasks : int;
@@ -1097,6 +1113,7 @@ module Core = struct
   let watch = watch
   let parallel = parallel
   let execute = execute
+  let run_interactive = run_interactive
 end
 
 module Low_level = struct

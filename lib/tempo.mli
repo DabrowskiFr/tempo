@@ -217,6 +217,37 @@ val execute :
   ('input signal -> 'output signal -> unit) ->
   unit
 
+type wakeup
+
+type 'input interactive_source = {
+  poll : unit -> 'input option;
+  wait : unit -> unit;
+}
+
+(** [current_wakeup ()] returns the wakeup handle associated with the current
+    call to {!val:run_interactive}, when there is one. *)
+val current_wakeup : unit -> wakeup option
+
+(** [notify_wakeup wakeup] wakes an interactive runtime blocked in [wait]. *)
+val notify_wakeup : wakeup -> unit
+
+(** [register_wakeup_poller wakeup poller] adds an external poller executed
+    whenever the interactive runtime wakes up. *)
+val register_wakeup_poller : wakeup -> (unit -> bool) -> unit
+
+(** [emit_from_host signal value] injects an event from host code while a Tempo
+    runtime is active. *)
+val emit_from_host : ('a, 'a, event) signal_core -> 'a -> unit
+
+(** [run_interactive ~input ?output main] executes [main] in interactive mode.
+    The runtime calls [input.poll] at instant boundaries and only calls
+    [input.wait] when there is no more internal work to run. *)
+val run_interactive :
+  ?output:('output -> unit) ->
+  input:'input interactive_source ->
+  ('input signal -> 'output signal -> unit) ->
+  unit
+
 (** [execute_trace ~inputs main] runs [main] with a deterministic input script and
     returns every output emission in order. If [instants] is omitted, execution
     runs for [List.length inputs] logical instants. *)
@@ -275,6 +306,11 @@ module Core : sig
     ?instants:int ->
     ?input:(unit -> 'input option) ->
     ?output:('output -> unit) ->
+    ('input signal -> 'output signal -> unit) ->
+    unit
+  val run_interactive :
+    ?output:('output -> unit) ->
+    input:'input interactive_source ->
     ('input signal -> 'output signal -> unit) ->
     unit
 end

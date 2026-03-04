@@ -22,9 +22,107 @@ open Tempo_thread
 open Tempo_task
 open Tempo_signal
 
+type wakeup = {
+    mutex : Mutex.t
+  ; cond : Condition.t
+  ; mutable pending : bool
+  ; mutable pollers : (unit -> bool) list
+}
+
+type 'input interactive_source = {
+  poll : unit -> 'input option;
+  wait : unit -> unit;
+}
+
+type host_runtime = {
+    scheduler : scheduler_state
+  ; wakeup : wakeup option
+}
+
+let current_host_runtime : host_runtime option ref = ref None
+let current_interactive_wakeup : wakeup option ref = ref None
+
+let current_wakeup () = !current_interactive_wakeup
+
+let create_wakeup () =
+  { mutex = Mutex.create (); cond = Condition.create (); pending = false; pollers = [] }
+
+let notify_wakeup wakeup =
+  Mutex.lock wakeup.mutex;
+  wakeup.pending <- true;
+  Condition.broadcast wakeup.cond;
+  Mutex.unlock wakeup.mutex
+
+let register_wakeup_poller wakeup poller =
+  Mutex.lock wakeup.mutex;
+  wakeup.pollers <- poller :: wakeup.pollers;
+  Mutex.unlock wakeup.mutex
+
+let run_wakeup_pollers wakeup =
+  let pollers =
+    Mutex.lock wakeup.mutex;
+    let pollers = List.rev wakeup.pollers in
+    Mutex.unlock wakeup.mutex;
+    pollers
+  in
+  List.fold_left (fun acc poller -> poller () || acc) false pollers
+
+let wait_for_wakeup wakeup =
+  Mutex.lock wakeup.mutex;
+  while not wakeup.pending do
+    Condition.wait wakeup.cond wakeup.mutex
+  done;
+  wakeup.pending <- false;
+  Mutex.unlock wakeup.mutex
+
 let () = Tempo_log.init ()
 let log_ctx st =
   Tempo_log.context ~instant:st.debug.instant_counter ~step:st.debug.step_counter
+
+let emit_from_host signal value =
+  match !current_host_runtime with
+  | None -> invalid_arg "emit_from_host requires an active Tempo runtime"
+  | Some runtime ->
+      emit_event_from_host runtime.scheduler signal value;
+      (match runtime.wakeup with
+      | None -> ()
+      | Some wakeup -> notify_wakeup wakeup)
+
+module Join_many = struct
+  let wait_for_threads st ~(current_thread : thread) ~(resume_parent : unit -> unit)
+      (thread_ids : thread list) : unit =
+    match thread_ids with
+    | [] ->
+        resume_parent ()
+    | [ tid ] ->
+        if tid = current_thread then invalid_arg "join_many: cannot join current thread";
+        let state = Tempo_thread.find st.threads tid in
+        if state.completed then resume_parent ()
+        else state.waiters <- resume_parent :: state.waiters
+    | _ ->
+        let remaining = ref 0 in
+        let resumed = ref false in
+        let try_resume () =
+          if not !resumed then (
+            decr remaining;
+            if !remaining = 0 then (
+              resumed := true;
+              resume_parent ()))
+        in
+        let rec register = function
+          | [] -> ()
+          | tid :: rest ->
+              if tid = current_thread then
+                invalid_arg "join_many: cannot join current thread";
+              let state = Tempo_thread.find st.threads tid in
+              if not state.completed then (
+                incr remaining;
+                state.waiters <- try_resume :: state.waiters);
+              register rest
+        in
+        register thread_ids;
+        if !remaining = 0 then resume_parent ()
+end
 
 let handle_task : scheduler_state -> task -> unit =
   fun st t ->
@@ -155,6 +253,17 @@ let handle_task : scheduler_state -> task -> unit =
             then st.waiting <- (t.thread, thread_id) :: st.waiting;
             add_join_waiter st.threads thread_id resume
           end
+      | effect (Join_many thread_ids), k ->
+          let resume_parent () =
+            let t' =
+              spawn_now st t.thread t.guards t.kills (fun () -> continue k ())
+            in
+            Tempo_log.log ~task:t.t_id ctx "step.join_many"
+              "join_many resume | waiter task=#%d as task=#%d"
+              t.t_id t'.t_id
+          in
+          Join_many.wait_for_threads st ~current_thread:t.thread ~resume_parent
+            thread_ids
     in
     let cleanup () =
       finish_task st.threads t.thread
@@ -277,6 +386,13 @@ let create_scheduler_state () =
     ;waiting         = []
   }
 
+let has_live_tasks st =
+  Hashtbl.fold (fun _ state acc -> acc || state.active > 0) st.threads false
+
+let run_one_instant before_step after_step st =
+  run_instant before_step after_step st (Some 1);
+  not (Queue.is_empty st.current)
+
 let execute ?instants ?(input = fun () -> None) ?(output = fun _ -> ()) initial =
   let st = create_scheduler_state () in
   let input_signal = fresh_event_signal st in
@@ -294,5 +410,52 @@ let execute ?instants ?(input = fun () -> None) ?(output = fun _ -> ()) initial 
   let thread = Tempo_thread.new_thread_id st in
   ignore (spawn_now st thread [] [] (fun () -> initial input_signal output_signal));
   Tempo_log.log_banner (log_ctx st) "execute" "runtime start | schedule initial task=#%d";
-  run_instant before_step after_step st instants;
-  Tempo_log.log_duration_summary ()
+  current_host_runtime := Some { scheduler = st; wakeup = None };
+  Fun.protect
+    ~finally:(fun () ->
+      current_host_runtime := None;
+      Tempo_log.log_duration_summary ())
+    (fun () -> run_instant before_step after_step st instants)
+
+let rec run_interactive_loop ~output ~(input : 'input interactive_source) ~wakeup st
+    input_signal output_signal =
+  let before_step () =
+    match input.poll () with
+    | None -> ()
+    | Some payload -> emit_event_from_host st input_signal payload
+  in
+  let after_step () =
+    match output_signal.value with
+    | Some value -> output value
+    | None -> ()
+  in
+  let scheduled = run_one_instant before_step after_step st in
+  if not (has_live_tasks st) then ()
+  else if scheduled then
+    run_interactive_loop ~output ~input ~wakeup st input_signal output_signal
+  else begin
+    let _ = run_wakeup_pollers wakeup in
+    if Queue.is_empty st.current then input.wait ();
+    if Queue.is_empty st.current then wait_for_wakeup wakeup;
+    let _ = run_wakeup_pollers wakeup in
+    run_interactive_loop ~output ~input ~wakeup st input_signal output_signal
+  end
+
+let run_interactive ?(output = fun _ -> ()) ~(input : 'input interactive_source) initial =
+  let st = create_scheduler_state () in
+  let input_signal = fresh_event_signal st in
+  let output_signal = fresh_event_signal st in
+  let thread = Tempo_thread.new_thread_id st in
+  let wakeup = create_wakeup () in
+  ignore (spawn_now st thread [] [] (fun () -> initial input_signal output_signal));
+  Tempo_log.log_banner (log_ctx st) "execute"
+    "interactive runtime start | schedule initial task=#%d";
+  current_host_runtime := Some { scheduler = st; wakeup = Some wakeup };
+  current_interactive_wakeup := Some wakeup;
+  Fun.protect
+    ~finally:(fun () ->
+      current_interactive_wakeup := None;
+      current_host_runtime := None;
+      Tempo_log.log_duration_summary ())
+    (fun () ->
+      run_interactive_loop ~output ~input ~wakeup st input_signal output_signal)

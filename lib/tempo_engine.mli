@@ -15,10 +15,29 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *---------------------------------------------------------------------------*)
- 
+type wakeup
+
+type 'input interactive_source = {
+  poll : unit -> 'input option;
+  wait : unit -> unit;
+}
+
+val current_wakeup : unit -> wakeup option
+val notify_wakeup : wakeup -> unit
+val register_wakeup_poller : wakeup -> (unit -> bool) -> unit
+
+val emit_from_host :
+  ('a, 'a, Tempo_types.event) Tempo_types.signal_core -> 'a -> unit
+
 val execute :
      ?instants:int
   -> ?input:(unit -> 'input option)
   -> ?output:('output -> unit)
+  -> ('input Tempo_types.signal -> 'output Tempo_types.signal -> unit)
+  -> unit
+
+val run_interactive :
+     ?output:('output -> unit)
+  -> input:'input interactive_source
   -> ('input Tempo_types.signal -> 'output Tempo_types.signal -> unit)
   -> unit

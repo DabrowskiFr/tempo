@@ -131,6 +131,34 @@ localement cohérente et démonstrative.
   au lieu de `run_interactive`, afin de rester compatibles avec l'API actuelle
   de `develop` tout en restaurant le backend `tempo-fluidsynth`
 
+### Intégration progressive de l'exécution interactive
+
+- objectif : récupérer la partie utile du snapshot `lib/core/` sans casser
+  l'écosystème historique présent sur `develop`
+- choix retenu :
+  - ne pas remplacer le `tempo` monolithique existant
+  - porter uniquement la surface interactive :
+    - `run_interactive`
+    - `wakeup`
+    - `current_wakeup`
+    - `notify_wakeup`
+    - `register_wakeup_poller`
+    - `emit_from_host`
+- tentative échouée :
+  - déléguer aussi `Tempo.execute` vers `Tempo_engine.execute`
+  - effet observé : régressions sémantiques dans les tests (`watch`,
+    agrégats, ordonnancement d'awaiters)
+  - cause : `lib/tempo_engine.ml` reste un runtime plus simple que le
+    monolithe principal
+- correction :
+  - conserver `Tempo.execute` sur l'implémentation historique de `lib/tempo.ml`
+  - n'utiliser `Tempo_engine` que pour `run_interactive` et le réveil hôte
+- travail complémentaire :
+  - inclusion de `tempo_task`, `tempo_signal` et `tempo_engine` dans
+    [lib/dune] pour que le runtime interactif fasse partie du package public
+  - ajout du support `Join_many` à `Tempo_engine`, nécessaire pour supporter
+    `parallel`
+
 ### Applications avancées réintroduites
 
 - ajout de `applications/advanced/music_score_player/`
