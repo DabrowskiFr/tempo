@@ -66,7 +66,6 @@ let initial_world () =
     combo_window_left = 0;
     game_over = false;
     message = "Appuyez sur Entree ou Espace pour demarrer";
-    pending_audio = [];
   }
 
 let process (bus : Bus.t) (world : world) =
@@ -98,6 +97,7 @@ let process (bus : Bus.t) (world : world) =
   in
   Tempo.parallel
     [
-      (fun () -> Tempo.watch stop (fun () -> Tempo.parallel runtime_processes));
+      (fun () ->
+        Tempo.Constructs.supervise_until stop (fun () -> Tempo.parallel runtime_processes));
       quit_watcher;
     ]

@@ -8,16 +8,6 @@ let zone_label = function
 let frame_process (bus : Bus.t) (world : world) =
   let rec loop () =
     let _ = Tempo.await bus.input in
-    if world.started && (not world.paused) && not world.game_over then (
-      world.round_left <- max 0 (world.round_left - 1);
-      if world.round_left = 0 then
-        if world.round_index + 1 < world.rounds_total then (
-          world.round_index <- world.round_index + 1;
-          world.round_left <- world.round_frames;
-          world.message <- Printf.sprintf "Manche %d/%d" (world.round_index + 1) world.rounds_total)
-        else (
-          world.game_over <- true;
-          world.message <- "Partie terminee - appuyez sur R pour rejouer"));
     Tempo.emit bus.draw
       [
         Draw_room;
@@ -56,8 +46,11 @@ let frame_process (bus : Bus.t) (world : world) =
 let flush (bus : Bus.t) (world : world) =
   let rec loop () =
     let cmds = Tempo.await bus.draw in
-    let audio = List.rev world.pending_audio in
-    world.pending_audio <- [];
+    let audio =
+      match Tempo.Low_level.peek bus.audio with
+      | None -> []
+      | Some cmds -> List.rev cmds
+    in
     let frame =
       {
         draw = List.rev cmds;

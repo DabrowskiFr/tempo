@@ -62,6 +62,9 @@ en priorité sur :
     la migration comme un vrai basculement de source de vérité : activer le
     nouveau build, adapter les dépendants actifs, puis seulement conserver ou
     supprimer l'ancien code comme archive
+13. pour une application vitrine, n'introduire `Tempo_jobs` que si un besoin
+    métier réel existe (calcul externe, import ou I/O parallélisable) ; ne pas
+    l'utiliser comme simple démonstration décorative
 
 ## Points d'attention
 

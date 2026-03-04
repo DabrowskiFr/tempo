@@ -31,7 +31,19 @@ let process (bus : Bus.t) =
   in
   let rec run_feedback () =
     let fx = Tempo.await trigger in
-    Tempo.watch trigger (fun () -> emit_feedback bus fx fx_ttl);
+    Tempo.watch trigger (fun () ->
+        let ttl = ref fx_ttl in
+        Tempo.Constructs.timeout fx_ttl ~on_timeout:(fun () -> ())
+          (fun () ->
+            let rec loop () =
+              let pos, success, label = fx in
+              let kind = if success then Flagrant else False_positive in
+              Tempo.emit bus.draw [ Draw_action_fx (pos, kind, label, !ttl) ];
+              ttl := max 0 (!ttl - 1);
+              Tempo.pause ();
+              loop ()
+            in
+            loop ()));
     run_feedback ()
   in
   Tempo.parallel [ ingest_events; run_feedback ]

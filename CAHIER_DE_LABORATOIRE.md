@@ -309,3 +309,34 @@ reconstruction locale cohérente de la vitrine réactive recherchée.
   - suppression de l'entrée obsolète dans `.ocamlformat-ignore`
 - validation :
   - `dune build @install @runtest @doc`
+
+### 2026-03-04 - game-univ recentré comme vitrine du coeur Tempo
+
+- objectif : pousser `game-univ` plus loin comme démonstrateur du runtime
+  réactif sans ajouter artificiellement `Tempo_jobs`
+- changements retenus :
+  - supervision racine via `Tempo.Constructs.supervise_until`
+  - feedback visuel borné par `Tempo.Constructs.timeout`
+  - logique musicale découpée en boucles `Tempo.Constructs.every_n`
+    par mode et par phase
+  - suppression du tampon audio mutable hors-modèle `world.pending_audio`
+    au profit du signal agrégé `bus.audio`
+  - retrait de la décrémentation du temps de manche dans `Render.frame_process`
+    pour laisser `Clock.process` comme seule source de vérité temporelle
+- justification sur `Tempo_jobs` :
+  - tentative volontairement non lancée
+  - raison : aucun calcul externe ni I/O asynchrone ne justifie ici un job
+    parallèle ; l'introduire n'aurait servi qu'à "montrer" le package, au
+    détriment de la lisibilité de la vitrine
+- résultat :
+  - `game-univ` montre maintenant plus clairement
+    - `parallel`
+    - `watch` / supervision
+    - `run_interactive`
+    - `Constructs.every_n`
+    - `Constructs.timeout`
+    - communication inter-processus par signaux agrégés
+- validation :
+  - `dune build applications/advanced/game-univ/src/main.exe applications/advanced/game-univ/src/headless_runner.exe`
+  - `dune exec ./applications/advanced/game-univ/src/headless_runner.exe`
+  - `dune build @install @runtest @doc`

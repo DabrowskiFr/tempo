@@ -37,7 +37,6 @@ let reset_world (world : world) =
   world.combo_window_left <- 0;
   world.game_over <- false;
   world.message <- "Appuyez sur Entree ou Espace pour demarrer";
-  world.pending_audio <- [];
   Array.iter
     (fun s ->
       s.cheating <- false;
