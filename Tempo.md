@@ -150,7 +150,7 @@ let () =
 Applications avancées importantes dans ce dépôt :
 - `applications/advanced/game-univ`
 - `applications/advanced/music_score_player`
-- `applications/advanced/refactor`
+- `applications/advanced/music_score_player`
 - `applications/advanced/tempo-core-studio`
 
 Démos simples :

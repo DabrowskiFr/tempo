@@ -116,6 +116,42 @@ en priorité sur :
     format source et un format dérivé, séparer physiquement les assets
     (`mid/` vs `tscore/`) et charger uniquement le format opérationnel en
     runtime
+27. pour comparer des backends sonores dans une vitrine interactive, ajouter un
+    mécanisme de bascule runtime explicite (mêmes notes, même timeline, seul
+    le backend change) afin que la comparaison reste fiable
+28. lorsqu'un asset de haute qualité est volumineux, le garder optionnel et
+    non versionné (gitignore local ciblé), avec une politique de fallback
+    explicite vers un asset plus léger versionné
+29. pour les contrôles expressifs MIDI (ex: pédale CC64), les modéliser comme
+    événements explicites de la partition logique Tempo et les rejouer via un
+    processus dédié, au même titre que les notes
+30. pour les partitions volumineuses, séparer le format source (texte lisible)
+    et le format runtime (binaire chargé par l'application), avec des outils
+    CLI explicites pour conversion et inspection texte
+31. garder une notation texte orientée musicien (tempo référencé à la noire,
+    positions par mesure/étape), puis convertir systématiquement vers la
+    représentation interne sans exposer la granularité brute à l'utilisateur
+32. pour éviter tout coût caché à l'exécution, charger les partitions en
+    format binaire versionné au démarrage/changement de morceau ; ne faire les
+    conversions `mid/txt -> binaire` qu'en phase outillage (CLI), jamais à
+    chaque instant de la boucle Tempo
+33. dans les formats d'échange visibles utilisateur (`txt`, métadonnées
+    affichées), éviter les libellés techniques liés au backend source (ex:
+    ticks MIDI) et privilégier des unités logiques stables (`step`)
+34. lorsque la grille temporelle est destinée à des musiciens, exposer une
+    `subdivision` (ex: `1/16`) et garder `units_per_bar` comme donnée interne
+    dérivée/mise en cache pour le runtime
+35. pour le piano, intégrer explicitement la tempo map et les contrôles
+    expressifs (CC64/66/67) dans la timeline logique Tempo, puis les rejouer
+    via des processus dédiés, plutôt que d'en laisser l'interprétation implicite
+    au backend audio
+36. maintenir une nomenclature d'assets musicale uniforme et lisible
+    (`compositeur_oeuvre_reference.*`) afin de garder la navigation claire
+    dans l'application de démo et d'éviter les identifiants bruts de source
+37. en lecture interactive, dériver la durée d'un instant de la métrique
+    réelle de la partition (`meter` + `units_per_bar`) et non d'une hypothèse
+    fixe (ex: 1/16), pour éviter les dérives temporelles malgré une conversion
+    d'événements correcte
 
 ## Points d'attention
 

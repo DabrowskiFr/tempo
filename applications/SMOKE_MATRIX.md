@@ -9,7 +9,6 @@ This matrix defines release smoke checks for all app slugs exposed by:
 | App | Build target | `run --help` | Headless smoke | Status |
 |---|---|---|---|---|
 | `game-univ` | yes | yes | no | automated (partial) |
-| `refactor` | yes | yes | yes (`--headless --steps 120 --seed 1`) | automated |
 | `tempo-core-studio` | yes | yes | yes (`--headless --instants 12`) | automated |
 | `snake-raylib` | yes | yes | no | automated (partial) |
 | `boids-raylib` | yes | yes | no | automated (partial) |
@@ -24,8 +23,7 @@ This matrix defines release smoke checks for all app slugs exposed by:
 Run interactively before release:
 
 1. `dune exec ./applications/run -- game-univ`
-2. `dune exec ./applications/run -- refactor`
-3. `dune exec ./applications/run -- tempo-core-studio`
+2. `dune exec ./applications/run -- tempo-core-studio`
 4. at least one demo per visual family:
    - `dune exec ./applications/run -- boids-raylib`
    - `dune exec ./applications/run -- lenia-raylib`

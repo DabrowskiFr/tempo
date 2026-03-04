@@ -16,6 +16,8 @@ type midi_file = {
     division : int;
     tempo_us_per_quarter : int;
     time_signature : (int * int) option;
+    tempo_changes_us_per_quarter : (int * int) list;
+    time_signature_changes : (int * (int * int)) list;
     events : (int * midi_event) list;
   }
 
@@ -29,5 +31,6 @@ val program_select : t -> channel:int -> bank:int -> preset:int -> unit
 val note_on : t -> channel:int -> key:int -> velocity:int -> unit
 val note_off : t -> channel:int -> key:int -> unit
 val all_notes_off : t -> channel:int -> unit
+val control_change : t -> channel:int -> control:int -> value:int -> unit
 
 val import_midi_file : string -> midi_file

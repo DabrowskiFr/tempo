@@ -12,7 +12,7 @@ Applications are now split into:
 Moved advanced apps:
 
 - `applications/advanced/game-univ`
-- `applications/advanced/refactor`
+- `applications/advanced/music_score_player`
 
 Simple demos are under `applications/simple-demos/*`.
 
@@ -28,13 +28,13 @@ Examples:
 
 ```bash
 dune exec ./applications/run -- game-univ
-dune exec ./applications/run -- refactor
+dune exec ./applications/run -- music_score_player
 dune exec ./applications/run -- lenia-raylib
 ```
 
 Compatibility alias kept:
 
-- `reactive-reconfiguration-engine` maps to `refactor` in launcher scripts.
+- `reactive-reconfiguration-engine` launcher is deprecated.
 
 ### Release validation
 

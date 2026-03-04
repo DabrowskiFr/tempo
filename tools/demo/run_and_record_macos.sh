@@ -33,7 +33,7 @@ STARTUP_DELAY="${6:-8}"
 
 APP_DIR=""
 case "$APP" in
-  game-univ|refactor)
+  game-univ|tempo-core-studio|music_score_player)
     APP_DIR="applications/advanced/$APP"
     ;;
   snake-raylib|boids-raylib|ca-continuous-raylib|lenia-raylib|solar-system-raylib|logicgroove|temporalsim)

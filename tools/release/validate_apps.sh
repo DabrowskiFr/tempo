@@ -6,7 +6,7 @@ cd "$ROOT"
 
 PROFILE="${DUNE_PROFILE:-release}"
 
-ADVANCED_APPS="game-univ refactor tempo-core-studio"
+ADVANCED_APPS="game-univ tempo-core-studio"
 SIMPLE_APPS="snake-raylib boids-raylib ca-continuous-raylib lenia-raylib solar-system-raylib logicgroove temporalsim"
 ALL_APPS="$ADVANCED_APPS $SIMPLE_APPS"
 
@@ -77,7 +77,6 @@ dune exec ./applications/reconfiguration/run -- help >/dev/null
 
 log "[2/5] README quality checks"
 check_readme_sections "$ROOT/applications/advanced/game-univ"
-check_readme_sections "$ROOT/applications/advanced/refactor"
 for app in $SIMPLE_APPS; do
   check_readme_sections "$ROOT/applications/simple-demos/$app"
 done
@@ -103,7 +102,6 @@ done
 
 log "[5/5] Headless smoke checks"
 # Keep smoke deterministic and short.
-dune exec ./applications/run -- refactor -- --headless --steps 120 --seed 1 >/dev/null
 dune exec ./applications/run -- tempo-core-studio -- --headless --instants 12 >/dev/null
 
 log "Validation OK"

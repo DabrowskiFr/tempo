@@ -149,7 +149,7 @@ let () =
 Important advanced applications in this repository:
 - `applications/advanced/game-univ`
 - `applications/advanced/music_score_player`
-- `applications/advanced/refactor`
+- `applications/advanced/music_score_player`
 - `applications/advanced/tempo-core-studio`
 
 Simple demos:

@@ -284,6 +284,21 @@ CAMLprim value caml_tempo_fluidsynth_all_notes_off(value synth_v, value channel_
   CAMLreturn(Val_unit);
 }
 
+CAMLprim value caml_tempo_fluidsynth_control_change(
+    value synth_v, value channel_v, value control_v, value value_v)
+{
+  CAMLparam4(synth_v, channel_v, control_v, value_v);
+  tempo_fluidsynth_t *handle = tempo_fluidsynth_handle(synth_v);
+  check_fluid(
+      fluid_synth_cc(
+          handle->synth,
+          Int_val(channel_v),
+          Int_val(control_v),
+          Int_val(value_v)),
+      "fluid_synth_cc failed");
+  CAMLreturn(Val_unit);
+}
+
 CAMLprim value caml_tempo_fluidsynth_import_midi_file(value path_v)
 {
   CAMLparam1(path_v);

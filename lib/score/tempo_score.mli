@@ -24,9 +24,30 @@ type voice = {
   notes : note array;
 }
 
+type pedal = {
+  start_unit : int;
+  channel : int;
+  value : int;
+}
+
+type control = {
+  start_unit : int;
+  channel : int;
+  control : int;
+  value : int;
+}
+
+type tempo_change = {
+  start_unit : int;
+  bpm : int;
+}
+
 type t = {
   title : string;
   voices : voice array;
+  pedals : pedal array;
+  controls : control array;
+  tempo_changes : tempo_change array;
   total_units : int;
   unit_label : string;
   time_signature_num : int;
@@ -61,3 +82,20 @@ val to_text : t -> string
 
 val write_text_file : path:string -> t -> unit
 (** Write a score to a text file in the compact textual format. *)
+
+exception Unsupported_binary_format of string
+(** Raised when binary payload does not match tempo-score format/version. *)
+
+val of_binary : bytes -> t
+(** Parse a score from binary tempo-score payload.
+
+    Supports current binary v3 payloads and legacy v1/v2 payloads. *)
+
+val of_binary_file : string -> t
+(** Parse a score from a binary tempo-score file. *)
+
+val to_binary : t -> bytes
+(** Serialize a score to binary tempo-score payload (v3). *)
+
+val write_binary_file : path:string -> t -> unit
+(** Write a score to a binary tempo-score file. *)

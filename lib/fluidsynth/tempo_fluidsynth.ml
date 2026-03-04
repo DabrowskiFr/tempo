@@ -10,6 +10,8 @@ type midi_file = {
     division : int;
     tempo_us_per_quarter : int;
     time_signature : (int * int) option;
+    tempo_changes_us_per_quarter : (int * int) list;
+    time_signature_changes : (int * (int * int)) list;
     events : (int * midi_event) list;
   }
 
@@ -19,13 +21,13 @@ external program_select : t -> channel:int -> bank:int -> preset:int -> unit = "
 external note_on : t -> channel:int -> key:int -> velocity:int -> unit = "caml_tempo_fluidsynth_note_on"
 external note_off : t -> channel:int -> key:int -> unit = "caml_tempo_fluidsynth_note_off"
 external all_notes_off : t -> channel:int -> unit = "caml_tempo_fluidsynth_all_notes_off"
+external control_change : t -> channel:int -> control:int -> value:int -> unit = "caml_tempo_fluidsynth_control_change"
 
 let default_soundfont_candidates =
   [
     Sys.getenv_opt "TEMPO_SOUNDFONT";
-    Some "/Users/fredericdabrowski/Repos/tempo/tempo-dev/tempo/applications/advanced/music_score_player/assets/GeneralUser-GS.sf2";
-    Some "/opt/homebrew/Cellar/fluid-synth/2.5.3/share/fluid-synth/sf2/VintageDreamsWaves-v2.sf3";
-    Some "/opt/homebrew/Cellar/fluid-synth/2.5.3/share/fluid-synth/sf2/VintageDreamsWaves-v2.sf2";
+    Some "/Users/fredericdabrowski/Repos/tempo/tempo-dev/tempo/applications/advanced/music_score_player/assets/soundfonts/MuseScore_General.sf2";
+    Some "/Users/fredericdabrowski/Repos/tempo/tempo-dev/tempo/applications/advanced/music_score_player/assets/soundfonts/GeneralUser-GS.sf2";
   ]
 
 let default_soundfont () =
@@ -238,4 +240,13 @@ let import_midi_file path =
         | (_, sig_) :: _ -> Some sig_
         | [] -> None
       in
-      { division; tempo_us_per_quarter; time_signature; events })
+      {
+        division;
+        tempo_us_per_quarter;
+        time_signature;
+        tempo_changes_us_per_quarter =
+          List.sort (fun (ta, _) (tb, _) -> compare ta tb) !tempos;
+        time_signature_changes =
+          List.sort (fun (ta, _) (tb, _) -> compare ta tb) !time_signatures;
+        events;
+      })

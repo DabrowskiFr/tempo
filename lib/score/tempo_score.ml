@@ -19,9 +19,30 @@ type voice = {
   notes : note array;
 }
 
+type pedal = {
+  start_unit : int;
+  channel : int;
+  value : int;
+}
+
+type control = {
+  start_unit : int;
+  channel : int;
+  control : int;
+  value : int;
+}
+
+type tempo_change = {
+  start_unit : int;
+  bpm : int;
+}
+
 type t = {
   title : string;
   voices : voice array;
+  pedals : pedal array;
+  controls : control array;
+  tempo_changes : tempo_change array;
   total_units : int;
   unit_label : string;
   time_signature_num : int;
@@ -31,10 +52,13 @@ type t = {
 }
 
 exception Parse_error of string
+exception Unsupported_binary_format of string
 
 let min_bpm = 50
 let max_bpm = 180
 let default_bpm = 108
+let clamp lo hi v = max lo (min hi v)
+let canonical_unit_label = "1/16"
 
 let default =
   let voices =
@@ -89,8 +113,11 @@ let default =
   {
     title = "Built-in score";
     voices;
+    pedals = [||];
+    controls = [||];
+    tempo_changes = [||];
     total_units = 32;
-    unit_label = "sixteenth note";
+    unit_label = canonical_unit_label;
     time_signature_num = 4;
     time_signature_den = 4;
     units_per_bar = 16;
@@ -121,41 +148,89 @@ let gcd_list values =
   in
   loop 0 values
 
-let describe_unit unit_ticks division =
-  if unit_ticks <= 0 || division <= 0 then "logical unit"
-  else if division mod unit_ticks <> 0 then Printf.sprintf "%d MIDI ticks" unit_ticks
-  else
-    match division / unit_ticks with
-    | 1 -> "quarter note"
-    | 2 -> "eighth note"
-    | 4 -> "sixteenth note"
-    | 8 -> "thirty-second note"
-    | n -> Printf.sprintf "1/%d of a quarter note" n
-
 let units_per_bar ~division ~unit_ticks ~numerator ~denominator =
   let bar_ticks = (numerator * division * 4) / max 1 denominator in
-  max 1 (bar_ticks / max 1 unit_ticks)
+  let u = max 1 unit_ticks in
+  max 1 (int_of_float (Float.round (float_of_int bar_ticks /. float_of_int u)))
 
-let choose_unit_ticks values division max_tick =
-  let raw_gcd =
-    match gcd_list values with
-    | 0 -> max 1 (division / 4)
-    | n -> n
+let subdivision_den_of_units_per_bar ~num ~den ~units_per_bar =
+  let num = max 1 num in
+  let den = max 1 den in
+  let upb = max 1 units_per_bar in
+  let scaled = upb * den in
+  if scaled mod num = 0 then Some (scaled / num) else None
+
+let unit_label_of_subdivision_den den =
+  Printf.sprintf "1/%d" (max 1 den)
+
+let units_of_ticks ticks unit_ticks =
+  int_of_float
+    (Float.round (float_of_int ticks /. float_of_int (max 1 unit_ticks)))
+
+let units_floor ticks unit_ticks =
+  max 0 (ticks / max 1 unit_ticks)
+
+let units_ceil ticks unit_ticks =
+  let u = max 1 unit_ticks in
+  max 0 ((ticks + u - 1) / u)
+
+let choose_unit_ticks values division max_tick numerator denominator =
+  let bar_ticks = (max 1 numerator * max 1 division * 4) / max 1 denominator in
+  let max_units = 4096 in
+  let quant_error ticks =
+    List.fold_left
+      (fun acc v ->
+        let q = units_of_ticks v ticks in
+        let reconstructed = q * ticks in
+        acc + abs (v - reconstructed))
+      0 values
+  in
+  let score ticks =
+    let err = quant_error ticks in
+    let density_penalty = max 0 ((max_tick / max 1 ticks) - 1024) in
+    (err * 1000) + density_penalty
+  in
+  let add_candidate acc ticks =
+    if ticks <= 0 then acc
+    else if max_tick / ticks > max_units then acc
+    else
+      let upb =
+        max 1
+          (int_of_float
+             (Float.round (float_of_int bar_ticks /. float_of_int ticks)))
+      in
+      if upb > 32 then acc
+    else if List.mem ticks acc then acc
+    else ticks :: acc
+  in
+  let preferred_units_per_bar = [ 32; 24; 16; 12; 8; 6; 4; 3; 2; 1 ] in
+  let bar_aligned_candidates =
+    preferred_units_per_bar
+    |> List.filter_map (fun upb ->
+           if upb <= 0 || bar_ticks mod upb <> 0 then None
+           else Some (bar_ticks / upb))
   in
   let candidate_denominators = [ 64; 48; 32; 24; 16; 12; 8; 6; 4; 3; 2; 1 ] in
-  let exact_candidates =
+  let division_candidates =
     candidate_denominators
     |> List.filter_map (fun denom ->
            if division mod denom <> 0 then None
-           else
-             let ticks = division / denom in
-             if ticks < raw_gcd then None
-             else if List.for_all (fun value -> value mod ticks = 0) values then Some ticks
-             else None)
+           else Some (division / denom))
   in
-  match exact_candidates with
-  | ticks :: _ -> ticks
+  let candidates =
+    List.fold_left add_candidate [] (bar_aligned_candidates @ division_candidates)
+  in
+  match candidates with
+  | ticks :: rest ->
+      List.fold_left
+        (fun best t -> if score t < score best then t else best)
+        ticks rest
   | [] ->
+      let raw_gcd =
+        match gcd_list values with
+        | 0 -> max 1 (division / 4)
+        | n -> n
+      in
       let rec coarsen ticks =
         if ticks <= 0 then max 1 raw_gcd
         else
@@ -171,6 +246,7 @@ let of_midi_file path =
   let programs = Array.make 16 0 in
   let active = Hashtbl.create 64 in
   let groups = Hashtbl.create 32 in
+  let controls_ticks_rev = ref [] in
   let register_note channel bank program start_tick duration_tick key velocity =
     let group_key = (channel, bank, program) in
     let bucket =
@@ -203,6 +279,9 @@ let of_midi_file path =
       | Synth.Control_change (channel, control, value) ->
           if control = 0 then bank_msb.(channel) <- value
           else if control = 32 then bank_lsb.(channel) <- value
+          else if control = 64 || control = 66 || control = 67 then
+            controls_ticks_rev :=
+              (tick, channel, control, clamp 0 127 value) :: !controls_ticks_rev
       | Synth.Program_change (channel, program) ->
           programs.(channel) <- program
       | Synth.Note_on (channel, key, velocity) ->
@@ -242,6 +321,11 @@ let of_midi_file path =
           acc !bucket)
       0 raw_groups
   in
+  let time_signature_num, time_signature_den =
+    match midi.time_signature with
+    | Some (num, den) -> (max 1 num, max 1 den)
+    | None -> (4, 4)
+  in
   let unit_ticks =
     let values =
       List.concat_map
@@ -251,7 +335,8 @@ let of_midi_file path =
             !bucket)
         raw_groups
     in
-    choose_unit_ticks values midi.division max_tick
+    choose_unit_ticks values midi.division max_tick time_signature_num
+      time_signature_den
   in
   let voices =
     Array.of_list
@@ -264,9 +349,11 @@ let of_midi_file path =
                     | 0 -> compare ka kb
                     | n -> n)
              |> List.map (fun (start_tick, duration_tick, key, velocity) ->
+                    let start_unit = units_floor start_tick unit_ticks in
+                    let end_unit = units_ceil (start_tick + duration_tick) unit_ticks in
                     {
-                      start_unit = start_tick / unit_ticks;
-                      duration_units = max 1 (duration_tick / unit_ticks);
+                      start_unit;
+                      duration_units = max 1 (end_unit - start_unit);
                       midi = key;
                       volume = float_of_int velocity /. 127.0;
                     })
@@ -279,13 +366,71 @@ let of_midi_file path =
            })
          raw_groups)
   in
+  let controls =
+    !controls_ticks_rev
+    |> List.sort (fun (ta, ca, cta, va) (tb, cb, ctb, vb) ->
+           match compare ta tb with
+           | 0 -> (
+               match compare ca cb with
+               | 0 -> (
+                   match compare cta ctb with
+                   | 0 -> compare va vb
+                   | n -> n)
+               | n -> n)
+           | n -> n)
+    |> List.map (fun (tick, channel, control, value) ->
+           {
+             start_unit = units_of_ticks tick unit_ticks;
+             channel;
+             control;
+             value;
+           })
+    |> Array.of_list
+  in
+  let pedals =
+    controls
+    |> Array.to_list
+    |> List.filter_map (fun (c : control) ->
+           if c.control = 64 then
+             Some { start_unit = c.start_unit; channel = c.channel; value = c.value }
+           else None)
+    |> Array.of_list
+  in
+  let tempo_changes =
+    midi.tempo_changes_us_per_quarter
+    |> List.sort (fun (ta, _) (tb, _) -> compare ta tb)
+    |> List.filter_map (fun (tick, tempo_us_per_quarter) ->
+           if tempo_us_per_quarter <= 0 then None
+           else
+             let bpm =
+               int_of_float
+                 (60000000.0 /. float_of_int (max 1 tempo_us_per_quarter))
+             in
+             Some
+               {
+                 start_unit = max 0 (units_of_ticks tick unit_ticks);
+                 bpm = clamp min_bpm max_bpm bpm;
+               })
+    |> List.sort (fun a b -> compare a.start_unit b.start_unit)
+    |> Array.of_list
+  in
   let total_units =
+    let note_max =
+      Array.fold_left
+        (fun acc (voice : voice) ->
+          Array.fold_left
+            (fun acc (note : note) -> max acc (note.start_unit + note.duration_units))
+            acc voice.notes)
+        0 voices
+    in
+    let with_controls =
+      Array.fold_left
+        (fun acc (c : control) -> max acc (c.start_unit + 1))
+        note_max controls
+    in
     Array.fold_left
-      (fun acc (voice : voice) ->
-        Array.fold_left
-          (fun acc (note : note) -> max acc (note.start_unit + note.duration_units))
-          acc voice.notes)
-      0 voices
+      (fun acc (t : tempo_change) -> max acc (t.start_unit + 1))
+      with_controls tempo_changes
   in
   let initial_bpm =
     let bpm =
@@ -293,29 +438,35 @@ let of_midi_file path =
     in
     max min_bpm (min max_bpm bpm)
   in
-  let time_signature_num, time_signature_den =
-    match midi.time_signature with
-    | Some (num, den) -> (max 1 num, max 1 den)
-    | None -> (4, 4)
+  let units_per_bar =
+    units_per_bar ~division:midi.division ~unit_ticks ~numerator:time_signature_num
+      ~denominator:time_signature_den
+  in
+  let unit_label =
+    match
+      subdivision_den_of_units_per_bar ~num:time_signature_num ~den:time_signature_den
+        ~units_per_bar
+    with
+    | Some subdivision_den -> unit_label_of_subdivision_den subdivision_den
+    | None -> canonical_unit_label
   in
   {
     title = Filename.basename path;
     voices;
+    pedals;
+    controls;
+    tempo_changes;
     total_units = max 1 total_units;
-    unit_label = describe_unit unit_ticks midi.division;
+    unit_label;
     time_signature_num;
     time_signature_den;
-    units_per_bar =
-      units_per_bar ~division:midi.division ~unit_ticks ~numerator:time_signature_num
-        ~denominator:time_signature_den;
+    units_per_bar;
     initial_bpm;
   }
 
 let note_count (score : t) =
   Array.fold_left (fun acc (voice : voice) -> acc + Array.length voice.notes) 0
     score.voices
-
-let clamp lo hi v = max lo (min hi v)
 
 let parse_int ~line ~field raw =
   match int_of_string_opt raw with
@@ -354,6 +505,15 @@ let parse_meter ~line raw =
         (Parse_error
            (Printf.sprintf "line %d: expected meter as N/D, got %S" line raw))
 
+let parse_tempo_q ~line raw =
+  let raw = String.trim raw in
+  let v =
+    if String.starts_with ~prefix:"q=" raw then
+      String.sub raw 2 (String.length raw - 2)
+    else raw
+  in
+  clamp min_bpm max_bpm (parse_int ~line ~field:"tempo (q=...)" (String.trim v))
+
 let parse_unit_fraction unit_label =
   match String.split_on_char '/' (String.trim unit_label) with
   | [ "1"; d ] -> int_of_string_opt (String.trim d)
@@ -365,16 +525,27 @@ let derive_units_per_bar ~num ~den ~unit_label =
       max 1 (num * (unit_den / den))
   | _ -> 16
 
+let normalize_unit_label raw =
+  let s = String.trim raw in
+  if s = "" then canonical_unit_label
+  else
+    match parse_unit_fraction s with
+    | Some d when d > 0 -> Printf.sprintf "1/%d" d
+    | _ -> canonical_unit_label
+
 let of_text content =
   let lines = String.split_on_char '\n' content in
   let header_seen = ref false in
   let title = ref "Untitled score" in
   let meter_num = ref 4 in
   let meter_den = ref 4 in
-  let unit_label = ref "1/16" in
+  let unit_label = ref canonical_unit_label in
   let units_per_bar = ref None in
   let initial_bpm = ref default_bpm in
   let voices_rev = ref [] in
+  let pedals_rev = ref [] in
+  let controls_rev = ref [] in
+  let tempo_changes_rev = ref [] in
   let current_voice : (string * instrument * note list ref) option ref = ref None in
   let push_current () =
     match !current_voice with
@@ -383,7 +554,7 @@ let of_text content =
         let notes =
           !notes_ref
           |> List.rev
-          |> List.sort (fun a b ->
+          |> List.sort (fun (a : note) (b : note) ->
                  match compare a.start_unit b.start_unit with
                  | 0 -> compare a.midi b.midi
                  | n -> n)
@@ -398,11 +569,14 @@ let of_text content =
       let line = String.trim raw_line in
       if line <> "" && line.[0] <> '#' then
         if not !header_seen then
-          if String.equal line "tempo-score v1" then header_seen := true
+          if String.equal line "tempo-score v1" || String.equal line "tempo-score v2"
+          then header_seen := true
           else
             raise
               (Parse_error
-                 (Printf.sprintf "line %d: expected header `tempo-score v1`" line_no))
+                 (Printf.sprintf
+                    "line %d: expected header `tempo-score v1` or `tempo-score v2`"
+                    line_no))
         else if String.starts_with ~prefix:"title:" line then
           title := strip_quotes (String.trim (String.sub line 6 (String.length line - 6)))
         else if String.starts_with ~prefix:"meter:" line then
@@ -412,18 +586,71 @@ let of_text content =
           meter_den := den
         else if String.starts_with ~prefix:"unit:" line then
           unit_label :=
-            strip_quotes (String.trim (String.sub line 5 (String.length line - 5)))
+            normalize_unit_label
+              (strip_quotes (String.trim (String.sub line 5 (String.length line - 5))))
+        else if String.starts_with ~prefix:"grid:" line then
+          unit_label :=
+            normalize_unit_label
+              (strip_quotes (String.trim (String.sub line 5 (String.length line - 5))))
+        else if String.starts_with ~prefix:"subdivision:" line then
+          unit_label :=
+            normalize_unit_label
+              (strip_quotes
+                 (String.trim (String.sub line 12 (String.length line - 12))))
         else if String.starts_with ~prefix:"units_per_bar:" line then
           units_per_bar :=
             Some
               (parse_int ~line:line_no ~field:"units_per_bar"
                  (String.trim
                     (String.sub line 14 (String.length line - 14))))
+        else if String.starts_with ~prefix:"tempo:" line then
+          initial_bpm :=
+            parse_tempo_q ~line:line_no
+              (String.trim (String.sub line 6 (String.length line - 6)))
         else if String.starts_with ~prefix:"bpm:" line then
           initial_bpm :=
             clamp min_bpm max_bpm
               (parse_int ~line:line_no ~field:"bpm"
                  (String.trim (String.sub line 4 (String.length line - 4))))
+        else if String.starts_with ~prefix:"tempo_change " line then (
+          let payload = String.sub line 13 (String.length line - 13) in
+          let fields = Hashtbl.create 6 in
+          String.split_on_char ' ' payload
+          |> List.filter (fun t -> String.trim t <> "")
+          |> List.iter (fun token ->
+                 let key, value = split_kv ~line:line_no token in
+                 Hashtbl.replace fields key value);
+          let get key =
+            match Hashtbl.find_opt fields key with
+            | Some v -> v
+            | None ->
+                raise
+                  (Parse_error
+                     (Printf.sprintf
+                        "line %d: missing tempo_change field %S" line_no key))
+          in
+          let units_per_bar_now =
+            Option.value !units_per_bar
+              ~default:
+                (derive_units_per_bar ~num:!meter_num ~den:!meter_den
+                   ~unit_label:!unit_label)
+          in
+          let start_unit =
+            match (Hashtbl.find_opt fields "start", Hashtbl.find_opt fields "bar", Hashtbl.find_opt fields "step") with
+            | Some s, _, _ -> parse_int ~line:line_no ~field:"tempo_change start" s
+            | None, Some b, Some step ->
+                let bar = parse_int ~line:line_no ~field:"tempo_change bar" b in
+                let step = parse_int ~line:line_no ~field:"tempo_change step" step in
+                ((max 1 bar - 1) * units_per_bar_now) + (max 1 step - 1)
+            | _ ->
+                raise
+                  (Parse_error
+                     (Printf.sprintf
+                        "line %d: tempo_change requires start:<u> or bar:<m> step:<k>"
+                        line_no))
+          in
+          let bpm = parse_tempo_q ~line:line_no (get "q") in
+          tempo_changes_rev := { start_unit = max 0 start_unit; bpm } :: !tempo_changes_rev)
         else if String.starts_with ~prefix:"voice:" line then (
           push_current ();
           let payload = String.trim (String.sub line 6 (String.length line - 6)) in
@@ -479,16 +706,34 @@ let of_text content =
               |> List.iter (fun token ->
                      let key, value = split_kv ~line:line_no token in
                      Hashtbl.replace fields key value);
+              let get_opt key = Hashtbl.find_opt fields key in
               let get key =
-                match Hashtbl.find_opt fields key with
+                match get_opt key with
                 | Some v -> v
                 | None ->
                     raise
                       (Parse_error
                          (Printf.sprintf "line %d: missing note field %S" line_no key))
               in
+              let units_per_bar_now =
+                Option.value !units_per_bar
+                  ~default:
+                    (derive_units_per_bar ~num:!meter_num ~den:!meter_den
+                       ~unit_label:!unit_label)
+              in
               let start_unit =
-                parse_int ~line:line_no ~field:"note start" (get "start")
+                match (get_opt "start", get_opt "bar", get_opt "step") with
+                | Some s, _, _ -> parse_int ~line:line_no ~field:"note start" s
+                | None, Some b, Some step ->
+                    let bar = parse_int ~line:line_no ~field:"note bar" b in
+                    let step = parse_int ~line:line_no ~field:"note step" step in
+                    ((max 1 bar - 1) * units_per_bar_now) + (max 1 step - 1)
+                | _ ->
+                    raise
+                      (Parse_error
+                         (Printf.sprintf
+                            "line %d: note requires either start:<u> or bar:<m> step:<k>"
+                            line_no))
               in
               let duration_units =
                 parse_int ~line:line_no ~field:"note dur" (get "dur")
@@ -503,6 +748,110 @@ let of_text content =
                   volume = float_of_int (clamp 1 127 velocity) /. 127.0;
                 }
                 :: !notes_ref)
+        else if String.starts_with ~prefix:"pedal " line then (
+          let payload = String.sub line 6 (String.length line - 6) in
+          let fields = Hashtbl.create 8 in
+          String.split_on_char ' ' payload
+          |> List.filter (fun t -> String.trim t <> "")
+          |> List.iter (fun token ->
+                 let key, value = split_kv ~line:line_no token in
+                 Hashtbl.replace fields key value);
+          let get_opt key = Hashtbl.find_opt fields key in
+          let get key =
+            match get_opt key with
+            | Some v -> v
+            | None ->
+                raise
+                  (Parse_error
+                     (Printf.sprintf "line %d: missing pedal field %S" line_no key))
+          in
+          let units_per_bar_now =
+            Option.value !units_per_bar
+              ~default:
+                (derive_units_per_bar ~num:!meter_num ~den:!meter_den
+                   ~unit_label:!unit_label)
+          in
+          let start_unit =
+            match (get_opt "start", get_opt "bar", get_opt "step") with
+            | Some s, _, _ -> parse_int ~line:line_no ~field:"pedal start" s
+            | None, Some b, Some step ->
+                let bar = parse_int ~line:line_no ~field:"pedal bar" b in
+                let step = parse_int ~line:line_no ~field:"pedal step" step in
+                ((max 1 bar - 1) * units_per_bar_now) + (max 1 step - 1)
+            | _ ->
+                raise
+                  (Parse_error
+                     (Printf.sprintf
+                        "line %d: pedal requires either start:<u> or bar:<m> step:<k>"
+                        line_no))
+          in
+          let channel = parse_int ~line:line_no ~field:"pedal ch" (get "ch") in
+          let value_raw =
+            match Hashtbl.find_opt fields "val" with
+            | Some v -> v
+            | None -> get "value"
+          in
+          let value = parse_int ~line:line_no ~field:"pedal val" value_raw in
+          pedals_rev :=
+            { start_unit = max 0 start_unit; channel = clamp 0 15 channel; value = clamp 0 127 value }
+            :: !pedals_rev)
+        else if String.starts_with ~prefix:"control " line then (
+          let payload = String.sub line 8 (String.length line - 8) in
+          let fields = Hashtbl.create 8 in
+          String.split_on_char ' ' payload
+          |> List.filter (fun t -> String.trim t <> "")
+          |> List.iter (fun token ->
+                 let key, value = split_kv ~line:line_no token in
+                 Hashtbl.replace fields key value);
+          let get_opt key = Hashtbl.find_opt fields key in
+          let get key =
+            match get_opt key with
+            | Some v -> v
+            | None ->
+                raise
+                  (Parse_error
+                     (Printf.sprintf "line %d: missing control field %S" line_no key))
+          in
+          let units_per_bar_now =
+            Option.value !units_per_bar
+              ~default:
+                (derive_units_per_bar ~num:!meter_num ~den:!meter_den
+                   ~unit_label:!unit_label)
+          in
+          let start_unit =
+            match (get_opt "start", get_opt "bar", get_opt "step") with
+            | Some s, _, _ -> parse_int ~line:line_no ~field:"control start" s
+            | None, Some b, Some step ->
+                let bar = parse_int ~line:line_no ~field:"control bar" b in
+                let step = parse_int ~line:line_no ~field:"control step" step in
+                ((max 1 bar - 1) * units_per_bar_now) + (max 1 step - 1)
+            | _ ->
+                raise
+                  (Parse_error
+                     (Printf.sprintf
+                        "line %d: control requires start:<u> or bar:<m> step:<k>"
+                        line_no))
+          in
+          let channel = parse_int ~line:line_no ~field:"control ch" (get "ch") in
+          let control =
+            match get_opt "cc" with
+            | Some cc -> parse_int ~line:line_no ~field:"control cc" cc
+            | None -> parse_int ~line:line_no ~field:"control control" (get "control")
+          in
+          let value_raw =
+            match get_opt "val" with
+            | Some v -> v
+            | None -> get "value"
+          in
+          let value = parse_int ~line:line_no ~field:"control val" value_raw in
+          controls_rev :=
+            {
+              start_unit = max 0 start_unit;
+              channel = clamp 0 15 channel;
+              control = clamp 0 127 control;
+              value = clamp 0 127 value;
+            }
+            :: !controls_rev)
         else
           raise
             (Parse_error
@@ -512,17 +861,71 @@ let of_text content =
     raise (Parse_error "missing header `tempo-score v1`");
   push_current ();
   let voices = Array.of_list (List.rev !voices_rev) in
+  let pedals =
+    !pedals_rev
+    |> List.sort (fun (a : pedal) (b : pedal) ->
+           match compare a.start_unit b.start_unit with
+           | 0 -> compare a.channel b.channel
+           | n -> n)
+    |> Array.of_list
+  in
+  let controls =
+    let controls = List.rev !controls_rev in
+    let with_legacy_pedals =
+      List.rev_map
+        (fun (p : pedal) ->
+          {
+            start_unit = p.start_unit;
+            channel = p.channel;
+            control = 64;
+            value = p.value;
+          })
+        !pedals_rev
+      @ controls
+    in
+    with_legacy_pedals
+    |> List.sort (fun (a : control) (b : control) ->
+           match compare a.start_unit b.start_unit with
+           | 0 -> (
+               match compare a.channel b.channel with
+               | 0 -> (
+                   match compare a.control b.control with
+                   | 0 -> compare a.value b.value
+                   | n -> n)
+               | n -> n)
+           | n -> n)
+    |> Array.of_list
+  in
+  let tempo_changes =
+    !tempo_changes_rev
+    |> List.sort (fun (a : tempo_change) (b : tempo_change) ->
+           match compare a.start_unit b.start_unit with
+           | 0 -> compare a.bpm b.bpm
+           | n -> n)
+    |> Array.of_list
+  in
   let total_units =
-    Array.fold_left
-      (fun acc (v : voice) ->
-        Array.fold_left
-          (fun local (n : note) -> max local (n.start_unit + n.duration_units))
-          acc v.notes)
-      0 voices
+    let note_max =
+      Array.fold_left
+        (fun acc (v : voice) ->
+          Array.fold_left
+            (fun local (n : note) -> max local (n.start_unit + n.duration_units))
+            acc v.notes)
+        0 voices
+    in
+    let with_controls =
+      Array.fold_left (fun acc (c : control) -> max acc (c.start_unit + 1)) note_max
+        controls
+    in
+    Array.fold_left (fun acc (t : tempo_change) -> max acc (t.start_unit + 1))
+      with_controls tempo_changes
   in
   {
     title = !title;
     voices;
+    pedals;
+    controls;
+    tempo_changes;
     total_units = max 1 total_units;
     unit_label = !unit_label;
     time_signature_num = !meter_num;
@@ -555,12 +958,26 @@ let maybe_quote s =
 let to_text (score : t) =
   let b = Buffer.create 1024 in
   let add fmt = Printf.ksprintf (Buffer.add_string b) fmt in
-  add "tempo-score v1\n";
+  add "tempo-score v2\n";
   add "title: %s\n" (maybe_quote score.title);
   add "meter: %d/%d\n" score.time_signature_num score.time_signature_den;
-  add "unit: %s\n" (maybe_quote score.unit_label);
-  add "units_per_bar: %d\n" score.units_per_bar;
-  add "bpm: %d\n\n" score.initial_bpm;
+  let unit_text =
+    match parse_unit_fraction score.unit_label with
+    | Some d when d > 0 -> Printf.sprintf "1/%d" d
+    | _ -> canonical_unit_label
+  in
+  add "subdivision: %s\n" (maybe_quote unit_text);
+  add "tempo: q=%d\n\n" score.initial_bpm;
+  let printed_tempo_change = ref false in
+  Array.iter
+    (fun (t : tempo_change) ->
+      if not (t.start_unit = 0 && t.bpm = score.initial_bpm) then (
+        let bar = (t.start_unit / score.units_per_bar) + 1 in
+        let step = (t.start_unit mod score.units_per_bar) + 1 in
+        add "tempo_change bar:%d step:%d q:%d\n" bar step t.bpm;
+        printed_tempo_change := true))
+    score.tempo_changes;
+  if !printed_tempo_change then add "\n";
   Array.iteri
     (fun idx (voice : voice) ->
       add "voice: %s | ch:%d bank:%d prog:%d\n"
@@ -568,11 +985,22 @@ let to_text (score : t) =
         voice.instrument.channel voice.instrument.bank voice.instrument.preset;
       Array.iter
         (fun (n : note) ->
-          add "note start:%d dur:%d midi:%d vel:%d\n" n.start_unit n.duration_units
+          let bar = (n.start_unit / score.units_per_bar) + 1 in
+          let step = (n.start_unit mod score.units_per_bar) + 1 in
+          add "note bar:%d step:%d dur:%d midi:%d vel:%d\n" bar step n.duration_units
             n.midi (velocity_of_volume n.volume))
         voice.notes;
       if idx < Array.length score.voices - 1 then add "\n")
     score.voices;
+  if Array.length score.controls > 0 then (
+    add "\n";
+    Array.iter
+      (fun (c : control) ->
+        let bar = (c.start_unit / score.units_per_bar) + 1 in
+        let step = (c.start_unit mod score.units_per_bar) + 1 in
+        add "control bar:%d step:%d ch:%d cc:%d val:%d\n" bar step c.channel c.control
+          c.value)
+      score.controls);
   Buffer.contents b
 
 let write_text_file ~path score =
@@ -582,3 +1010,93 @@ let write_text_file ~path score =
     (fun () ->
       output_string oc (to_text score);
       output_char oc '\n')
+
+let binary_magic_v1 = "TEMPO_SCORE_BIN_V1\000"
+let binary_magic_v2 = "TEMPO_SCORE_BIN_V2\000"
+let binary_magic_v3 = "TEMPO_SCORE_BIN_V3\000"
+
+type legacy_t = {
+  title : string;
+  voices : voice array;
+  pedals : pedal array;
+  total_units : int;
+  unit_label : string;
+  time_signature_num : int;
+  time_signature_den : int;
+  units_per_bar : int;
+  initial_bpm : int;
+}
+
+let of_legacy (v : legacy_t) : t =
+  let controls =
+    v.pedals
+    |> Array.map (fun (p : pedal) ->
+           {
+             start_unit = p.start_unit;
+             channel = p.channel;
+             control = 64;
+             value = p.value;
+           })
+  in
+  {
+    title = v.title;
+    voices = v.voices;
+    pedals = v.pedals;
+    controls;
+    tempo_changes = [||];
+    total_units = v.total_units;
+    unit_label = normalize_unit_label v.unit_label;
+    time_signature_num = v.time_signature_num;
+    time_signature_den = v.time_signature_den;
+    units_per_bar = v.units_per_bar;
+    initial_bpm = v.initial_bpm;
+  }
+
+let of_binary payload =
+  let magic_len = String.length binary_magic_v1 in
+  if Bytes.length payload < magic_len then
+    raise (Unsupported_binary_format "payload too short");
+  let prefix = Bytes.sub_string payload 0 magic_len in
+  if
+    (not (String.equal prefix binary_magic_v1))
+    && not (String.equal prefix binary_magic_v2)
+    && not (String.equal prefix binary_magic_v3)
+  then
+    raise (Unsupported_binary_format "invalid magic/version");
+  let try_decode_current () =
+    try Some (Marshal.from_bytes payload magic_len : t) with _ -> None
+  in
+  let try_decode_legacy () =
+    try Some (of_legacy (Marshal.from_bytes payload magic_len : legacy_t)) with _ -> None
+  in
+  match try_decode_current () with
+  | Some score -> score
+  | None -> (
+      match try_decode_legacy () with
+      | Some score -> score
+      | None ->
+          raise (Unsupported_binary_format "cannot decode marshal payload"))
+
+let of_binary_file path =
+  let ic = open_in_bin path in
+  Fun.protect
+    ~finally:(fun () -> close_in_noerr ic)
+    (fun () ->
+      let len = in_channel_length ic in
+      let raw = really_input_string ic len in
+      of_binary (Bytes.of_string raw))
+
+let to_binary score =
+  let body = Marshal.to_bytes score [ Marshal.No_sharing ] in
+  let out = Bytes.create (String.length binary_magic_v3 + Bytes.length body) in
+  Bytes.blit_string binary_magic_v3 0 out 0 (String.length binary_magic_v3);
+  Bytes.blit body 0 out (String.length binary_magic_v3) (Bytes.length body);
+  out
+
+let write_binary_file ~path score =
+  let oc = open_out_bin path in
+  Fun.protect
+    ~finally:(fun () -> close_out_noerr oc)
+    (fun () ->
+      let payload = to_binary score in
+      output_bytes oc payload)

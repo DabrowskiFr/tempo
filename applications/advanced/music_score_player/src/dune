@@ -7,3 +7,8 @@
  (name score_convert)
  (modules score_convert)
  (libraries tempo-score))
+
+(executable
+ (name score_show_text)
+ (modules score_show_text)
+ (libraries tempo-score))

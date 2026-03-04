@@ -69,6 +69,274 @@
 - validation:
   - `dune build ./applications/advanced/music_score_player/src/main.exe ./applications/advanced/music_score_player/src/score_convert.exe`
 
+### Comparaison SoundFonts dans l'application
+
+- objectif du lot: comparer plusieurs banques `.sf2/.sf3` sur un même morceau
+  sans redémarrer l'application
+- réalisation:
+  - ajout d'un répertoire dédié
+    `applications/advanced/music_score_player/assets/soundfonts/`
+  - déplacement de `GeneralUser-GS.sf2` vers ce répertoire
+  - chargement dynamique de la liste des SoundFonts dans l'UI
+  - contrôle runtime:
+    - `F5` banque précédente
+    - `F6` banque suivante
+  - changement de banque appliqué par redémarrage propre du synthé en
+    conservant le même flux de partition Tempo
+  - mise à jour du fallback hardcodé dans `tempo_fluidsynth` vers le nouveau
+    chemin `assets/soundfonts/GeneralUser-GS.sf2`
+- validation:
+  - `dune build ./applications/advanced/music_score_player/src/main.exe ./applications/advanced/music_score_player/src/score_convert.exe`
+
+### Politique SoundFonts (poids dépôt vs qualité locale)
+
+- objectif du lot: garder une base git légère tout en permettant un rendu piano
+  de meilleure qualité en local
+- réalisation:
+  - conservation de deux banques dans `assets/soundfonts`:
+    - `GeneralUser-GS.sf2` (versionnée)
+    - `MuseScore_General.sf2` (locale, non versionnée)
+  - suppression locale des banques non retenues (`Vintage...`, `MuseScore...sf3`)
+  - ajout de `.gitignore` dans `assets/soundfonts` pour ne versionner que
+    `GeneralUser-GS.sf2`
+  - fallback explicite dans le player:
+    - défaut `MuseScore_General.sf2` si présent
+    - sinon `GeneralUser-GS.sf2`
+  - alignement du fallback dans `tempo_fluidsynth` sur le même ordre
+
+### Support pédale piano (MIDI CC64) dans le modèle Tempo
+
+- objectif du lot: intégrer la pédale sustain du piano dans le modèle logique
+  Tempo, sans déléguer la timeline à FluidSynth
+- réalisation:
+  - extension du modèle `tempo-score` avec `pedals : pedal array`
+    (`start_unit`, `channel`, `value`)
+  - import MIDI: récupération des `Control_change` CC64 dans
+    `Tempo_score.of_midi_file`
+  - format texte: ajout du directive
+    `pedal start:<u> ch:<c> val:<v>` (ou `value:<v>`)
+  - sérialisation texte: export des événements pédale
+  - exécution app:
+    - ajout d'un processus Tempo dédié `pedal_process`
+    - émission synchrone d'événements `Pedal_cc`
+    - envoi côté audio via `Synth.control_change ... ~control:64`
+  - binding FluidSynth:
+    - ajout de `control_change` en OCaml et stub C (`fluid_synth_cc`)
+- validation:
+  - `dune build ./applications/advanced/music_score_player/src/main.exe ./applications/advanced/music_score_player/src/score_convert.exe`
+
+### Format binaire `tempo-score` + CLI texte
+
+- objectif du lot: accélérer le chargement des grosses partitions tout en
+  gardant une vue texte éditable/inspectable
+- réalisation:
+  - ajout API binaire dans `Tempo_score`:
+    - `to_binary` / `of_binary`
+    - `write_binary_file` / `of_binary_file`
+    - magic/version binaire explicite
+  - extension de `score_convert.exe`:
+    - conversion `mid|tscore|tbin` -> `tscore|tbin` selon extension de sortie
+  - ajout d'un utilitaire dédié:
+    - `score_show_text.exe <input.tbin|input.tscore|input.mid>`
+    - affiche la représentation texte sur stdout
+  - application `music_score_player`:
+    - charge désormais `assets/scorebin/*.tbin`
+    - `assets/tscore` reste la source texte éditable
+  - conversion de tous les scores existants vers `assets/scorebin/*.tbin`
+- validation:
+  - `dune build ./applications/advanced/music_score_player/src/main.exe ./applications/advanced/music_score_player/src/score_convert.exe ./applications/advanced/music_score_player/src/score_show_text.exe`
+
+### Notation texte plus musicale + synchronisation des assets
+
+- objectif du lot: rendre le `.txt` plus lisible musicalement tout en gardant
+  le runtime binaire `.tscore`
+- réalisation:
+  - format texte mis à jour en `tempo-score v2`:
+    - `tempo: q=<bpm>` (référence noire)
+    - positions `note/pedal` en `bar:<m> step:<k>`
+    - compatibilité lecture conservée avec le v1 (`start:`/`bpm:`/`unit:`)
+  - convention assets finalisée:
+    - `assets/mid/*.mid` (sources)
+    - `assets/txt/*.txt` (édition)
+    - `assets/tscore/*.tscore` (runtime binaire)
+  - resynchronisation complète depuis les MIDI présents:
+    - régénération de tous les `.txt`
+    - régénération de tous les `.tscore`
+    - suppression des sorties orphelines non liées à un `.mid` source
+
+### Binaire `tempo-score` v2 + compatibilité v1
+
+- objectif du lot: verrouiller un format runtime binaire versionné v2, sans
+  conversion au fil des instants pendant l'exécution de l'application
+- réalisation:
+  - `Tempo_score.of_binary` accepte désormais les préfixes
+    `TEMPO_SCORE_BIN_V1` et `TEMPO_SCORE_BIN_V2`
+  - `Tempo_score.to_binary` écrit désormais `TEMPO_SCORE_BIN_V2`
+  - mise à jour doc API (`tempo_score.mli`) et odoc (`doc/tempo-score/index.mld`)
+  - mise à jour README du player (panneau de sélection en bas)
+  - régénération complète des assets:
+    - `assets/mid/*.mid` -> `assets/txt/*.txt`
+    - `assets/txt/*.txt` -> `assets/tscore/*.tscore` (binaire v2)
+- tentative écartée (raison):
+  - encapsuler un schéma binaire entièrement nouveau (enregistrements dédiés)
+  - écarté pour ce lot car la structure sérialisée n'a pas changé et le besoin
+    principal est la version explicite + rétrocompatibilité lecture
+- validation:
+  - build OK:
+    `dune build ./applications/advanced/music_score_player/src/main.exe ./applications/advanced/music_score_player/src/score_convert.exe ./applications/advanced/music_score_player/src/score_show_text.exe`
+  - vérification d'un payload `.tscore`: préfixe `TEMPO_SCORE_BIN_V2`
+
+### Neutralisation de `unit_label` (pas de fuite MIDI)
+
+- objectif du lot: retirer des formats d'échange les libellés dépendants de
+  MIDI (`128 MIDI ticks`) qui perturbent la lecture métier
+- réalisation:
+  - valeur canonique interne: `unit_label = "step"` pour les scores importés et
+    le score built-in
+  - export texte v2: sortie en `unit: step` (au lieu de `grid: ...`)
+  - lecture rétrocompatible conservée:
+    - `unit:` et `grid:` toujours acceptés
+    - normalisation vers `step` (ou `1/N` si fourni explicitement)
+  - régénération des assets `txt/` et `tscore/` depuis `mid/`
+- tentative écartée (raison):
+  - suppression structurelle du champ `unit_label` du type `Tempo_score.t`
+  - écartée pour ce lot car casserait la compatibilité Marshal binaire avec les
+    partitions déjà produites
+- validation:
+  - `dune build ./applications/advanced/music_score_player/src/main.exe ./applications/advanced/music_score_player/src/score_convert.exe`
+  - contrôle manuel: les `.txt` générés affichent `unit: step`
+
+### Passage à `subdivision` (remplacement de `units_per_bar` dans le texte)
+
+- objectif du lot: rendre la métadonnée de grille lisible musicien, en
+  exposant une subdivision (`1/N`) plutôt qu'un compteur interne
+  (`units_per_bar`)
+- réalisation:
+  - export texte `tempo-score v2` modifié:
+    - `subdivision: 1/N` affiché
+    - `units_per_bar` non affiché
+  - parser texte étendu:
+    - accepte `subdivision:` (nouveau)
+    - conserve la lecture de `unit:` / `grid:` / `units_per_bar:` (anciens)
+  - import MIDI:
+    - calcule `units_per_bar` (interne runtime)
+    - dérive `subdivision` lorsque possible et stocke le libellé `1/N`
+  - régénération des assets `txt` et `tscore` depuis `mid`
+- tentative écartée (raison):
+  - retirer physiquement `units_per_bar` du type OCaml
+  - écartée pour ce lot afin d'éviter une casse large (runtime + compatibilité
+    binaire Marshal existante)
+- validation:
+  - build OK:
+    `dune build ./applications/advanced/music_score_player/src/main.exe ./applications/advanced/music_score_player/src/score_convert.exe ./applications/advanced/music_score_player/src/score_show_text.exe`
+  - contrôle des `.txt`: présence de `subdivision: ...`, absence de
+    `units_per_bar`
+
+### Piano: tempo map + CC66/CC67 + demi-pédale
+
+- objectif du lot: enrichir l'exécution piano pour couvrir les contrôles
+  expressifs demandés (tempo map, sostenuto/una corda, demi-pédale)
+- réalisation:
+  - `tempo-fluidsynth`:
+    - exporte désormais la liste complète des changements de tempo et de
+      métrique lus dans le MIDI (`tempo_changes_us_per_quarter`,
+      `time_signature_changes`)
+  - `tempo-score`:
+    - ajout des événements `control` (`start_unit`, `ch`, `cc`, `val`)
+    - ajout des événements `tempo_change` (`start_unit`, `bpm`)
+    - import MIDI étendu:
+      - contrôles CC64/66/67 conservés
+      - tempo map convertie en `tempo_change`
+    - format texte étendu:
+      - `tempo_change bar:<m> step:<k> q:<bpm>`
+      - `control bar:<m> step:<k> ch:<c> cc:<n> val:<v>`
+    - compatibilité lecture conservée pour anciens fichiers (`pedal` legacy)
+    - binaire runtime passé en `TEMPO_SCORE_BIN_V3`
+      (lecture v1/v2/v3, décodage legacy pour anciens payloads)
+  - player `music_score_player`:
+    - remplacement du flux `Pedal_cc` par `Control_cc` générique
+    - processus Tempo dédié pour rejouer les `control` sur la timeline logique
+    - application de la tempo map pendant l'exécution:
+      - mise à jour de `transport.bpm`
+      - recalage de `source.unit_ms` entre instants
+- tentative échouée:
+  - première passe de build KO (inférence ambiguë de type sur tri de listes
+    d'événements record)
+  - correction: annotations explicites de type sur les comparateurs de tri
+    (`pedal`, `control`, `tempo_change`)
+- validation:
+  - build OK:
+    `dune build ./applications/advanced/music_score_player/src/main.exe ./applications/advanced/music_score_player/src/score_convert.exe ./applications/advanced/music_score_player/src/score_show_text.exe`
+  - régénération complète des assets MIDI -> TXT -> TSCORE
+  - contrôle binaire: en-tête `.tscore` = `TEMPO_SCORE_BIN_V3`
+
+### Uniformisation des noms de partitions Beethoven (assets MIDI)
+
+- objectif du lot: rendre les noms de fichiers ajoutés plus lisibles et
+  homogènes entre `mid/`, `txt/`, `tscore/`
+- réalisation:
+  - renommage de:
+    - `6101-2d_moonlight_sonata_27-2_1_2_(nc)smythe.*`
+    - `71773a_sonata_quasi-fantasie_(moonlight)_(nc)smythe.*`
+  - nouveaux noms:
+    - `beethoven_moonlight_sonata_op27_no2_mov1_smythe_6101.*`
+    - `beethoven_moonlight_sonata_op27_no2_mov1_smythe_71773a.*`
+  - régénération des contenus `.txt` et `.tscore` depuis les `.mid` renommés
+    pour aligner aussi les titres internes
+- validation:
+  - conversion OK via `score_convert.exe` pour les deux fichiers
+
+### Renommage des trois `piano_sonata_13_*` (Beethoven)
+
+- objectif du lot: corriger l'identification compositeur/oeuvre pour les trois
+  fichiers ajoutés en conservant une nomenclature uniforme
+- réalisation:
+  - renommage:
+    - `piano_sonata_13_1_(c)oguri.*` ->
+      `beethoven_sonata_op13_mov1_oguri.*`
+    - `piano_sonata_13_2_(c)oguri.*` ->
+      `beethoven_sonata_op13_mov2_oguri.*`
+    - `piano_sonata_13_3_(c)oguri.*` ->
+      `beethoven_sonata_op13_mov3_oguri.*`
+  - régénération `txt/tscore` depuis les `mid` renommés
+- validation:
+  - présence des nouveaux noms dans `assets/mid`, `assets/txt`, `assets/tscore`
+
+### Renommage de Bach en convention lisible
+
+- objectif du lot: homogénéiser le nom de la pièce de Bach avec la convention
+  descriptive utilisée sur les autres assets
+- réalisation:
+  - `bach_prelude_c.*` -> `bach_prelude_in_c_major.*`
+  - régénération de `txt` et `tscore` depuis le `mid` renommé
+- validation:
+  - présence de `bach_prelude_in_c_major` dans `assets/mid`, `assets/txt`,
+    `assets/tscore`
+
+### Correction du modèle de durée d'instant en lecture
+
+- objectif du lot: supprimer l'écart de timing perçu entre la partition MIDI
+  source et la lecture Tempo (silences/espaces artificiels signalés)
+- cause racine identifiée:
+  - la boucle interactive utilisait une durée d'instant fixe
+    `15000/bpm` (hypothèse "double-croche"), indépendante de la grille réelle
+    de la partition (`meter` + `units_per_bar`)
+  - conséquence: lecture temporellement inexacte dès qu'une partition n'était
+    pas exactement sur cette hypothèse, même si la conversion d'événements
+    était correcte
+- réalisation:
+  - remplacement par un calcul musical exact:
+    - `quarter_ms = 60000/bpm`
+    - `bar_ms = quarter_ms * (num * 4 / den)`
+    - `unit_ms = bar_ms / units_per_bar`
+  - `transport` stocke désormais `unit_ms` courant
+  - la tempo map met à jour à la fois `bpm` et `unit_ms`
+  - régénération complète des assets `txt/tscore` depuis les `mid`
+- validation:
+  - build OK:
+    `dune build ./applications/advanced/music_score_player/src/main.exe ./applications/advanced/music_score_player/src/score_convert.exe`
+  - conversion complète relancée sur tous les `mid` présents
+
 ### Objectif
 
 Repartir du dernier commit restauré après suppression accidentelle et reconstruire

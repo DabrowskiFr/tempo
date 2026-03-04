@@ -7,7 +7,7 @@ This checklist is the release gate for all applications under `/Users/fredericda
 - [ ] Architecture and category rules respected:
   - `/Users/fredericdabrowski/Repos/tempo/applications/ARCHITECTURE.md`
 - [ ] App is placed in the correct category:
-  - `advanced`: production-grade or research-grade applications (`game-univ`, `refactor`).
+  - `advanced`: production-grade or research-grade applications (`game-univ`, `music_score_player`, `tempo-core-studio`).
   - `simple-demos`: focused demos and experiments.
 - [ ] App is launchable from unified router:
   - `dune exec ./applications/run -- <app>`

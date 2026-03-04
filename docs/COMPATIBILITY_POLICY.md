@@ -28,7 +28,7 @@ Breaking changes are allowed only with migration instructions.
 
 - Keep compatibility aliases for at least one release cycle when feasible.
 - Example:
-  - `reactive-reconfiguration-engine` launcher alias kept for `refactor`.
+  - `reactive-reconfiguration-engine` launcher kept only as a deprecated stub.
 
 ## 4. Path/layout policy
 

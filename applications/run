@@ -16,7 +16,6 @@ Categories:
   advanced:
     game-univ
     music_score_player
-    refactor
     tempo-core-studio
   simple-demos:
     snake-raylib
@@ -34,9 +33,6 @@ case "$APP" in
     ;;
   music_score_player)
     TARGET="$ROOT_DIR/advanced/music_score_player/run"
-    ;;
-  refactor|reactive-reconfiguration-engine)
-    TARGET="$ROOT_DIR/advanced/refactor/run"
     ;;
   tempo-core-studio)
     TARGET="$ROOT_DIR/advanced/tempo-core-studio/run"
