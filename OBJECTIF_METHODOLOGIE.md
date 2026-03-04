@@ -89,6 +89,10 @@ en priorité sur :
     représentation où les durées métier sont incarnées par des processus Tempo
     et des signaux explicites, plutôt que par un état local mutable qui simule
     l'avancement du temps
+20. lorsqu'un backend externe continu (audio, rendu spécialisé, I/O) est
+    piloté par Tempo, préférer que le programme Tempo produise des commandes
+    explicites, puis que l'hôte les applique entre les instants, plutôt que
+    d'appeler directement le backend depuis les processus synchrones
 
 ## Points d'attention
 

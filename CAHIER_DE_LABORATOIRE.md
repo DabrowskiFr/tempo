@@ -493,3 +493,57 @@ reconstruction locale cohérente de la vitrine réactive recherchée.
     les signaux agrégés
 - validation :
   - `dune build applications/advanced/music_score_player/src/main.exe`
+
+### 2026-03-04 - music_score_player : commandes audio appliquées côté hôte
+
+- objectif : éviter que les processus Tempo appellent directement FluidSynth,
+  afin que la communication avec le backend audio se fasse à la frontière de
+  sortie du runtime
+- refactoring réalisé :
+  - remplacement du processus audio interne par une sortie `host_output`
+    contenant :
+    - la `frame` à afficher
+    - la liste des `audio_commands` à appliquer pour l'instant courant
+  - `render_process` agrège maintenant les commandes audio présentes pendant
+    l'instant et les transmet au callback de sortie
+  - le callback hôte applique ensuite `note_on`, `note_off` et `all_notes_off`
+    à FluidSynth avant de dessiner la frame
+- intérêt :
+  - Tempo continue à décider des durées et des instants de début/fin
+  - FluidSynth n'est plus appelé depuis la logique synchrone elle-même
+  - la frontière entre coeur Tempo et effet externe audio est plus nette
+- validation :
+  - `dune build applications/advanced/music_score_player/src/main.exe`
+
+### 2026-03-04 - music_score_player : séquencer le rendu hôte après les émissions de notes
+
+- problème observé :
+  - après séparation entre logique Tempo et backend audio, l'application
+    tournait mais aucun son n'était audible
+- analyse :
+  - le rendu hôte pouvait être déclenché trop tôt dans l'instant, avant que les
+    processus réveillés par `pulse` aient eu le temps d'émettre leurs
+    `Note_on` / `Note_off`
+- correction :
+  - les demandes de rendu sont maintenant planifiées via `Low_level.fork`, ce
+    qui décale l'émission de `render` après les émissions du même instant déjà
+    déclenchées par le contrôle
+- validation :
+  - `dune build applications/advanced/music_score_player/src/main.exe`
+
+### 2026-03-04 - music_score_player : ajout de morceaux MIDI plus orientés rock
+
+- objectif : disposer de morceaux plus proches d'un jeu "groupe de rock" pour
+  tester la vitrine musicale avec un matériau plus énergique et plus dense
+- morceaux ajoutés dans `applications/advanced/music_score_player/assets` :
+  - `acdc_for_those_about_to_rock.mid`
+  - `acdc_highway_to_hell.mid`
+  - `acdc_let_there_be_rock.mid`
+  - `acdc_back_in_black.mid`
+- source :
+  - téléchargements depuis BitMidi, choisis pour avoir un caractère plus
+    clairement rock que les exemples classiques déjà présents
+- remarque :
+  - certains fichiers se sont révélés trop lourds ou musicalement mal encodés
+    pour la vitrine (nombre de notes très élevé, métrique incohérente comme
+    `1/4`) ; le sélecteur les filtre désormais automatiquement au chargement

@@ -96,6 +96,10 @@ type note_event =
   | Note_off of instrument * int
   | Panic
 
+type host_bridge = {
+  mutable pending_audio : note_event list;
+}
+
 exception Quit_request
 exception Reload_score_request of int
 
@@ -438,8 +442,25 @@ let score_of_midi_file path =
 let score_choices () =
   let file_choices =
     midi_asset_paths ()
-    |> List.map (fun path ->
-           { label = Filename.basename path; path = Some path })
+    |> List.filter_map (fun path ->
+           try
+             let midi = Synth.import_midi_file path in
+             let note_on_count =
+               List.fold_left
+                 (fun acc (_, ev) ->
+                   match ev with
+                   | Synth.Note_on (_, _, velocity) when velocity <> 0 -> acc + 1
+                   | _ -> acc)
+                 0 midi.events
+             in
+             let acceptable_time_signature =
+               match midi.time_signature with
+               | None -> true
+               | Some (num, den) -> num >= 2 && num <= 12 && den >= 2 && den <= 16
+             in
+             if note_on_count > 5000 || not acceptable_time_signature then None
+             else Some { label = Filename.basename path; path = Some path }
+           with _ -> None)
   in
   Array.of_list ({ label = "Built-in score"; path = None } :: file_choices)
 
@@ -619,23 +640,10 @@ let rec voice_process restart pulse note_events (spec : score_voice) () =
   watch restart (fun () -> run_from 0 0 ());
   voice_process restart pulse note_events spec ()
 
-let audio_process note_events synth () =
-  let all_notes_off () =
-    for channel = 0 to 15 do
-      Synth.all_notes_off synth ~channel
-    done
-  in
+let audio_bridge_process note_events bridge () =
   let rec loop () =
     let batch = List.rev (await note_events) in
-    List.iter
-      (function
-        | Panic -> all_notes_off ()
-        | Note_on (instrument, note) ->
-            Synth.note_on synth ~channel:instrument.channel ~key:note.midi
-              ~velocity:(velocity_of_volume note.volume)
-        | Note_off (instrument, key) ->
-            Synth.note_off synth ~channel:instrument.channel ~key)
-      batch;
+    bridge.pending_audio <- bridge.pending_audio @ batch;
     loop ()
   in
   loop ()
@@ -649,6 +657,9 @@ let render_process render transport output () =
   loop ()
 
 let control_process score pulse restart render note_events transport source input () =
+  let schedule_render () =
+    ignore (Low_level.fork (fun () -> emit render ()))
+  in
   let set_bpm bpm =
     let bpm = max min_bpm (min max_bpm bpm) in
     transport.bpm <- bpm;
@@ -663,30 +674,35 @@ let control_process score pulse restart render note_events transport source inpu
     transport.current_unit <- next_unit;
     next_unit
   in
-  let handle = function
+  let handle event =
+    let needs_render = ref false in
+    let result =
+      match event with
     | Quit ->
+        needs_render := true;
         emit note_events Panic;
         raise Quit_request
     | Toggle_play ->
         transport.playing <- not transport.playing;
         if not transport.playing then emit note_events Panic;
-        emit render ();
+        schedule_render ();
         None
     | Restart ->
         reset_transport transport source;
         emit note_events Panic;
         emit restart ();
-        emit render ();
+        schedule_render ();
         None
     | Tempo_up ->
         set_bpm (transport.bpm + 6);
-        emit render ();
+        schedule_render ();
         None
     | Tempo_down ->
         set_bpm (transport.bpm - 6);
-        emit render ();
+        schedule_render ();
         None
     | Select_score idx ->
+        schedule_render ();
         emit note_events Panic;
         raise (Reload_score_request idx)
     | Pulse ->
@@ -696,21 +712,30 @@ let control_process score pulse restart render note_events transport source inpu
             emit note_events Panic;
             emit restart ());
           emit pulse ();
-          emit render ();
+          schedule_render ();
           Some next_unit)
         else (
-          emit render ();
+          schedule_render ();
           None)
+    in
+    (result, !needs_render)
   in
   let rec loop () =
     when_ input (fun () ->
         let batch = await_immediate input in
-        ignore (List.filter_map handle batch);
+        let _, needs_render =
+          List.fold_left
+            (fun (results, render_needed) event ->
+              let result, needs = handle event in
+              (result :: results, render_needed || needs))
+            ([], false) batch
+        in
+        if needs_render then schedule_render ();
         pause ();
         loop ())
   in
   pause ();
-  emit render ();
+  schedule_render ();
   loop ()
 
 let draw_background (score : score_data) height (viewport : viewport) =
@@ -914,7 +939,27 @@ let draw_frame score height ui (frame : frame) =
   draw_legend score height;
   end_drawing ()
 
-let main_program score synth source input output =
+let apply_audio_commands synth commands =
+  List.iter
+    (function
+      | Panic ->
+          for channel = 0 to 15 do
+            Synth.all_notes_off synth ~channel
+          done
+      | Note_on (instrument, note) ->
+          Synth.note_on synth ~channel:instrument.channel ~key:note.midi
+            ~velocity:(velocity_of_volume note.volume)
+      | Note_off (instrument, key) ->
+          Synth.note_off synth ~channel:instrument.channel ~key)
+    commands
+
+let render_output score height ui synth bridge (frame : frame) =
+  let audio_commands = bridge.pending_audio in
+  bridge.pending_audio <- [];
+  apply_audio_commands synth audio_commands;
+  draw_frame score height ui frame
+
+let main_program score bridge source input output =
   let restart = new_signal () in
   let pulse = new_signal () in
   let render = new_signal () in
@@ -931,7 +976,7 @@ let main_program score synth source input output =
   parallel
     ((fun () ->
        control_process score pulse restart render note_events transport source input ())
-    :: (fun () -> audio_process note_events synth ())
+    :: (fun () -> audio_bridge_process note_events bridge ())
     :: (fun () -> render_process render transport output ())
     :: Array.to_list
          (Array.mapi
@@ -954,6 +999,7 @@ let () =
   let rec run_selected () =
     let score = score_of_choice ui.choices.(ui.selected_index) in
     let synth = Synth.create ~gain:0.7 () in
+    let bridge = { pending_audio = [] } in
     Array.iter
       (fun spec ->
         Synth.program_select synth ~channel:spec.instrument.channel
@@ -970,8 +1016,8 @@ let () =
       };
     let next_action =
       try
-        run_interactive ~input ~output:(draw_frame score height ui)
-          (main_program score synth source);
+        run_interactive ~input ~output:(render_output score height ui synth bridge)
+          (main_program score bridge source);
         Continue
       with
       | Quit_request -> Quit_app
