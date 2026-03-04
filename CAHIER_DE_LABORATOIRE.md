@@ -547,3 +547,51 @@ reconstruction locale cohérente de la vitrine réactive recherchée.
   - certains fichiers se sont révélés trop lourds ou musicalement mal encodés
     pour la vitrine (nombre de notes très élevé, métrique incohérente comme
     `1/4`) ; le sélecteur les filtre désormais automatiquement au chargement
+
+### 2026-03-04 - music_score_player : nettoyage du modèle vitrine
+
+- objectif : rapprocher encore l'application du modèle Tempo en supprimant les
+  points trop ad hoc relevés pendant l'audit
+- corrections réalisées :
+  - le sélecteur de morceaux ne parse plus tous les fichiers MIDI au démarrage
+    ; le chargement est maintenant lazy au moment de la sélection
+  - le bridge audio n'utilise plus de concaténation de listes coûteuse ; il
+    accumule les commandes en ordre inverse puis les draine côté hôte
+  - l'ordonnancement rendu/audio n'utilise plus `Low_level.fork` ; il passe
+    maintenant par un vrai signal agrégé `render_request` suivi d'un `pause`
+    explicite dans `render_process`
+- validation :
+  - `dune build applications/advanced/music_score_player/src/main.exe`
+
+### 2026-03-04 - music_score_player : rejet explicite des MIDI trop lourds
+
+- problème observé :
+  - certains morceaux orientés rock restaient problématiques même après le
+    nettoyage du sélecteur
+  - en particulier, des partitions très denses ou trop longues pouvaient
+    dégrader fortement l'expérience de la vitrine
+- correction :
+  - ajout d'un garde-fou dans `load_score`
+  - si une partition dépasse un seuil raisonnable pour la vitrine
+    (`voices`, `notes`, `total_units`, `units_per_bar`), elle est rejetée
+    proprement et remplacée par la partition intégrée
+- intérêt :
+  - l'application ne tente plus d'exécuter des fichiers qui sortent du domaine
+    cible de la démonstration
+  - le comportement devient explicite et stable, y compris quand on force un
+    fichier sur la ligne de commande
+- validation :
+  - `dune build applications/advanced/music_score_player/src/main.exe`
+
+### 2026-03-04 - music_score_player : retrait complet des MIDI rock problématiques
+
+- décision :
+  - supprimer complètement les fichiers ACDC encore présents dans les assets
+    plutôt que de garder des cas connus comme peu adaptés à la vitrine
+- fichiers retirés :
+  - `acdc_back_in_black.mid`
+  - `acdc_highway_to_hell.mid`
+- raison :
+  - même avec les garde-fous de chargement, ils restaient source de confusion
+    pour l'utilisateur et n'apportaient pas une démonstration stable du modèle
+    Tempo

@@ -93,6 +93,10 @@ en priorité sur :
     piloté par Tempo, préférer que le programme Tempo produise des commandes
     explicites, puis que l'hôte les applique entre les instants, plutôt que
     d'appeler directement le backend depuis les processus synchrones
+21. dans une vitrine interactive, éviter tout travail lourd au démarrage qui
+    ne sert qu'à peupler l'interface ; charger les métadonnées et partitions à
+    la demande pour que l'utilisateur voie immédiatement la fenêtre et puisse
+    interagir sans latence parasite
 
 ## Points d'attention
 

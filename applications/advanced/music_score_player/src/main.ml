@@ -97,7 +97,7 @@ type note_event =
   | Panic
 
 type host_bridge = {
-  mutable pending_audio : note_event list;
+  mutable pending_audio_rev : note_event list;
 }
 
 exception Quit_request
@@ -442,25 +442,7 @@ let score_of_midi_file path =
 let score_choices () =
   let file_choices =
     midi_asset_paths ()
-    |> List.filter_map (fun path ->
-           try
-             let midi = Synth.import_midi_file path in
-             let note_on_count =
-               List.fold_left
-                 (fun acc (_, ev) ->
-                   match ev with
-                   | Synth.Note_on (_, _, velocity) when velocity <> 0 -> acc + 1
-                   | _ -> acc)
-                 0 midi.events
-             in
-             let acceptable_time_signature =
-               match midi.time_signature with
-               | None -> true
-               | Some (num, den) -> num >= 2 && num <= 12 && den >= 2 && den <= 16
-             in
-             if note_on_count > 5000 || not acceptable_time_signature then None
-             else Some { label = Filename.basename path; path = Some path }
-           with _ -> None)
+    |> List.map (fun path -> { label = Filename.basename path; path = Some path })
   in
   Array.of_list ({ label = "Built-in score"; path = None } :: file_choices)
 
@@ -468,6 +450,33 @@ let score_of_choice (choice : score_choice) =
   match choice.path with
   | None -> default_score
   | Some path -> score_of_midi_file path
+
+let score_note_count (score : score_data) =
+  Array.fold_left (fun acc (voice : score_voice) -> acc + Array.length voice.notes) 0
+    score.voices
+
+let acceptable_score (score : score_data) =
+  Array.length score.voices <= 12
+  && score_note_count score <= 2200
+  && score.total_units <= 2400
+  && score.units_per_bar > 0
+  && score.units_per_bar <= 64
+
+let load_score (choice : score_choice) =
+  try score_of_choice choice
+      |> fun score ->
+      if acceptable_score score then score
+      else (
+        Printf.eprintf
+          "score %s rejected: too dense for interactive showcase (voices=%d notes=%d units=%d bar=%d)\n\
+           %!"
+          choice.label (Array.length score.voices) (score_note_count score)
+          score.total_units score.units_per_bar;
+        default_score)
+  with exn ->
+    Printf.eprintf "failed to load score %s: %s\n%!" choice.label
+      (Printexc.to_string exn);
+    default_score
 
 let initial_selected_index choices =
   match Sys.argv |> Array.to_list |> List.tl with
@@ -643,23 +652,21 @@ let rec voice_process restart pulse note_events (spec : score_voice) () =
 let audio_bridge_process note_events bridge () =
   let rec loop () =
     let batch = List.rev (await note_events) in
-    bridge.pending_audio <- bridge.pending_audio @ batch;
+    bridge.pending_audio_rev <- List.rev_append batch bridge.pending_audio_rev;
     loop ()
   in
   loop ()
 
-let render_process render transport output () =
+let render_process render_request transport output () =
   let rec loop () =
-    ignore (await render);
+    ignore (await render_request);
+    pause ();
     emit output (make_frame transport);
     loop ()
   in
   loop ()
 
-let control_process score pulse restart render note_events transport source input () =
-  let schedule_render () =
-    ignore (Low_level.fork (fun () -> emit render ()))
-  in
+let control_process score pulse restart render_request note_events transport source input () =
   let set_bpm bpm =
     let bpm = max min_bpm (min max_bpm bpm) in
     transport.bpm <- bpm;
@@ -675,34 +682,26 @@ let control_process score pulse restart render note_events transport source inpu
     next_unit
   in
   let handle event =
-    let needs_render = ref false in
-    let result =
-      match event with
+    match event with
     | Quit ->
-        needs_render := true;
         emit note_events Panic;
         raise Quit_request
     | Toggle_play ->
         transport.playing <- not transport.playing;
         if not transport.playing then emit note_events Panic;
-        schedule_render ();
-        None
+        true
     | Restart ->
         reset_transport transport source;
         emit note_events Panic;
         emit restart ();
-        schedule_render ();
-        None
+        true
     | Tempo_up ->
         set_bpm (transport.bpm + 6);
-        schedule_render ();
-        None
+        true
     | Tempo_down ->
         set_bpm (transport.bpm - 6);
-        schedule_render ();
-        None
+        true
     | Select_score idx ->
-        schedule_render ();
         emit note_events Panic;
         raise (Reload_score_request idx)
     | Pulse ->
@@ -712,30 +711,19 @@ let control_process score pulse restart render note_events transport source inpu
             emit note_events Panic;
             emit restart ());
           emit pulse ();
-          schedule_render ();
-          Some next_unit)
-        else (
-          schedule_render ();
-          None)
-    in
-    (result, !needs_render)
+          true)
+        else true
   in
   let rec loop () =
     when_ input (fun () ->
         let batch = await_immediate input in
-        let _, needs_render =
-          List.fold_left
-            (fun (results, render_needed) event ->
-              let result, needs = handle event in
-              (result :: results, render_needed || needs))
-            ([], false) batch
-        in
-        if needs_render then schedule_render ();
+        let needs_render = List.fold_left (fun acc event -> handle event || acc) false batch in
+        if needs_render then emit render_request ();
         pause ();
         loop ())
   in
   pause ();
-  schedule_render ();
+  emit render_request ();
   loop ()
 
 let draw_background (score : score_data) height (viewport : viewport) =
@@ -954,15 +942,15 @@ let apply_audio_commands synth commands =
     commands
 
 let render_output score height ui synth bridge (frame : frame) =
-  let audio_commands = bridge.pending_audio in
-  bridge.pending_audio <- [];
+  let audio_commands = List.rev bridge.pending_audio_rev in
+  bridge.pending_audio_rev <- [];
   apply_audio_commands synth audio_commands;
   draw_frame score height ui frame
 
 let main_program score bridge source input output =
   let restart = new_signal () in
   let pulse = new_signal () in
-  let render = new_signal () in
+  let render_request = new_signal_agg ~initial:false ~combine:(fun _ () -> true) in
   let note_events =
     new_signal_agg ~initial:[] ~combine:(fun acc ev -> ev :: acc)
   in
@@ -975,9 +963,9 @@ let main_program score bridge source input output =
   in
   parallel
     ((fun () ->
-       control_process score pulse restart render note_events transport source input ())
+       control_process score pulse restart render_request note_events transport source input ())
     :: (fun () -> audio_bridge_process note_events bridge ())
-    :: (fun () -> render_process render transport output ())
+    :: (fun () -> render_process render_request transport output ())
     :: Array.to_list
          (Array.mapi
             (fun _voice_index spec -> fun () -> voice_process restart pulse note_events spec ())
@@ -997,9 +985,9 @@ let () =
   init_window width height "Tempo Advanced Music Score Player";
   set_target_fps 60;
   let rec run_selected () =
-    let score = score_of_choice ui.choices.(ui.selected_index) in
+    let score = load_score ui.choices.(ui.selected_index) in
     let synth = Synth.create ~gain:0.7 () in
-    let bridge = { pending_audio = [] } in
+    let bridge = { pending_audio_rev = [] } in
     Array.iter
       (fun spec ->
         Synth.program_select synth ~channel:spec.instrument.channel
