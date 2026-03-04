@@ -66,10 +66,8 @@ type transport = {
 }
 
 type metronome_source = {
-  pending_pulses : int Atomic.t;
-  stop_requested : bool Atomic.t;
-  mutable worker : unit Domain.t option;
-  unit_ms : int Atomic.t;
+  mutable next_pulse_at : float;
+  mutable unit_ms : int;
 }
 
 type started_note = {
@@ -203,7 +201,6 @@ let default_midi_candidates =
   [
     "assets/demo.mid";
     "applications/advanced/music_score_player/assets/demo.mid";
-    "applications/simple-demos/score-player-raylib/assets/demo.mid";
   ]
 
 let find_default_midi () =
@@ -360,49 +357,46 @@ let load_score () =
       | None -> default_score)
 
 let create_source unit_ms =
-  {
-    pending_pulses = Atomic.make 0;
-    stop_requested = Atomic.make false;
-    worker = None;
-    unit_ms = Atomic.make unit_ms;
-  }
+  { next_pulse_at = Unix.gettimeofday () +. (float_of_int unit_ms /. 1000.0); unit_ms }
 
-let stop_source source =
-  Atomic.set source.stop_requested true;
-  Option.iter Domain.join source.worker;
-  source.worker <- None
+let stop_source _source = ()
 
-let spawn_metronome source =
-  let worker () =
-    while not (Atomic.get source.stop_requested) do
-      let sleep_s = float_of_int (Atomic.get source.unit_ms) /. 1000.0 in
-      Unix.sleepf sleep_s;
-      if not (Atomic.get source.stop_requested) then (
-        ignore (Atomic.fetch_and_add source.pending_pulses 1))
-    done
-  in
-  source.worker <- Some (Domain.spawn worker)
+let reset_metronome_clock source =
+  source.next_pulse_at <- Unix.gettimeofday () +. (float_of_int source.unit_ms /. 1000.0)
 
 let poll_events source =
   let events = ref [] in
   let push ev = events := ev :: !events in
-  let pulses = Atomic.exchange source.pending_pulses 0 in
   if window_should_close () || is_key_pressed Key.Escape then push Quit;
   if is_key_pressed Key.Space then push Toggle_play;
   if is_key_pressed Key.R then push Restart;
   if is_key_pressed Key.Equal then push Tempo_up;
   if is_key_pressed Key.Minus then push Tempo_down;
+  let now = Unix.gettimeofday () in
+  let pulses = ref 0 in
+  while now >= source.next_pulse_at do
+    incr pulses;
+    source.next_pulse_at <- source.next_pulse_at +. (float_of_int source.unit_ms /. 1000.0)
+  done;
   let events = List.rev !events in
-  let pulse_events = List.init pulses (fun _ -> Pulse) in
+  let pulse_events = List.init !pulses (fun _ -> Pulse) in
   match events @ pulse_events with
   | [] -> None
   | batch -> Some batch
 
-let make_input source =
-  if Option.is_none source.worker then spawn_metronome source;
-  fun () ->
-    Unix.sleepf (1.0 /. 60.0);
-    poll_events source
+let make_interactive_source source =
+  {
+    poll =
+      (fun () ->
+        poll_events source);
+    wait =
+      (fun () ->
+        let now = Unix.gettimeofday () in
+        let until_pulse = source.next_pulse_at -. now in
+        let sleep_s = max 0.0 (min (1.0 /. 120.0) until_pulse) in
+        if sleep_s > 0.0 then Unix.sleepf sleep_s;
+        Option.iter Tempo.notify_wakeup (Tempo.current_wakeup ()));
+  }
 
 let copy_voice_state voices =
   Array.map
@@ -435,16 +429,7 @@ let clear_voice (score : score_data) synth voices =
 let reset_transport (score : score_data) synth transport voices source =
   transport.current_unit <- -1;
   clear_voice score synth voices;
-  Atomic.set source.pending_pulses 0
-
-let wait_pulses pulse count =
-  let rec loop remaining =
-    if remaining <= 0 then ()
-    else (
-      ignore (await pulse);
-      loop (remaining - 1))
-  in
-  loop count
+  reset_metronome_clock source
 
 let start_note (score : score_data) synth runtime voice_index (note : note) =
   let spec = score.voices.(voice_index) in
@@ -469,36 +454,46 @@ let finish_note (score : score_data) synth runtime voice_index (note : note) not
   | Some playing when playing.note_id = note_id -> runtime.active <- None
   | _ -> ()
 
-let note_process pulse score synth runtime voice_index (note : note) () =
-  wait_pulses pulse (note.start_unit + 1);
-  let note_id = start_note score synth runtime voice_index note in
-  wait_pulses pulse note.duration_units;
-  finish_note score synth runtime voice_index note note_id
+let stop_if_due score synth runtime voice_index current_unit =
+  match runtime.active with
+  | Some playing when current_unit >= playing.start_unit + playing.duration_units ->
+      let note =
+        {
+          start_unit = playing.start_unit;
+          duration_units = playing.duration_units;
+          midi = playing.midi;
+          volume = 0.0;
+        }
+      in
+      finish_note score synth runtime voice_index note playing.note_id
+  | _ -> ()
 
-let score_cycle pulse score synth voices () =
-  let note_processes =
-    Array.to_list
-      (Array.mapi
-         (fun voice_index spec ->
-           Array.to_list
-             (Array.map
-                (fun note ->
-                  note_process pulse score synth voices.(voice_index) voice_index note)
-                spec.notes))
-         score.voices)
-    |> List.concat
+let rec voice_process restart pulse score synth runtime voice_index
+    (notes : note array) transport () =
+  let rec loop next_idx () =
+    ignore (await pulse);
+    let current_unit = transport.current_unit in
+    stop_if_due score synth runtime voice_index current_unit;
+    let next_idx =
+      if next_idx < Array.length notes then
+        let note : note = notes.(next_idx) in
+        if runtime.active = None && note.start_unit = current_unit then (
+          ignore (start_note score synth runtime voice_index note);
+          next_idx + 1)
+        else next_idx
+      else next_idx
+    in
+    loop next_idx ()
   in
-  parallel note_processes
+  watch restart (fun () -> loop 0 ());
+  voice_process restart pulse score synth runtime voice_index notes transport ()
 
-let rec score_process restart pulse score synth voices () =
-  watch restart (fun () -> score_cycle pulse score synth voices ());
-  score_process restart pulse score synth voices ()
-
-let control_process score pulse restart synth transport voices source input output stop () =
+let control_process score pulse restart synth transport voices source input output () =
   let set_bpm bpm =
     let bpm = max min_bpm (min max_bpm bpm) in
     transport.bpm <- bpm;
-    Atomic.set source.unit_ms (unit_ms_of_bpm bpm)
+    source.unit_ms <- unit_ms_of_bpm bpm;
+    reset_metronome_clock source
   in
   let advance_one_unit () =
     let next_unit =
@@ -512,8 +507,7 @@ let control_process score pulse restart synth transport voices source input outp
   let handle = function
     | Quit ->
         clear_voice score synth voices;
-        emit stop ();
-        None
+        raise Exit
     | Toggle_play ->
         transport.playing <- not transport.playing;
         if not transport.playing then clear_voice score synth voices;
@@ -538,11 +532,15 @@ let control_process score pulse restart synth transport voices source input outp
   let rec loop () =
     when_ input (fun () ->
         let batch = await_immediate input in
+        let should_quit = List.exists (function Quit -> true | _ -> false) batch in
         ignore (List.filter_map handle batch);
-        emit output (make_frame transport voices));
-    pause ();
-    loop ()
+        emit output (make_frame transport voices);
+        if should_quit then raise Exit
+        else (
+          pause ();
+          loop ()))
   in
+  emit output (make_frame transport voices);
   loop ()
 
 let draw_background (score : score_data) height =
@@ -644,11 +642,15 @@ let main_program score synth source input output =
   in
   watch stop (fun () ->
       parallel
-        [
-          (fun () ->
-            control_process score pulse restart synth transport voices source input output stop ());
-          (fun () -> score_process restart pulse score synth voices ());
-        ])
+        ((fun () ->
+           control_process score pulse restart synth transport voices source input output ())
+        :: Array.to_list
+             (Array.mapi
+                (fun voice_index spec ->
+                  fun () ->
+                    voice_process restart pulse score synth voices.(voice_index)
+                      voice_index spec.notes transport ())
+                score.voices)))
 
 let () =
   let score = load_score () in
@@ -662,9 +664,17 @@ let () =
         ~bank:spec.instrument.bank ~preset:spec.instrument.preset)
     score.voices;
   let source = create_source (unit_ms_of_bpm score.initial_bpm) in
-  let input = make_input source in
+  let input = make_interactive_source source in
+  draw_frame score height
+    {
+      playing = true;
+      bpm = score.initial_bpm;
+      unit_ms = unit_ms_of_bpm score.initial_bpm;
+      current_unit = -1;
+      voices = Array.init (Array.length score.voices) (fun _ -> { active = None; next_note_id = 0 });
+    };
   (try
-     execute ~input ~output:(draw_frame score height)
+     run_interactive ~input ~output:(draw_frame score height)
        (main_program score synth source)
    with Exit -> ());
   stop_source source;

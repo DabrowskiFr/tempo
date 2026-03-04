@@ -154,7 +154,6 @@ Applications avancées importantes dans ce dépôt :
 - `applications/advanced/tempo-core-studio`
 
 Démos simples :
-- `applications/simple-demos/score-player-raylib`
 - `applications/simple-demos/snake-raylib`
 - `applications/simple-demos/boids-raylib`
 

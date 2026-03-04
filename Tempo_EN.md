@@ -153,7 +153,6 @@ Important advanced applications in this repository:
 - `applications/advanced/tempo-core-studio`
 
 Simple demos:
-- `applications/simple-demos/score-player-raylib`
 - `applications/simple-demos/snake-raylib`
 - `applications/simple-demos/boids-raylib`
 

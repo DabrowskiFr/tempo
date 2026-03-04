@@ -81,8 +81,9 @@ Le dépôt restauré correspondait à un état plus ancien :
   - `note_on` / `note_off`
   - `all_notes_off`
   - import d'un fichier MIDI via le player FluidSynth
-- réintégration de la démo
-  [applications/simple-demos/score-player-raylib/src/main.ml](/Users/fredericdabrowski/Repos/tempo/tempo-dev/tempo/applications/simple-demos/score-player-raylib/src/main.ml)
+- réintégration initiale d'une démo simple `score-player-raylib`, ensuite
+  supprimée au profit de la seule vitrine avancée
+  [applications/advanced/music_score_player/src/main.ml](/Users/fredericdabrowski/Repos/tempo/tempo-dev/tempo/applications/advanced/music_score_player/src/main.ml)
 
 Limite connue :
 - la démo utilise encore un polling léger pour les entrées clavier Raylib, car
@@ -120,7 +121,6 @@ localement cohérente et démonstrative.
   - reporter seulement les ajouts compatibles :
     - `tempo-fluidsynth`
     - `applications/advanced/music_score_player`
-    - `applications/simple-demos/score-player-raylib`
 - tentative abandonnée : activer directement le runtime restructuré via
   `lib/core/dune` sur `develop`
   - effet : casse immédiate de `tempo-frp`, `tempo-async` et `tempo.game`
@@ -258,6 +258,16 @@ reconstruction locale cohérente de la vitrine réactive recherchée.
 
 - objectif : ne plus dépendre du runtime monolithique historique récupéré via
   Git, et faire construire `tempo` directement depuis la version reconstruite
+
+### 2026-03-04 - Recentrement de la vitrine musicale
+
+- suppression de `applications/simple-demos/score-player-raylib/`
+- conservation de `applications/advanced/music_score_player/` comme unique
+  application musique de référence
+- correction de la boucle interactive musicale :
+  - source temporelle basée sur l'horloge murale
+  - `control_process` ne force plus un `pause` en l'absence d'entrée
+  - `Quit` arrête proprement la boucle sans bloquer sur `Escape`
   sous `lib/core`
 - changement retenu :
   - activation de la bibliothèque publique `tempo` dans `lib/core/dune`
