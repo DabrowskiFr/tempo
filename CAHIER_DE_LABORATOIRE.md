@@ -376,6 +376,24 @@
 - validation:
   - `dune build ./applications/advanced/music_score_player/src/main.exe` OK
 
+### Renforcement de la documentation technique (MIDI vs `tscore`)
+
+- objectif du lot: fournir une explication plus précise et structurée des
+  formats de données et de leur interprétation d'exécution
+- réalisation:
+  - réécriture de
+    `applications/advanced/music_score_player/EXPLICATIONS_MUSIC_PLAYER.md`
+    avec:
+    - structure binaire MIDI (`MThd`, `MTrk`, delta-time VLQ, running status)
+    - interprétation exacte des notes/tempo/signature
+    - structure détaillée du format `tscore` textuel v2
+    - comparaison MIDI vs `tscore` (précision, abstraction, usages)
+    - rappel du pipeline d'exécution Tempo et de la couche FluidSynth
+  - génération d'un PDF dédié:
+    `EXPLICATIONS_MUSIC_PLAYER.pdf`
+- validation:
+  - génération PDF OK via `pandoc + xelatex`
+
 ### Objectif
 
 Repartir du dernier commit restauré après suppression accidentelle et reconstruire
@@ -982,3 +1000,28 @@ reconstruction locale cohérente de la vitrine réactive recherchée.
   - mise à jour de l'aide affichée à l'écran
 - validation :
   - `dune build applications/advanced/music_score_player/src/main.exe`
+
+### 2026-03-04 - music_score_player : renforcement du document technique PDF
+
+- objectif du lot:
+  - produire un document autonome, détaillé et exploitable pour comprendre
+    tout le pipeline (MIDI -> format Tempo -> ordonnancement Tempo ->
+    commandes audio), hors aspects UI
+- actions menées :
+  - extension substantielle de
+    `applications/advanced/music_score_player/EXPLICATIONS_MUSIC_PLAYER.md`
+    avec :
+    - pipeline complet de transformation des données
+    - modèle de temps unifié et relation tick/barre/step
+    - traces précises note et contrôle
+    - ordonnancement et invariants d'exécution
+    - limites connues et cartographie code -> rôle
+  - régénération du PDF :
+    - `applications/advanced/music_score_player/EXPLICATIONS_MUSIC_PLAYER.pdf`
+- tentative non retenue :
+  - conserver une version plus concise orientée "vue d'ensemble"
+  - raison de rejet : insuffisante pour expliquer précisément les conventions
+    de timeline et le protocole exact Tempo <-> bridge audio
+- résultat :
+  - document orienté "spécification technique exécutable", plus précis pour
+    l'audit et la maintenance

@@ -159,6 +159,17 @@ en priorité sur :
 39. si l'objectif produit impose une source d'exécution unique, éviter les
     fallbacks implicites entre formats; expliciter un seul format runtime
     (ici `tscore`) et traiter les autres comme formats d'import/outillage
+40. pour la documentation de formats d'échange/exécution, documenter
+    systématiquement la structure fichier, la sémantique de chaque champ, le
+    chemin d'interprétation runtime, puis comparer explicitement format source
+    et format cible (précision, pertes, gains, cas d'usage)
+41. pour un document de référence destiné à expliquer un runtime réactif,
+    séparer explicitement :
+    - le protocole de données (formats source/cible),
+    - l'ordonnancement temporel (instants/inter-instants, invariants),
+    - le pont d'effets (application hôte des commandes),
+    puis ajouter une trace pas-à-pas d'une note et d'un contrôle pour rendre
+    vérifiable le lien entre théorie, code et rendu audio
 
 ## Points d'attention
 
