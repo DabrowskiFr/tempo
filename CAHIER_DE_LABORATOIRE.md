@@ -1025,3 +1025,266 @@ reconstruction locale cohérente de la vitrine réactive recherchée.
 - résultat :
   - document orienté "spécification technique exécutable", plus précis pour
     l'audit et la maintenance
+
+### 2026-03-04 - music_score_player : refonte orientée traits réactifs Tempo
+
+- objectif du lot:
+  - pousser l'application vers un usage plus démonstratif du modèle Tempo
+    (instants, signaux, composition parallèle, frontière d'effets)
+- architecture introduite dans `src/main.ml` :
+  - `Audio_bridge` :
+    - bus de commandes agrégé (`Note_on`, `Note_off`, `Control_cc`, `Panic`)
+    - collecte synchrone des commandes émises dans l'instant
+    - application des effets FluidSynth uniquement côté hôte
+  - `Score_reactive` :
+    - processus par voix (`voice_process`) consommant un signal `tick`
+    - processus dédié contrôles (`controls_process`)
+    - reset piloté par signal `restart` (`watch`) sans fork low-level ad hoc
+  - `Transport_reactive` :
+    - automate transport (play/pause/restart/select/quit) piloté par événements
+    - émission d'un `tick` logique par instant joué
+    - émission d'une `frame` partagée pour rendu UI cohérent avec l'audio
+- tentative non retenue :
+  - introduire un forwarder intermédiaire `pulse -> tick`
+  - raison de rejet : redondant et incorrect (transport émet déjà le `tick`
+    logique au bon moment)
+- correction technique rencontrée :
+  - conflit d'ordre de définition (`clamp`, reset horloge) et contraintes de
+    typage sur signal agrégé `cmd_bus` ; corrigé par typage explicite
+- validation :
+  - `dune build applications/advanced/music_score_player/src/main.exe`
+
+### 2026-03-04 - music_score_player : état transport unifié + transaction de reload
+
+- objectif du lot:
+  - aller plus loin dans l'exploitation réactive sans sur-ingénierie :
+    - état transport centralisé
+    - changement de score/soundfont transactionnel
+- modifications :
+  - `Transport_reactive` publie désormais un **signal d'état agrégé unique**
+    (`state`) de type `frame`, utilisé comme source de vérité runtime
+  - la vue (`render_process`) consomme ce signal d'état, plutôt qu'un
+    événement séparé de rendu
+  - ajout d'un signal `lifecycle` et d'un `lifecycle_process` dédié pour
+    sérialiser les transitions critiques :
+    - `Request_reload_score`
+    - `Request_reload_soundfont`
+    - `Request_quit`
+  - protocole transactionnel appliqué :
+    - émission `Panic` sur le bus audio
+    - `pause ()`
+    - déclenchement de l'exception de transition
+- tentative non retenue :
+  - initialiser l'état transport via `await state` au démarrage
+  - cause : blocage possible sur signal agrégé non encore émis
+  - correction : injection explicite d'un `initial_state`
+- validation :
+  - `dune build applications/advanced/music_score_player/src/main.exe`
+
+### 2026-03-04 - music_score_player : indicateur visuel de disponibilité (READY/LOADING)
+
+- objectif du lot:
+  - rendre explicite l'état "prêt à jouer" pendant les changements de morceau
+    ou de SoundFont, pour éviter de presser `SPACE` pendant un chargement
+- modifications :
+  - ajout d'un état UI `is_ready` dans `ui_state`
+  - affichage d'un écran de chargement explicite avant les opérations coûteuses
+    (`load_score`, création synthé, configuration instruments)
+  - header enrichi avec `State: READY|LOADING`
+  - `SPACE` ignoré tant que l'état n'est pas `READY`
+  - message d'aide contextualisé selon l'état
+- validation :
+  - `dune build applications/advanced/music_score_player/src/main.exe`
+
+### 2026-03-04 - music_score_player : amélioration visuelle de la vitrine
+
+- objectif du lot:
+  - renforcer la lisibilité et le rendu "application" sans dénaturer le
+    caractère technique de la timeline
+- améliorations implémentées :
+  - hiérarchie typographique renforcée dans le header (titre, sous-titre,
+    méta-infos)
+  - panneau "Now Playing" à droite avec badge d'état (`READY/LOADING`,
+    `PLAYING/PAUSED`, BPM, SoundFont, unité)
+  - labels de morceaux humanisés (sans extensions techniques) + ellipses
+    intelligentes pour éviter les débordements
+  - liste des scores plus lisible :
+    - alternance de lignes
+    - survol souris
+    - sélection plus contrastée
+  - timeline enrichie :
+    - différenciation visuelle barres de mesure / temps intermédiaires
+    - playhead avec halo léger pour mieux repérer la position active
+  - labels de voies plus musicaux (`Ch N Piano/Violin/...`) au lieu de libellés
+    bruts
+- validation :
+  - `dune build applications/advanced/music_score_player/src/main.exe`
+
+### 2026-03-04 - music_score_player : correction de recouvrement des zones UI
+
+- problème observé :
+  - le panneau d'état ("Now Playing") et les repères de mesure du haut de
+    timeline se recouvraient partiellement
+- correction :
+  - descente de la grille principale (`grid_top`) pour réserver une hauteur
+    dédiée au header étendu
+- résultat :
+  - séparation visuelle nette entre header/panneau et timeline
+- validation :
+  - `dune build applications/advanced/music_score_player/src/main.exe`
+
+### 2026-03-04 - music_score_player : `grid_top` dynamique basé sur le header
+
+- objectif du lot:
+  - éviter les régressions de recouvrement lors d'évolutions visuelles du
+    header, sans retoucher manuellement des constantes
+- modifications :
+  - remplacement de la constante `grid_top` par un calcul dynamique
+    (`grid_top ()`) dérivé de la géométrie effective du header/panneau d'état
+  - propagation de cette valeur au rendu timeline (`background`, `rows`,
+    `playhead`) et aux calculs de hauteur de ligne
+- résultat :
+  - la timeline s'aligne automatiquement sous le header courant
+- validation :
+  - `dune build applications/advanced/music_score_player/src/main.exe`
+
+### 2026-03-04 - music_score_player : lot visuel (mesure active, transport, focus, chargement)
+
+- objectif du lot:
+  - implémenter les améliorations 4 + 6 + 7 + 9 + 10 demandées pour rendre
+    la vitrine plus lisible et plus "application"
+- modifications :
+  - **Mesure active (4)** :
+    - mise en évidence de la mesure courante dans `draw_background`
+  - **Transport cliquable (6)** :
+    - ajout d'une barre de boutons `PLAY/PAUSE` et `RESTART`
+    - gestion des clics souris dans `poll_events`
+  - **Typographie mixte (7)** :
+    - contraste renforcé entre titre/header et texte de contenu
+    - tailles/poids visuels différenciés (titre, now playing, méta, commandes)
+  - **Focus playhead (9)** :
+    - ajout d'un vignettage horizontal autour du curseur pendant la lecture
+  - **Placeholder de chargement (10)** :
+    - écran de chargement enrichi avec étape courante et temps écoulé
+    - progression affichée sur les étapes `load score`, `create synth`,
+      `configure instruments`, `finalize scene`
+- ajustement associé :
+  - `grid_top ()` tient désormais compte aussi de la barre transport pour
+    empêcher tout recouvrement
+- validation :
+  - `dune build applications/advanced/music_score_player/src/main.exe`
+
+### 2026-03-04 - music_score_player : correction recouvrement transport vs entête timeline
+
+- problème observé :
+  - les boutons `PLAY/RESTART` pouvaient encore empiéter sur la bande des
+    numéros de mesures
+- correction :
+  - ajout d'une marge explicite `transport_to_timeline_gap` dans le calcul
+    `grid_top ()`
+  - la timeline réserve désormais systématiquement un tampon vertical sous la
+    barre transport
+- validation :
+  - `dune build applications/advanced/music_score_player/src/main.exe`
+
+### 2026-03-04 - music_score_player : passe layout-safe (contraintes + alerte visuelle)
+
+- objectif du lot:
+  - rendre le layout plus robuste aux évolutions UI et détecter immédiatement
+    les recouvrements résiduels
+- modifications :
+  - centralisation de la géométrie en blocs :
+    - `status_panel_rect ()`
+    - `transport_rect ()`
+  - `grid_top ()` recalcule la timeline depuis les bas de blocs réels
+    (header/panneau/transport), plus depuis des constantes dispersées
+  - ajout d'une détection de collisions (`detect_layout_issues`) et d'une
+    alerte visuelle non bloquante (`LAYOUT WARNING`) affichée en haut
+- résultat :
+  - meilleure résilience du layout lors des prochains ajustements visuels
+  - signal immédiat si une zone se recouvre malgré les contraintes
+- validation :
+  - `dune build applications/advanced/music_score_player/src/main.exe`
+
+### 2026-03-05 - music_score_player : correction faux positif layout warning
+
+- problème observé :
+  - bannière `LAYOUT WARNING: Header text overlaps status panel` affichée alors
+    que le rendu visuel ne se recouvrait pas réellement
+- cause :
+  - détection basée sur une largeur fixe trop large pour le bloc de texte
+    header
+- correction :
+  - calcul de collision aligné sur des largeurs textuelles mesurées et bornées
+    (`measure_text`, cap à 760 pour la ligne "Now playing")
+- validation :
+  - `dune build applications/advanced/music_score_player/src/main.exe`
+
+### 2026-03-05 - music_score_player : mise à jour du PDF explicatif (version tempo-friendly)
+
+- objectif du lot:
+  - aligner le document explicatif avec l'architecture runtime actuelle
+    (transport réactif unifié, cycle de vie transactionnel, bridge d'effets,
+    feedback READY/LOADING, layout-safe)
+- modifications documentaires :
+  - section 16 mise à jour:
+    - retrait des anciens éléments (`control_process`, `voice_process` legacy)
+    - cartographie des modules actuels:
+      - `Transport_reactive`
+      - `Score_reactive`
+      - `Audio_bridge`
+      - `lifecycle_process`
+  - ajout d'une section 17 ("Mise à jour 2026-03-05"):
+    - état `state` unifié,
+    - protocole `Panic -> pause -> transition`,
+    - frontière instant/inter-instant,
+    - état `LOADING/READY`,
+    - conventions visuelles récentes orientées lisibilité réactive
+  - régénération du PDF:
+    - `applications/advanced/music_score_player/EXPLICATIONS_MUSIC_PLAYER.pdf`
+- validation :
+  - génération `pandoc` terminée sans erreur
+
+### 2026-03-05 - music_score_player : correction recouvrement léger voies/scores
+
+- problème observé :
+  - recouvrement visuel léger entre le bas de la zone des voies (timeline) et
+    le haut du panneau `Scores`
+- correction :
+  - introduction de marges explicites de layout:
+    - `selector_bottom_margin`
+    - `timeline_to_selector_gap`
+  - harmonisation des calculs `row_height_of_score` et `selector_geometry`
+    pour réserver le même espace vertical
+- validation :
+  - `dune build applications/advanced/music_score_player/src/main.exe`
+
+### 2026-03-05 - music_score_player : correction many-tracks (Metallica)
+
+- problème observé :
+  - avec des morceaux comportant beaucoup de voies, la timeline empiétait sur
+    le panneau `Scores`
+- cause :
+  - hauteur minimale de voie trop élevée, empêchant une compression suffisante
+    quand le nombre de pistes augmente
+  - dessin des blocs de notes supposait des lignes "hautes"
+- correction :
+  - abaissement de la hauteur minimale (`min_row_h = 8`)
+  - calcul adaptatif des paddings/hauteurs de blocs de notes selon `row_h`
+  - limitation des offsets d'empilement pour éviter les débordements en lignes
+    fines
+- validation :
+  - `dune build applications/advanced/music_score_player/src/main.exe`
+
+### 2026-03-05 - music_score_player : mapping instruments UI (GM complet)
+
+- objectif du lot:
+  - améliorer la fidélité des libellés d'instruments affichés dans la timeline
+- modifications :
+  - remplacement du mapping partiel (quelques presets) par une table GM
+    complète (128 programmes)
+  - ajout d'une règle spécifique canal 10 (`channel = 9`) :
+    - affichage `Percussion (GM Drum Kit)`
+  - indication de bank non nulle dans le label (`[bank N]`)
+- validation :
+  - `dune build applications/advanced/music_score_player/src/main.exe`

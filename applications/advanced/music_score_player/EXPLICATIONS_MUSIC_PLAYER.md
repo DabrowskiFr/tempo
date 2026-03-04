@@ -812,18 +812,25 @@ Fichier principal:
 
 Fonctions clés:
 
-- `control_process`
-  - pilotage transport/tempo/restart/pulse.
-- `voice_process`
-  - lecture des notes d'une voix.
-- `note_release_process`
-  - émission différée des `Note_off`.
-- `control_process_timeline`
-  - lecture des événements de contrôle.
-- `audio_bridge_process`
-  - transfert signal logique -> commandes audio.
-- `apply_audio_commands`
-  - ordonnancement final + appels FluidSynth.
+- `Transport_reactive.process`
+  - automate transport (play/pause/restart/select/quit),
+  - application tempo map et calcul `unit_ms`,
+  - émission du `tick` logique et publication du `state` (`frame`).
+- `Score_reactive.voice_process`
+  - projection d'une voix en commandes logiques
+    (`Note_on`, `Note_off`) en fonction du `tick`.
+- `Score_reactive.controls_process`
+  - projection des contrôles (`Control_cc`) sur la même timeline logique.
+- `Audio_bridge.collect_process`
+  - collecte des commandes agrégées émises dans l'instant.
+- `Audio_bridge.apply`
+  - tri stable (`Panic`, `Note_off`, `Control_cc`, `Note_on`) et appels
+    FluidSynth côté hôte.
+- `lifecycle_process`
+  - transitions transactionnelles:
+    - `Panic`
+    - `pause`
+    - `Reload_*` / `Quit`.
 
 Formats:
 
@@ -831,3 +838,65 @@ Formats:
   - structure score + conversion + sérialisation.
 - `lib/fluidsynth/tempo_fluidsynth.ml`
   - interface de synthèse/audio + import MIDI.
+
+---
+
+## 17) Mise à jour 2026-03-05 : éléments Tempo-friendly ajoutés
+
+### 17.1 État réactif unifié
+
+Le runtime n'utilise plus un transport mutable dispersé comme source
+principale; il publie un signal agrégé `state` (type `frame`) contenant:
+
+- `playing`,
+- `bpm`,
+- `unit_ms`,
+- `current_unit`.
+
+La vue consomme ce signal; le transport le met à jour; la musique et l'UI
+restent alignées sur la même source temporelle.
+
+### 17.2 Transactions explicites de cycle de vie
+
+Les changements de morceau/soundfont et la sortie passent par un signal
+`lifecycle` dédié.
+
+Le protocole appliqué est:
+
+1. émission `Panic`,
+2. `pause ()` (frontière d'instant),
+3. transition (`Reload_score`, `Reload_soundfont`, `Quit`).
+
+Ce protocole évite les états intermédiaires ambiguës.
+
+### 17.3 Frontière d'effets conservée
+
+Les processus réactifs ne pilotent pas directement FluidSynth:
+
+- ils émettent des commandes logiques,
+- le bridge hôte applique les effets en inter-instant.
+
+Le modèle instant/inter-instant de Tempo est donc respecté explicitement.
+
+### 17.4 Feedback de disponibilité
+
+L'application expose l'état `LOADING/READY`:
+
+- `SPACE` est actif seulement en `READY`,
+- l'écran de chargement affiche l'étape courante et le temps écoulé.
+
+Cela rend le comportement runtime observable sans introduire d'effets de bord
+dans les processus musicaux.
+
+### 17.5 Lisibilité de la timeline
+
+Améliorations visuelles ajoutées sans changer la sémantique:
+
+- mesure active en surbrillance,
+- focus visuel autour du playhead,
+- barre transport cliquable,
+- layout dérivé de blocs géométriques (`status_panel_rect`, `transport_rect`)
+  avec détection de recouvrement.
+
+Ces éléments servent la compréhension de l'état réactif plutôt qu'un simple
+habillage graphique.

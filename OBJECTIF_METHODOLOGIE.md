@@ -170,6 +170,52 @@ en priorité sur :
     - le pont d'effets (application hôte des commandes),
     puis ajouter une trace pas-à-pas d'une note et d'un contrôle pour rendre
     vérifiable le lien entre théorie, code et rendu audio
+42. pour une vitrine applicative Tempo, structurer le code en trois couches
+    explicites :
+    - transport réactif (automate + tick logique + frame),
+    - projection partition -> événements (processus parallèles par voix),
+    - bridge d'effets externes confiné à l'inter-instant,
+    de façon à rendre visibles les frontières pure/déterministe vs impure
+43. pour les transitions lourdes (reload score/soundfont, quit), utiliser un
+    signal de cycle de vie dédié et un protocole transactionnel explicite
+    (`panic` -> `pause` -> transition), afin d'éviter les états intermédiaires
+    ambigus entre moteur réactif, audio et hôte UI
+44. pour une UI de vitrine orientée timeline, améliorer la lecture musicale
+    avant d'ajouter de nouveaux widgets :
+    - hiérarchie typographique explicite,
+    - distinction forte mesure/temps/playhead,
+    - labels métiers lisibles (morceaux/instruments),
+    - gestion systématique de l'overflow texte (ellipses),
+    afin de rendre les états et transitions compréhensibles d'un coup d'oeil
+45. lorsqu'un header est enrichi (panneaux d'état, métadonnées), réserver une
+    zone verticale explicite et décaler la timeline en conséquence pour éviter
+    tout recouvrement entre informations de contexte et repères musicaux
+46. lorsque des blocs UI ont des géométries interdépendantes, préférer une
+    position calculée (`layout function`) à des constantes dispersées, puis
+    propager cette position dans le rendu et les calculs de taille pour
+    maintenir la cohérence lors des itérations visuelles
+47. pour une vitrine interactive audio, ajouter des affordances visibles avant
+    d'ajouter de nouvelles fonctionnalités :
+    - action directe souris sur transport,
+    - repère de mesure active,
+    - focus visuel sur le curseur,
+    - feedback explicite pendant chargement (étape + temps),
+    afin de réduire l'ambiguïté perçue sans complexifier le modèle réactif
+48. pour stabiliser un layout riche, exprimer d'abord la géométrie en blocs
+    nommés (rectangles) puis dériver les positions dépendantes (ex: top de
+    timeline) à partir de ces blocs ; ajouter une vérification de collision
+    légère en runtime pour détecter les recouvrements dès l'intégration
+49. dans une vérification de collision UI, privilégier des dimensions mesurées
+    (texte effectivement rendu) plutôt que des boîtes fixes sur-approchées,
+    afin d'éviter les faux positifs qui masquent les vrais problèmes
+50. lorsqu'un document explicatif couvre un runtime en forte évolution,
+    maintenir une section "cartographie code -> rôle" synchronisée avec les
+    noms de modules/fonctions réellement présents et ajouter une section
+    "mise à jour" datée pour tracer explicitement les invariants désormais
+    garantis par l'architecture courante
+51. pour l'affichage d'instruments MIDI, préférer une table GM complète et une
+    convention explicite pour la percussion (canal 10), plutôt qu'un mapping
+    partiel heuristique qui dégrade la lisibilité métier
 
 ## Points d'attention
 
