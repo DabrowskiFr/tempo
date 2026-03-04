@@ -1,0 +1,3 @@
+; Snapshot of the refactored runtime kept for comparison/reconstruction.
+; The active public [tempo] library on branch [develop] still builds from
+; [lib/tempo.ml] and companion modules.

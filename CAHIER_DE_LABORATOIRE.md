@@ -1,0 +1,149 @@
+# Cahier de laboratoire
+
+## 2026-03-04
+
+### Objectif
+
+Repartir du dernier commit restauré après suppression accidentelle et reconstruire
+au plus près l'état atteint précédemment :
+- séparation des packages `tempo`, `tempo-app`, `tempo-jobs`
+- surface runtime structurée autour de `Core`, `Constructs`, `Low_level`,
+  `Observe`, `Meta`
+- base documentaire et packaging cohérents
+
+### Constat initial
+
+Le dépôt restauré correspondait à un état plus ancien :
+- un seul package `tempo`
+- structure monolithique dans `lib/`
+- pas de `tempo-app`, pas de `tempo-jobs`
+- pas de cahier ni de fichier d'objectif/méthodologie
+
+### Actions réalisées
+
+#### Réorganisation des sources
+
+- création de `lib/core/`
+- copie des modules techniques existants (`tempo_types`, `tempo_signal`,
+  `tempo_task`, `tempo_thread`, `tempo_engine`, `tempo_log`) dans `lib/core/`
+- ajout de la nouvelle façade publique :
+  - `tempo_base`
+  - `tempo_low_level`
+  - `tempo_core_api`
+  - `tempo_constructs`
+  - `tempo_observe`
+  - `tempo_meta`
+  - nouveau `tempo`
+
+#### Runtime
+
+- conservation du moteur existant comme base
+- ajout d'un mode `run_interactive`
+- ajout d'un mécanisme de réveil (`wakeup`) pour éviter le busy waiting dans
+  le mode interactif
+- ajout de l'injection hôte `emit_from_host`
+
+#### Packages
+
+- ajout de `tempo-app`
+- ajout de `tempo-jobs`
+- mise à jour de `dune-project`
+- génération des fichiers `.opam`
+
+### Difficultés rencontrées
+
+- le dépôt restauré était très en arrière par rapport à l'état perdu ; la
+  reconstruction est donc une réimplémentation, pas une simple restauration
+- plusieurs collisions de noms sont apparues pendant la reconstruction
+  (`None` dans `tempo-app`, types internes exposés dans `tempo-jobs`)
+- le modèle interactif du runtime a dû être réintroduit au-dessus d'un moteur
+  initialement purement batch
+
+### Échecs / limites actuelles
+
+- `run_interactive` existe, mais son articulation exacte avec toutes les
+  sources externes reste à durcir
+- la reconstruction des backends spécialisés (`raylib`, `fluidsynth`) et des
+  démos avancées n'est pas encore réappliquée dans ce dépôt
+- la documentation odoc est seulement partiellement reconstruite
+
+### Validation
+
+- `dune build @install @runtest` passe sur l'état reconstruit de base
+
+### Extension FluidSynth + démo musique
+
+- ajout de `tempo-fluidsynth` dans `lib/fluidsynth/`
+- ajout d'une découverte des flags C via `dune-configurator`
+- ajout d'un binding minimal pour :
+  - création/arrêt du synthé
+  - `program_select`
+  - `note_on` / `note_off`
+  - `all_notes_off`
+  - import d'un fichier MIDI via le player FluidSynth
+- réintégration de la démo
+  [applications/simple-demos/score-player-raylib/src/main.ml](/Users/fredericdabrowski/Repos/tempo/tempo-dev/tempo/applications/simple-demos/score-player-raylib/src/main.ml)
+
+Limite connue :
+- la démo utilise encore un polling léger pour les entrées clavier Raylib, car
+  Raylib n'expose pas ici de wakeup événementiel pur exploitable directement
+  depuis `run_interactive`
+
+### Reconstruction de tempo-raylib et d'une appli avancée
+
+- ajout d'un package local `tempo-raylib` sous `lib/raylib/`
+- suppression de la dépendance implicite à l'installation opam externe
+- choix retenu : ne pas réintroduire `tempo.game`, mais fournir directement :
+  - `Ui`
+  - `Hud`
+  - `Fx`
+  - `Audio`
+  - `Backend`
+- ajout d'une application avancée compacte dans
+  `applications/advanced/tempo-showcase/`
+  pour servir de vitrine des features `Tempo` + `Tempo_jobs`
+
+Ce choix ne reconstitue pas l'ancien écosystème complet, mais remet une base
+localement cohérente et démonstrative.
+
+### Reprise sur la branche `develop`
+
+- constat : la restauration initiale avait été faite par erreur sur `main`,
+  alors que l'historique actif contenant `game-univ` est sur `develop`
+- vérification : `origin/develop` contient bien `applications/advanced/game-univ`
+  ainsi que les autres applications avancées historiques
+- mesure de sûreté : l'état reconstruit sur `main` a été préservé sur la
+  branche `codex/reconstructed-main` pour éviter toute perte avant bascule
+- choix retenu sur `develop` :
+  - conserver l'écosystème existant (`game-univ`, `refactor`,
+    `tempo-core-studio`, `tempo.game`, `tempo-frp`, `tempo-async`)
+  - reporter seulement les ajouts compatibles :
+    - `tempo-fluidsynth`
+    - `applications/advanced/music_score_player`
+    - `applications/simple-demos/score-player-raylib`
+- tentative abandonnée : activer directement le runtime restructuré via
+  `lib/core/dune` sur `develop`
+  - effet : casse immédiate de `tempo-frp`, `tempo-async` et `tempo.game`
+    qui dépendent encore de l'API historique
+  - correction : laisser `lib/core/` comme snapshot de reconstruction
+    documentaire/technique, mais ne pas l'activer dans le build de `develop`
+- adaptation : les démos musicales ont été rebranchées sur `Tempo.execute`
+  au lieu de `run_interactive`, afin de rester compatibles avec l'API actuelle
+  de `develop` tout en restaurant le backend `tempo-fluidsynth`
+
+### Applications avancées réintroduites
+
+- ajout de `applications/advanced/music_score_player/`
+  comme version avancée explicite de la démo musicale
+- ajout de `applications/advanced/cheat_detector_game/`
+  comme jeu réactif local reconstruit contre les packages actuels
+
+Le `cheat_detector_game` réintroduit :
+- un process d'entrée
+- un process de contrôle
+- un process par étudiant
+- un process de maintenance FX
+- un process `Tempo_jobs` pour un scan externe
+
+Ce n'est pas la restauration bit-à-bit de l'ancien `game-univ`, mais c'est une
+reconstruction locale cohérente de la vitrine réactive recherchée.

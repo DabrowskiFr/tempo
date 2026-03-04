@@ -1,0 +1,57 @@
+# Objectif et méthodologie
+
+## Objectif courant
+
+Ramener le dépôt restauré à un état proche de la version précédemment obtenue,
+en priorité sur :
+
+1. la structure des packages
+2. la clarté de l'API publique
+3. la documentation et la traçabilité des changements
+
+## Architecture cible
+
+### Packages principaux
+
+- `tempo` : runtime synchrone et constructions réactives
+- `tempo-app` : helpers applicatifs (`App`, `Loop`, `Scene`)
+- `tempo-jobs` : jobs externes parallèles réinjectés dans Tempo
+- `tempo-raylib` : backend et modèles de présentation spécialisés
+- `tempo-fluidsynth` : rendu SoundFont et import MIDI pour les démos musicales
+
+### Niveaux de l'API `tempo`
+
+- `Tempo.Core`
+- `Tempo.Constructs`
+- `Tempo.Low_level`
+- `Tempo.Observe`
+- `Tempo.Meta`
+
+## Méthodologie
+
+1. repartir du dépôt restauré sans supposer que les changements perdus sont
+   encore disponibles localement
+2. reconstruire d'abord une base compilable et testable
+3. documenter immédiatement les décisions importantes
+4. procéder par couches :
+   - runtime
+   - packages
+   - doc
+   - démos / backends
+5. valider fréquemment avec Dune
+6. pour les backends externes, privilégier une reconstruction minimale mais
+   directement testable avant d'affiner l'API
+7. pour les applications avancées, préférer des vitrines locales cohérentes
+   avec l'API courante plutôt qu'une dépendance implicite à l'ancien écosystème
+8. lorsqu'une divergence de branche est découverte, préserver d'abord le
+   travail local reconstruit sur une branche dédiée, puis reporter
+   sélectivement sur la branche cible sans régression pour les applications
+   déjà présentes
+
+## Points d'attention
+
+- la correction prévaut sur la vitesse
+- éviter les API publiques ambiguës
+- réserver `Low_level` aux auteurs d'extensions et aux cas avancés
+- garder une séparation nette entre primitives réactives et helpers
+  applicatifs

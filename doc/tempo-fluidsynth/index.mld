@@ -1,0 +1,8 @@
+{0 tempo-fluidsynth}
+
+`tempo-fluidsynth` provides:
+- realtime SoundFont playback for Tempo demos
+- MIDI file import through FluidSynth's MIDI player/parser
+
+Tempo still owns the logical playback timeline. FluidSynth is used for sound
+quality and for decoding standard MIDI files into note and controller events.

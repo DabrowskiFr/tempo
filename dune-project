@@ -50,3 +50,16 @@
   (ocaml (>= 5.3.0))
   (dune (>= 3.0))
   (tempo (= :version))))
+
+(package
+ (name tempo-fluidsynth)
+ (synopsis "FluidSynth backend for Tempo music applications")
+ (description "SoundFont-based music rendering and MIDI import for Tempo applications.")
+ (depends
+  (ocaml (>= 5.3.0))
+  (dune (>= 3.0))
+  (tempo (= :version))
+  dune-configurator
+  ctypes
+  ctypes-foreign
+  unix))
