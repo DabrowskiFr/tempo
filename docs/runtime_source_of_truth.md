@@ -4,27 +4,24 @@
 
 The runtime source of truth is:
 
-- `/Users/fredericdabrowski/Repos/tempo/lib/tempo.ml`
+- `/Users/fredericdabrowski/Repos/tempo/tempo-dev/tempo/lib/core/tempo.ml`
 - `/Users/fredericdabrowski/Repos/tempo/docs/runtime_perf_invariants.md` (hot-path rules)
 
 Public runtime behavior, scheduler semantics, signal handling, and performance work must be implemented there.
 
-## Legacy modules
+## Removed historical runtime files
 
-The following modules remain in the repository for reference only:
-
-- `/Users/fredericdabrowski/Repos/tempo/lib/tempo_engine.ml`
-- `/Users/fredericdabrowski/Repos/tempo/lib/tempo_signal.ml`
-- `/Users/fredericdabrowski/Repos/tempo/lib/tempo_task.ml`
-
-They are no longer part of the `tempo` library build.
+The old root-level runtime files under `lib/` (`tempo.ml`, `tempo_engine.ml`,
+`tempo_signal.ml`, `tempo_task.ml`, `tempo_thread.ml`, `tempo_types.ml`,
+`tempo_log.ml` and their interfaces) are no longer part of the repository's
+active runtime path.
 
 ## Contributor rule
 
 For runtime changes:
 
-1. Change `tempo.ml` (and `tempo.mli` when API changes).
-2. Do not add new behavior in legacy modules.
+1. Change `lib/core/tempo.ml` (and `lib/core/tempo.mli` when API changes).
+2. Keep the public build rooted in `lib/core/`.
 3. Validate with:
    - `dune build`
    - `dune runtest`
@@ -33,9 +30,9 @@ For runtime changes:
    - `/Users/fredericdabrowski/Repos/tempo/tests/ok/runtime_instant_observable_order.ml`
    - `/Users/fredericdabrowski/Repos/tempo/tests/ok/runtime_instant_current_empty.ml`
 
-## Internal structure (phase 2)
+## Internal structure
 
-Inside `tempo.ml`, runtime internals are now organized around dedicated modules:
+Inside `lib/core/`, runtime internals are organized around dedicated modules:
 
 - `Thread_store`: dense thread-state storage and logical thread id allocation.
 - `Task_fastpath`: hot-path checks for kills/guards.
@@ -55,8 +52,8 @@ This avoids duplicated scheduler logic, reduces maintenance overhead, and makes 
 
 Before merging runtime refactors:
 
-1. No semantic behavior added in legacy modules.
+1. No semantic behavior added outside `lib/core/`.
 2. Deterministic tests assert values/signals, not print order.
 3. New helper/module has an explicit ownership boundary.
 4. Runtime docs list the new helper in the internal module map.
-5. Hot-path changes respect `/Users/fredericdabrowski/Repos/tempo/docs/runtime_perf_invariants.md`.
+5. Hot-path changes respect `/Users/fredericdabrowski/Repos/tempo/tempo-dev/tempo/docs/runtime_perf_invariants.md`.

@@ -1,6 +1,6 @@
 # Runtime Performance Invariants
 
-This document defines mandatory rules for modifying hot paths in `/Users/fredericdabrowski/Repos/tempo/lib/tempo.ml`.
+This document defines mandatory rules for modifying hot paths in `/Users/fredericdabrowski/Repos/tempo/tempo-dev/tempo/lib/core/tempo.ml`.
 
 ## Scope
 

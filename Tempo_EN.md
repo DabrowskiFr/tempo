@@ -168,7 +168,7 @@ dune build @doc
 
 ## 8. Useful references
 
-- Public API: `lib/tempo.mli`
-- Main implementation: `lib/tempo.ml`
+- Public API: `lib/core/tempo.mli`
+- Main implementation: `lib/core/tempo.ml`
 - Tests: `tests/ok`
 - Odoc pages: `doc/`

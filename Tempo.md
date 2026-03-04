@@ -169,7 +169,7 @@ dune build @doc
 
 ## 8. Références utiles
 
-- API publique : `lib/tempo.mli`
-- Implémentation principale : `lib/tempo.ml`
+- API publique : `lib/core/tempo.mli`
+- Implémentation principale : `lib/core/tempo.ml`
 - Tests : `tests/ok`
 - Documentation odoc : `doc/`

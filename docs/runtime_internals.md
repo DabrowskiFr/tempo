@@ -5,13 +5,11 @@ This note explains where to make changes in the runtime and which invariants mus
 ## Source of truth
 
 - Runtime semantics are implemented in:
-  - `/Users/fredericdabrowski/Repos/tempo/lib/tempo.ml`
+  - `/Users/fredericdabrowski/Repos/tempo/tempo-dev/tempo/lib/core/tempo.ml`
 - Hot-path/performance invariants are documented in:
-  - `/Users/fredericdabrowski/Repos/tempo/docs/runtime_perf_invariants.md`
+  - `/Users/fredericdabrowski/Repos/tempo/tempo-dev/tempo/docs/runtime_perf_invariants.md`
 
-Legacy modules (`tempo_engine`, `tempo_signal`, `tempo_task`) are kept as references only and are not part of the `tempo` build.
-
-## Internal module map in `tempo.ml`
+## Internal module map in `lib/core`
 
 - `Thread_store`:
   - manages dense thread-state storage (`thread_dense`),
@@ -60,7 +58,7 @@ When changing scheduler internals, update or extend these tests first, then modi
 
 ## Runtime anti-patterns
 
-- Updating legacy runtime modules (`tempo_engine`, `tempo_signal`, `tempo_task`) instead of `tempo.ml`.
+- Updating removed historical runtime files instead of `lib/core`.
 - Introducing side effects in deterministic tests that depend on task scheduling order.
 - Adding debug/metrics work on hot paths without guard checks.
 - Coupling runtime semantics to mutable shared references across processes.

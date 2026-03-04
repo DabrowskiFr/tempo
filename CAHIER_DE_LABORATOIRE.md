@@ -148,10 +148,10 @@ localement cohérente et démonstrative.
   - déléguer aussi `Tempo.execute` vers `Tempo_engine.execute`
   - effet observé : régressions sémantiques dans les tests (`watch`,
     agrégats, ordonnancement d'awaiters)
-  - cause : `lib/tempo_engine.ml` reste un runtime plus simple que le
-    monolithe principal
+  - cause : le runtime interactif de cette étape reste plus simple que le
+    monolithe principal alors encore actif
 - correction :
-  - conserver `Tempo.execute` sur l'implémentation historique de `lib/tempo.ml`
+  - conserver `Tempo.execute` sur l'implémentation historique alors active
   - n'utiliser `Tempo_engine` que pour `run_interactive` et le réveil hôte
 - travail complémentaire :
   - inclusion de `tempo_task`, `tempo_signal` et `tempo_engine` dans
@@ -288,5 +288,24 @@ reconstruction locale cohérente de la vitrine réactive recherchée.
     public `tempo`
   - ces fichiers historiques peuvent désormais être traités comme restes du
     runtime récupéré, et non plus comme dépendance active
+- validation :
+  - `dune build @install @runtest @doc`
+
+### 2026-03-04 - Suppression des anciens fichiers runtime racine
+
+- objectif : supprimer définitivement les restes du runtime racine historique
+  maintenant que le build public `tempo` utilise `lib/core`
+- fichiers supprimés :
+  - `lib/tempo.ml` / `lib/tempo.mli`
+  - `lib/tempo_engine.ml` / `lib/tempo_engine.mli`
+  - `lib/tempo_signal.ml` / `lib/tempo_signal.mli`
+  - `lib/tempo_task.ml` / `lib/tempo_task.mli`
+  - `lib/tempo_thread.ml` / `lib/tempo_thread.mli`
+  - `lib/tempo_types.ml` / `lib/tempo_types.mli`
+  - `lib/tempo_log.ml`
+- travail associé :
+  - réalignement de la documentation vers `lib/core/tempo.ml` et
+    `lib/core/tempo.mli`
+  - suppression de l'entrée obsolète dans `.ocamlformat-ignore`
 - validation :
   - `dune build @install @runtest @doc`

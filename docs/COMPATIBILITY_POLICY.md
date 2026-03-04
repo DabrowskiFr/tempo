@@ -4,7 +4,7 @@ This policy defines compatibility expectations for Tempo runtime and application
 
 ## 1. Stable surface (default expectation)
 
-- Core synchronous API in `/Users/fredericdabrowski/Repos/tempo/lib/tempo.mli`:
+- Core synchronous API in `/Users/fredericdabrowski/Repos/tempo/tempo-dev/tempo/lib/core/tempo.mli`:
   - `execute`, signals, `await`, `await_immediate`, `pause`, `when_`, `watch`, `parallel`.
 - Deterministic observable semantics validated by `dune runtest`.
 - Unified app launcher contract:
