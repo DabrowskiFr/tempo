@@ -6,8 +6,17 @@ let name = "emit_await_example"
 let expected = [ "emit"; "observe:7" ]
 let trace_max = 8
 
+let input_of_list xs =
+  let st = ref xs in
+  fun () ->
+    match !st with
+    | [] -> None
+    | x :: rest ->
+        st := rest;
+        x
+
 let run_trace () =
-  execute_trace ~instants:4 ~inputs:[ None ] (fun _input output ->
+  Observe.execute_trace ~instants:4 ~input:(input_of_list [ None ]) (fun _input output ->
       let s = new_signal () in
       parallel
         [
@@ -30,7 +39,9 @@ let run () =
 
 let trace_rows () =
   let timeline =
-    execute_timeline ~instants:4 ~inputs:[ None; None; None; None ] (fun _input output ->
+    Observe.execute_timeline ~instants:4
+      ~input:(input_of_list [ None; None; None; None ])
+      (fun _input output ->
         let s = new_signal () in
         parallel
           [
@@ -43,6 +54,6 @@ let trace_rows () =
           ])
   in
   List.map
-    (fun (i : (unit, string) timeline_instant) ->
+    (fun (i : string Observe.timeline_instant) ->
       (i.instant, "-", Option.value i.output ~default:"-"))
     timeline

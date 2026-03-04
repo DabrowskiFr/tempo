@@ -469,6 +469,15 @@ let extract_output_signals (s : string) : signal_name list =
 (* -------------------------------------------------------------------------- *)
 
 module Sync = struct
+  let input_of_list xs =
+    let st = ref xs in
+    fun () ->
+      match !st with
+      | [] -> None
+      | x :: rest ->
+          st := rest;
+          x
+
   let signal_of_name sa sb sc sd = function
     | Sig_a -> sa
     | Sig_b -> sb
@@ -543,10 +552,12 @@ module Sync = struct
       in
       parallel [ input_pump; program_once; flush_trace ]
     in
-    let timeline = execute_timeline ~instants ~inputs run in
+    let timeline =
+      Observe.execute_timeline ~instants ~input:(input_of_list inputs) run
+    in
     List.map
-      (fun ({ instant; input; output } : (ext_input, string) timeline_instant) ->
-        { instant; input; output })
+      (fun ({ instant; output } : string Observe.timeline_instant) ->
+        { instant; input = None; output })
       timeline
 end
 

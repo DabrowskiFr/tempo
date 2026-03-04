@@ -9,6 +9,15 @@ type output = [ `Pong | `Done ]
 let expected = [ `Pong ]
 let trace_max = 8
 
+let input_of_list xs =
+  let st = ref xs in
+  fun () ->
+    match !st with
+    | [] -> None
+    | x :: rest ->
+        st := rest;
+        x
+
 let controller input output =
   let v = await input in
   match v with
@@ -16,7 +25,9 @@ let controller input output =
   | `Stop -> emit output `Done
 
 let run_trace () =
-  execute_trace ~instants:3 ~inputs:[ Some `Ping; None; None ] controller
+  Observe.execute_trace ~instants:3
+    ~input:(input_of_list [ Some `Ping; None; None ])
+    controller
 
 let pp = function `Pong -> "pong" | `Done -> "done"
 
@@ -31,12 +42,13 @@ let run () =
 
 let trace_rows () =
   let timeline =
-    execute_timeline ~instants:3 ~inputs:[ Some `Ping; None; None ] controller
+    Observe.execute_timeline ~instants:3
+      ~input:(input_of_list [ Some `Ping; None; None ])
+      controller
   in
-  let pp_input = function `Ping -> "ping" | `Stop -> "stop" in
   List.map
-    (fun (i : (input, output) timeline_instant) ->
+    (fun (i : output Observe.timeline_instant) ->
       ( i.instant,
-        Option.fold ~none:"-" ~some:pp_input i.input,
+        "-",
         Option.fold ~none:"-" ~some:pp i.output ))
     timeline

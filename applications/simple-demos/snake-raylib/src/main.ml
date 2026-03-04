@@ -1,4 +1,3 @@
-open Tempo
 open Raylib
 
 module App = Tempo_app.App

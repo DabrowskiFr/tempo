@@ -25,6 +25,12 @@ let coh_weight = 0.01
 let sep_weight = 0.06
 let jitter = 0.09
 
+module Rng = struct
+  let create seed = Random.State.make [| seed |]
+  let int t n = Random.State.int t n
+  let float t x = Random.State.float t x
+end
+
 let add a b = { x = a.x +. b.x; y = a.y +. b.y }
 let sub a b = { x = a.x -. b.x; y = a.y -. b.y }
 let scale s v = { x = s *. v.x; y = s *. v.y }
