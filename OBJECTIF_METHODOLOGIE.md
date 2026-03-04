@@ -152,6 +152,10 @@ en priorité sur :
     réelle de la partition (`meter` + `units_per_bar`) et non d'une hypothèse
     fixe (ex: 1/16), pour éviter les dérives temporelles malgré une conversion
     d'événements correcte
+38. quand la fidélité audio est prioritaire, privilégier une exécution pilotée
+    par ticks MIDI exacts (événements source), tout en conservant Tempo comme
+    chef d'orchestre de la boucle (pause/restart/interaction) et en gardant la
+    grille `units` pour la visualisation
 
 ## Points d'attention
 

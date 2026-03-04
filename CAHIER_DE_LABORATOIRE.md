@@ -337,6 +337,34 @@
     `dune build ./applications/advanced/music_score_player/src/main.exe ./applications/advanced/music_score_player/src/score_convert.exe`
   - conversion complète relancée sur tous les `mid` présents
 
+### Lecture MIDI exacte (ticks) pilotée par Tempo
+
+- objectif du lot: supprimer les artefacts de quantification audibles
+  (glissements/bégaiements) sur certains morceaux tout en gardant Tempo comme
+  orchestrateur de la boucle interactive
+- réalisation:
+  - ajout d'un mode de lecture runtime `Midi_ticks` dans
+    `music_score_player`:
+    - si un `.mid` homonyme du `.tscore` existe dans `assets/mid/`, la lecture
+      se fait sur événements MIDI exacts (`note on/off`, `control change`)
+      indexés par tick
+    - fallback automatique sur le mode quantifié existant si le `.mid` est
+      absent ou en erreur
+  - tempo map appliquée au tick exact:
+    - mise à jour de `source.unit_ms` à partir de
+      `tempo_us_per_quarter / division`
+    - recalage du BPM affiché
+  - conversion visuelle conservée:
+    - l'UI reste basée sur le score (`units`) avec projection tick->unit pour
+      le playhead
+  - suppression du morceau built-in de la liste
+- tentative/diagnostic:
+  - vérification des MIDI Moonlight: pas de chevauchement pathologique dans les
+    données source, ce qui a confirmé que les artefacts venaient du pipeline de
+    quantification/rejeu
+- validation:
+  - `dune build ./applications/advanced/music_score_player/src/main.exe` OK
+
 ### Objectif
 
 Repartir du dernier commit restauré après suppression accidentelle et reconstruire
