@@ -23,11 +23,16 @@ let process (bus : Bus.t) (world : world) =
       world.drink_progress <- 0.0;
       world.message <- "Un cafe vient d'apparaitre")
   in
-  let rec loop () =
+  let rec movement_process () =
+    let input = Tempo.await bus.input in
+    if world.started && (not world.paused) && not world.game_over then
+      Movement.apply_input ~bounds_w:960.0 ~bounds_h:640.0 world.professor input;
+    movement_process ()
+  in
+  let rec stamina_process () =
     let input = Tempo.await bus.input in
     if world.started && (not world.paused) && not world.game_over then (
       let moving = input.up || input.down || input.left || input.right in
-      Movement.apply_input ~bounds_w:960.0 ~bounds_h:640.0 world.professor input;
       let decay =
         0.018
         +. (if moving then 0.035 else 0.0)
@@ -35,7 +40,14 @@ let process (bus : Bus.t) (world : world) =
       in
       world.energy <- Time_helpers.clamp (world.energy -. decay) ~min:0.0 ~max:100.0;
       if world.focus_left > 0 then world.focus_left <- world.focus_left - 1;
-      (match world.coffee_active with
+      world.detection_radius <- recompute_detection_radius ());
+    stamina_process ()
+  in
+  let rec coffee_process () =
+    let input = Tempo.await bus.input in
+    if world.started && (not world.paused) && not world.game_over then (
+      let moving = input.up || input.down || input.left || input.right in
+      match world.coffee_active with
       | Some idx ->
           world.coffee_ttl <- max 0 (world.coffee_ttl - 1);
           let coffee = world.coffee_spots.(idx) in
@@ -63,12 +75,15 @@ let process (bus : Bus.t) (world : world) =
       | None ->
           world.coffee_respawn <- max 0 (world.coffee_respawn - 1);
           if world.coffee_respawn = 0 then activate_next_coffee ());
-      world.detection_radius <- recompute_detection_radius ());
+    coffee_process ()
+  in
+  let rec draw_process () =
+    let _ = Tempo.await bus.input in
     Tempo.emit bus.draw
       [ Draw_professor (world.professor.pos, world.professor.radius, world.detection_radius) ];
     (match world.coffee_active with
     | Some idx -> Tempo.emit bus.draw [ Draw_coffee (world.coffee_spots.(idx), world.drink_progress) ]
     | None -> ());
-    loop ()
+    draw_process ()
   in
-  loop ()
+  Tempo.parallel [ movement_process; stamina_process; coffee_process; draw_process ]
