@@ -1,5 +1,0 @@
-#!/bin/sh
-set -eu
-
-# Legacy compatibility wrapper.
-exec dune exec ./applications/run -- "$@"
