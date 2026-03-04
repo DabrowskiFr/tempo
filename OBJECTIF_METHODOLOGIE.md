@@ -156,6 +156,9 @@ en priorité sur :
     par ticks MIDI exacts (événements source), tout en conservant Tempo comme
     chef d'orchestre de la boucle (pause/restart/interaction) et en gardant la
     grille `units` pour la visualisation
+39. si l'objectif produit impose une source d'exécution unique, éviter les
+    fallbacks implicites entre formats; expliciter un seul format runtime
+    (ici `tscore`) et traiter les autres comme formats d'import/outillage
 
 ## Points d'attention
 

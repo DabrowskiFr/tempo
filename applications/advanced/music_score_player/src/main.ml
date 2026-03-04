@@ -36,7 +36,6 @@ type transport = {
   mutable bpm : int;
   mutable unit_ms : int;
   mutable current_unit : int;
-  mutable current_tick : int;
 }
 
 type metronome_source = {
@@ -61,6 +60,7 @@ type ui_state = {
   mutable selected_index : int;
   mutable selected_soundfont : int;
   mutable score_scroll_col : int;
+  mutable last_toggle_at : float;
 }
 
 type run_request =
@@ -79,16 +79,6 @@ type host_bridge = {
   mutable pending_audio_rev : note_event list;
   active_notes : int array array;
 }
-
-type playback_mode =
-  | Quantized
-  | Midi_ticks of {
-      division : int;
-      events_by_tick : note_event list array;
-      tempo_us_by_tick : int option array;
-      total_ticks : int;
-      ticks_per_unit : float;
-    }
 
 exception Quit_request
 exception Reload_score_request of int
@@ -204,66 +194,6 @@ let soundfont_choices () =
 let score_of_choice (choice : score_choice) =
   Score.of_binary_file choice.path
 
-let midi_path_of_choice (choice : score_choice) =
-  let root = "applications/advanced/music_score_player/assets/mid" in
-  let stem = Filename.remove_extension (Filename.basename choice.path) in
-  Filename.concat root (stem ^ ".mid")
-
-let instrument_of_channel channel =
-  { channel = clamp 0 15 channel; bank = 0; preset = 0 }
-
-let ticks_per_unit_of_score (score : score_data) division =
-  let ticks_per_bar =
-    (max 1 division * max 1 score.time_signature_num * 4)
-    / max 1 score.time_signature_den
-  in
-  float_of_int ticks_per_bar /. float_of_int (max 1 score.units_per_bar)
-
-let playback_from_midi score (midi : Synth.midi_file) =
-  let max_tick_events =
-    List.fold_left (fun acc (tick, _) -> max acc tick) 0 midi.events
-  in
-  let max_tick_tempo =
-    List.fold_left (fun acc (tick, _) -> max acc tick) 0 midi.tempo_changes_us_per_quarter
-  in
-  let total_ticks = max 1 (max max_tick_events max_tick_tempo + 1) in
-  let events_by_tick = Array.make total_ticks [] in
-  let tempo_us_by_tick = Array.make total_ticks None in
-  List.iter
-    (fun (tick, ev) ->
-      if tick >= 0 && tick < total_ticks then
-        match ev with
-        | Synth.Note_on (channel, key, velocity) ->
-            let event =
-              if velocity = 0 then Note_off (instrument_of_channel channel, key)
-              else
-                Note_on
-                  ( instrument_of_channel channel,
-                    { start_unit = 0; duration_units = 1; midi = key; volume = float_of_int velocity /. 127.0 } )
-            in
-            events_by_tick.(tick) <- event :: events_by_tick.(tick)
-        | Synth.Note_off (channel, key) ->
-            events_by_tick.(tick) <-
-              Note_off (instrument_of_channel channel, key) :: events_by_tick.(tick)
-        | Synth.Control_change (channel, control, value) ->
-            events_by_tick.(tick) <-
-              Control_cc (channel, control, value) :: events_by_tick.(tick)
-        | Synth.Program_change (_channel, _program) -> ())
-    midi.events;
-  List.iter
-    (fun (tick, tempo_us_per_quarter) ->
-      if tick >= 0 && tick < total_ticks then
-        tempo_us_by_tick.(tick) <- Some (max 1 tempo_us_per_quarter))
-    midi.tempo_changes_us_per_quarter;
-  Midi_ticks
-    {
-      division = max 1 midi.division;
-      events_by_tick;
-      tempo_us_by_tick;
-      total_ticks;
-      ticks_per_unit = ticks_per_unit_of_score score midi.division;
-    }
-
 let score_note_count (score : score_data) =
   Score.note_count score
 
@@ -291,22 +221,6 @@ let load_score (choice : score_choice) =
     Printf.eprintf "failed to load score %s: %s\n%!" choice.label
       (Printexc.to_string exn);
     Score.default
-
-let load_playback (choice : score_choice) =
-  let score = load_score choice in
-  let midi_path = midi_path_of_choice choice in
-  let mode =
-    if Sys.file_exists midi_path then
-      try playback_from_midi score (Synth.import_midi_file midi_path)
-      with exn ->
-        Printf.eprintf
-          "failed to load midi exact timeline %s: %s; fallback to quantized mode\n\
-           %!"
-          midi_path (Printexc.to_string exn);
-        Quantized
-    else Quantized
-  in
-  (score, mode)
 
 let initial_selected_index choices =
   match Sys.argv |> Array.to_list |> List.tl with
@@ -447,7 +361,11 @@ let poll_events source (ui : ui_state) =
         ui.score_scroll_col <- (ratio * max_scroll) / 1000;
         clamp_choice_scroll ui visible_rows)));
   if window_should_close () || is_key_pressed Key.Escape then push Quit;
-  if is_key_pressed Key.Space then push Toggle_play;
+  if is_key_pressed Key.Space then (
+    let now = Unix.gettimeofday () in
+    if now -. ui.last_toggle_at >= 0.18 then (
+      ui.last_toggle_at <- now;
+      push Toggle_play));
   if is_key_pressed Key.R then push Restart;
   let now = Unix.gettimeofday () in
   while now >= source.next_pulse_at do
@@ -561,13 +479,9 @@ let render_process render_request transport output () =
   in
   loop ()
 
-let control_process score mode pulse restart render_request note_events transport source input () =
+let control_process score pulse restart render_request note_events transport source input () =
   let tempo_cursor = ref 0 in
-  let tempo_len =
-    match mode with
-    | Quantized -> Array.length score.tempo_changes
-    | Midi_ticks { tempo_us_by_tick; _ } -> Array.length tempo_us_by_tick
-  in
+  let tempo_len = Array.length score.tempo_changes in
   let set_bpm bpm =
     let bpm = clamp 20 300 bpm in
     let unit_ms = unit_ms_of_score_bpm score bpm in
@@ -578,91 +492,29 @@ let control_process score mode pulse restart render_request note_events transpor
       source.next_pulse_at <- Unix.gettimeofday () +. (float_of_int unit_ms /. 1000.0))
   in
   let apply_tempo_at_unit unit =
-    match mode with
-    | Quantized ->
-        while !tempo_cursor < tempo_len && score.tempo_changes.(!tempo_cursor).start_unit < unit do
-          incr tempo_cursor
-        done;
-        while !tempo_cursor < tempo_len && score.tempo_changes.(!tempo_cursor).start_unit = unit do
-          set_bpm score.tempo_changes.(!tempo_cursor).bpm;
-          incr tempo_cursor
-        done
-    | Midi_ticks _ -> ()
-  in
-  let apply_tempo_at_tick tick =
-    match mode with
-    | Quantized -> ()
-    | Midi_ticks { tempo_us_by_tick; division; _ } ->
-        if tick >= 0 && tick < Array.length tempo_us_by_tick then
-          match tempo_us_by_tick.(tick) with
-          | None -> ()
-          | Some us ->
-              let bpm =
-                int_of_float (60000000.0 /. float_of_int (max 1 us))
-              in
-              let unit_ms = max 1 (int_of_float (Float.round (float_of_int us /. (1000.0 *. float_of_int division)))) in
-              let bpm = clamp 20 300 bpm in
-              transport.bpm <- bpm;
-              transport.unit_ms <- unit_ms;
-              source.unit_ms <- unit_ms;
-              source.next_pulse_at <- Unix.gettimeofday () +. (float_of_int unit_ms /. 1000.0)
-  in
-  let dispatch_tick_events tick =
-    match mode with
-    | Quantized -> ()
-    | Midi_ticks { events_by_tick; _ } ->
-        if tick >= 0 && tick < Array.length events_by_tick then
-          List.iter (fun ev -> emit note_events ev) (List.rev events_by_tick.(tick))
+    while !tempo_cursor < tempo_len && score.tempo_changes.(!tempo_cursor).start_unit < unit do
+      incr tempo_cursor
+    done;
+    while !tempo_cursor < tempo_len && score.tempo_changes.(!tempo_cursor).start_unit = unit do
+      set_bpm score.tempo_changes.(!tempo_cursor).bpm;
+      incr tempo_cursor
+    done
   in
   let reset_tempo () =
     tempo_cursor := 0;
-    (match mode with
-    | Quantized ->
-        set_bpm score.initial_bpm;
-        apply_tempo_at_unit 0
-    | Midi_ticks { tempo_us_by_tick; division; _ } ->
-        let us0 =
-          match tempo_us_by_tick.(0) with
-          | Some us -> us
-          | None -> 60000000 / max 1 score.initial_bpm
-        in
-        let bpm = clamp 20 300 (int_of_float (60000000.0 /. float_of_int (max 1 us0))) in
-        transport.bpm <- bpm;
-        let unit_ms = max 1 (int_of_float (Float.round (float_of_int us0 /. (1000.0 *. float_of_int division)))) in
-        transport.unit_ms <- unit_ms;
-        source.unit_ms <- unit_ms;
-        source.next_pulse_at <- Unix.gettimeofday () +. (float_of_int unit_ms /. 1000.0))
+    set_bpm score.initial_bpm;
+    apply_tempo_at_unit 0
   in
   let advance_one_unit () =
-    match mode with
-    | Quantized ->
-        let next_unit =
-          if transport.current_unit + 1 >= score.total_units then 0
-          else transport.current_unit + 1
-        in
-        transport.current_unit <- next_unit;
-        if next_unit = 0 then reset_tempo () else apply_tempo_at_unit next_unit;
-        next_unit
-    | Midi_ticks { total_ticks; ticks_per_unit; _ } ->
-        let next_tick =
-          if transport.current_tick + 1 >= total_ticks then 0
-          else transport.current_tick + 1
-        in
-        transport.current_tick <- next_tick;
-        if next_tick = 0 then (
-          reset_tempo ();
-          dispatch_tick_events 0)
-        else (
-          apply_tempo_at_tick next_tick;
-          dispatch_tick_events next_tick);
-        let next_unit =
-          clamp 0 (max 0 (score.total_units - 1))
-            (int_of_float
-               (Float.round
-                  (float_of_int next_tick /. max 1.0 ticks_per_unit)))
-        in
-        transport.current_unit <- next_unit;
-        if next_tick = 0 then 0 else next_unit
+    let prev_unit = transport.current_unit in
+    let next_unit =
+      if transport.current_unit + 1 >= score.total_units then 0
+      else transport.current_unit + 1
+    in
+    transport.current_unit <- next_unit;
+    let wrapped = prev_unit >= 0 && next_unit = 0 in
+    if wrapped then reset_tempo () else apply_tempo_at_unit next_unit;
+    (next_unit, wrapped)
   in
   let handle event =
     match event with
@@ -675,7 +527,6 @@ let control_process score mode pulse restart render_request note_events transpor
         true
     | Restart ->
         reset_transport transport source;
-        transport.current_tick <- -1;
         reset_tempo ();
         emit note_events Panic;
         emit restart ();
@@ -688,8 +539,8 @@ let control_process score mode pulse restart render_request note_events transpor
         raise (Reload_soundfont_request idx)
     | Pulse ->
         if transport.playing then (
-          let next_unit = advance_one_unit () in
-          if next_unit = 0 then (
+          let _next_unit, wrapped = advance_one_unit () in
+          if wrapped then (
             emit note_events Panic;
             emit restart ());
           emit pulse ();
@@ -705,7 +556,6 @@ let control_process score mode pulse restart render_request note_events transpor
         loop ())
   in
   pause ();
-  transport.current_tick <- -1;
   reset_tempo ();
   emit render_request ();
   loop ()
@@ -968,7 +818,7 @@ let render_output score height ui synth bridge (frame : frame) =
   apply_audio_commands synth bridge audio_commands;
   draw_frame score height ui frame
 
-let main_program score mode bridge source input output =
+let main_program score bridge source input output =
   let restart = new_signal () in
   let pulse = new_signal () in
   let render_request = new_signal_agg ~initial:false ~combine:(fun _ () -> true) in
@@ -981,32 +831,27 @@ let main_program score mode bridge source input output =
       bpm = score.initial_bpm;
       unit_ms = unit_ms_of_score_bpm score score.initial_bpm;
       current_unit = -1;
-      current_tick = -1;
     }
   in
-  let quantized_threads =
-    match mode with
-    | Quantized ->
-        let control_threads =
-          if Array.length score.controls = 0 then []
-          else [ (fun () -> control_process_timeline restart pulse note_events score.controls ()) ]
-        in
-        control_threads
-        @ Array.to_list
-            (Array.mapi
-               (fun _voice_index spec ->
-                 fun () -> voice_process restart pulse note_events spec ())
-               score.voices)
-    | Midi_ticks _ -> []
+  let control_threads =
+    if Array.length score.controls = 0 then []
+    else [ (fun () -> control_process_timeline restart pulse note_events score.controls ()) ]
+  in
+  let voice_threads =
+    Array.to_list
+      (Array.mapi
+         (fun _voice_index spec ->
+           fun () -> voice_process restart pulse note_events spec ())
+         score.voices)
   in
   parallel
     ([ (fun () ->
-         control_process score mode pulse restart render_request note_events transport source
+         control_process score pulse restart render_request note_events transport source
            input ());
        (fun () -> audio_bridge_process note_events bridge ());
        (fun () -> render_process render_request transport output ());
      ]
-    @ quantized_threads)
+    @ control_threads @ voice_threads)
 
 let () =
   let choices = score_choices () in
@@ -1024,14 +869,15 @@ let () =
       selected_index = initial_selected_index choices;
       selected_soundfont = initial_soundfont_index soundfonts;
       score_scroll_col = 0;
+      last_toggle_at = 0.0;
     }
   in
   let initial_score = score_of_choice ui.choices.(ui.selected_index) in
   let height = max 680 (height_of_score initial_score) in
-  init_window width height "Tempo Advanced Music Score Player";
+  init_window width height "Tempo Music Player";
   set_target_fps 60;
   let rec run_selected () =
-    let score, mode = load_playback ui.choices.(ui.selected_index) in
+    let score = load_score ui.choices.(ui.selected_index) in
     let selected_sf_idx = ui.selected_soundfont in
     ui.selected_soundfont <- selected_sf_idx;
     let soundfont_path = ui.soundfonts.(selected_sf_idx).sf_path in
@@ -1052,7 +898,7 @@ let () =
     let next_action =
       try
         run_interactive ~input ~output:(render_output score height ui synth bridge)
-          (main_program score mode bridge source);
+          (main_program score bridge source);
         Continue
       with
       | Quit_request -> Quit_app

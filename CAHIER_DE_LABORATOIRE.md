@@ -365,6 +365,17 @@
 - validation:
   - `dune build ./applications/advanced/music_score_player/src/main.exe` OK
 
+### Retour à une lecture 100% `tscore`
+
+- objectif du lot: supprimer l'ambiguïté runtime et revenir à la source
+  d'exécution unique demandée (`tscore`) pour le playback
+- réalisation:
+  - retrait complet de la branche `Midi_ticks` dans `main.ml`
+  - suppression du fallback automatique vers les `.mid` homonymes
+  - conservation du pilotage Tempo (pause/restart/boucle/tempo map `tscore`)
+- validation:
+  - `dune build ./applications/advanced/music_score_player/src/main.exe` OK
+
 ### Objectif
 
 Repartir du dernier commit restauré après suppression accidentelle et reconstruire
