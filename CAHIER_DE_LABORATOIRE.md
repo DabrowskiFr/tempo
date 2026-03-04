@@ -385,3 +385,111 @@ reconstruction locale cohérente de la vitrine réactive recherchée.
   - `dune build applications/advanced/game-univ/src/main.exe applications/advanced/game-univ/src/headless_runner.exe`
   - `dune exec ./applications/advanced/game-univ/src/headless_runner.exe`
   - `dune build @install @runtest @doc`
+
+### 2026-03-04 - music_score_player : import MIDI local et polyphonie réelle
+
+- objectif : corriger la vitrine musique pour qu'elle démarre vite avec un
+  fichier MIDI et joue réellement plusieurs notes au lieu d'un seul son
+  initial
+- problèmes observés :
+  - l'import MIDI via le player temps réel de FluidSynth bloquait le démarrage
+    de l'application
+  - après remplacement de l'import, l'application ne jouait qu'une seule note
+    au début, ce qui révélait un modèle de voix encore monophonique
+- refactoring réalisé :
+  - remplacement de l'import MIDI bloquant par un parseur SMF local dans
+    `lib/fluidsynth/tempo_fluidsynth.ml`
+  - ajout d'un SoundFont local de meilleure qualité :
+    `applications/advanced/music_score_player/assets/GeneralUser-GS.sf2`
+  - mise à jour du choix de SoundFont par défaut pour privilégier ce fichier
+  - refactoring de `music_score_player` pour que chaque voix garde une liste de
+    notes actives au lieu d'une seule note courante
+  - arrêt des notes échues par filtrage des notes actives à chaque pulse
+- tentative échouée :
+  - réutiliser directement le player MIDI de FluidSynth comme importeur
+  - raison : la lecture restait couplée au temps réel et gelait l'application
+    au démarrage
+- résultat :
+  - le build de l'application musique repasse
+  - le moteur de lecture supporte maintenant la polyphonie au sein d'une voix
+- validation :
+  - `dune build applications/advanced/music_score_player/src/main.exe`
+
+### 2026-03-04 - music_score_player : robustesse du runtime interactif et du backend FluidSynth
+
+- objectif : stabiliser la lecture de fichiers MIDI réels dans la vitrine
+  musique
+- problèmes observés :
+  - `Emit : multiple emission` lorsque plusieurs pulses étaient injectés dans
+    le même instant
+  - `fluid_synth_noteoff failed` sur certains fichiers importés
+- corrections réalisées :
+  - la source interactive de `music_score_player` ne livre plus qu'un seul
+    `Pulse` par instant ; les pulses en retard sont mis en file
+  - la boucle interactive du runtime n'injecte plus d'entrée hors d'un instant
+    actif
+  - `note_off` et `all_notes_off` sont rendus tolérants aux relâchements
+    redondants côté FluidSynth
+- résultat :
+  - disparition des exceptions liées aux doubles émissions
+  - le backend audio n'échoue plus sur un relâchement logique déjà consommé
+- validation :
+  - `dune build applications/advanced/music_score_player/src/main.exe`
+
+### 2026-03-04 - music_score_player : changement de morceau à chaud
+
+- objectif : pouvoir tester plusieurs fichiers MIDI disponibles dans les assets
+  sans redémarrer l'application
+- refactoring réalisé :
+  - ajout d'une liste de choix construite à partir des `.mid` et `.midi` du
+    dossier `applications/advanced/music_score_player/assets`
+  - ajout d'un sélecteur déroulant dans l'interface graphique
+  - arrêt propre du programme Tempo courant sur demande de changement de
+    morceau, puis relance d'un nouveau programme dans la même fenêtre et le
+    même process
+- choix d'implémentation :
+  - ne pas reconfigurer dynamiquement les processus de voix en place
+  - relancer proprement le programme Tempo avec un nouveau score, ce qui est
+    plus simple et plus robuste tout en restant transparent pour l'utilisateur
+- validation :
+  - `dune build applications/advanced/music_score_player/src/main.exe`
+
+### 2026-03-04 - music_score_player : rendre les mesures plus lisibles
+
+- objectif : faire ressortir plus nettement les mesures dans la partition
+  affichée
+- constat :
+  - les séparations de mesure existaient après l'ajout de la métrique, mais
+    restaient trop discrètes visuellement
+- corrections réalisées :
+  - alternance de fonds de mesure plus contrastés
+  - bandeau supérieur léger par mesure pour renforcer la lecture du découpage
+  - traits de mesure plus lumineux et plus épais
+  - numéros de mesure plus visibles
+  - correction de l'ordre des paramètres affichés dans l'en-tête (`Meter` /
+    `View`)
+- validation :
+  - `dune build applications/advanced/music_score_player/src/main.exe`
+
+### 2026-03-04 - music_score_player : lecture plus fidèle au modèle Tempo
+
+- objectif : faire utiliser à l'application musicale le plus possible le
+  modèle Tempo lui-même, au lieu d'une logique impérative locale pour la durée
+  des notes
+- refactoring réalisé :
+  - remplacement de l'état mutable de notes actives par un signal agrégé
+    d'événements musicaux `note_events`
+  - une note est maintenant incarnée par un petit processus Tempo qui :
+    - attend `start_unit` pulses
+    - émet `Note_on`
+    - attend `duration_units` pulses
+    - émet `Note_off`
+  - un processus audio dédié consomme `note_events` et appelle FluidSynth
+  - le rendu visuel des notes actives est recalculé à partir de `current_unit`
+    et de la partition, plutôt que relu depuis un état partagé
+- intérêt :
+  - la durée des notes est désormais portée directement par les instants Tempo
+  - la lecture illustre explicitement `parallel`, `watch`, `await`, `emit` et
+    les signaux agrégés
+- validation :
+  - `dune build applications/advanced/music_score_player/src/main.exe`

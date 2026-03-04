@@ -15,6 +15,7 @@ type midi_event =
 type midi_file = {
     division : int;
     tempo_us_per_quarter : int;
+    time_signature : (int * int) option;
     events : (int * midi_event) list;
   }
 

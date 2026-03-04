@@ -69,6 +69,26 @@ en priorité sur :
     a un propriétaire explicite ; éviter les mutations croisées et préférer des
     signaux dédiés (`restart`, statut, deltas) pour les transferts entre
     processus
+15. pour les applications musicales, garder FluidSynth comme backend sonore,
+    mais éviter de lui déléguer la timeline ou l'import temps réel si cela
+    bloque l'interface ; préférer un import local de partition puis une
+    orchestration des notes par Tempo
+16. lorsqu'une vitrine musicale doit rejouer un MIDI réel, vérifier
+    explicitement la polyphonie du modèle de voix ; une voix ne doit pas
+    supposer une seule note active si le matériau musical peut contenir des
+    accords ou des recouvrements
+17. pour une application interactive de démonstration, privilégier un
+    rechargement propre du programme Tempo courant plutôt qu'une mutation
+    dynamique de tous les processus en place lorsque l'utilisateur change de
+    scénario ou de morceau
+18. pour une partition affichée à l'écran, ne pas se contenter de lignes de
+    grille uniformes ; rendre les mesures perceptibles avec plusieurs indices
+    visuels combinés (fonds alternés, traits plus forts, numérotation) afin
+    que la structure musicale reste lisible pendant le défilement
+19. pour une application destinée à montrer le coeur de Tempo, préférer une
+    représentation où les durées métier sont incarnées par des processus Tempo
+    et des signaux explicites, plutôt que par un état local mutable qui simule
+    l'avancement du temps
 
 ## Points d'attention
 

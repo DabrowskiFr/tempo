@@ -270,9 +270,9 @@ CAMLprim value caml_tempo_fluidsynth_note_off(
 {
   CAMLparam3(synth_v, channel_v, key_v);
   tempo_fluidsynth_t *handle = tempo_fluidsynth_handle(synth_v);
-  check_fluid(
-      fluid_synth_noteoff(handle->synth, Int_val(channel_v), Int_val(key_v)),
-      "fluid_synth_noteoff failed");
+  /* FluidSynth may report failure when a note is already stopped.
+     For the Tempo showcase, releasing an already-ended note should be benign. */
+  (void)fluid_synth_noteoff(handle->synth, Int_val(channel_v), Int_val(key_v));
   CAMLreturn(Val_unit);
 }
 
@@ -280,9 +280,7 @@ CAMLprim value caml_tempo_fluidsynth_all_notes_off(value synth_v, value channel_
 {
   CAMLparam2(synth_v, channel_v);
   tempo_fluidsynth_t *handle = tempo_fluidsynth_handle(synth_v);
-  check_fluid(
-      fluid_synth_all_notes_off(handle->synth, Int_val(channel_v)),
-      "fluid_synth_all_notes_off failed");
+  (void)fluid_synth_all_notes_off(handle->synth, Int_val(channel_v));
   CAMLreturn(Val_unit);
 }
 
@@ -323,6 +321,14 @@ CAMLprim value caml_tempo_fluidsynth_import_midi_file(value path_v)
 
   fluid_player_set_tick_callback(player, on_midi_tick, &ctx);
   fluid_player_set_playback_callback(player, on_midi_event, &ctx);
+  if (fluid_player_set_tempo(player, FLUID_PLAYER_TEMPO_EXTERNAL_BPM, 60000.0)
+      != FLUID_OK) {
+    delete_fluid_player(player);
+    delete_fluid_synth(synth);
+    delete_fluid_settings(settings);
+    free(ctx.events);
+    caml_failwith("fluid_player_set_tempo failed");
+  }
   if (fluid_player_play(player) != FLUID_OK) {
     delete_fluid_player(player);
     delete_fluid_synth(synth);

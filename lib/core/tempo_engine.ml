@@ -340,16 +340,9 @@ let rec run_interactive_loop ~output ~(input : 'input interactive_source) ~wakeu
   else if scheduled then run_interactive_loop ~output ~input ~wakeup st input_signal output_signal
   else begin
     let _ = run_wakeup_pollers wakeup in
-    if Queue.is_empty st.current then begin
-      input.wait ();
-      let _ = run_wakeup_pollers wakeup in
-      before_step ()
-    end;
-    if Queue.is_empty st.current then begin
-      wait_for_wakeup wakeup;
-      let _ = run_wakeup_pollers wakeup in
-      before_step ()
-    end;
+    if Queue.is_empty st.current then input.wait ();
+    if Queue.is_empty st.current then wait_for_wakeup wakeup;
+    let _ = run_wakeup_pollers wakeup in
     run_interactive_loop ~output ~input ~wakeup st input_signal output_signal
   end
 
