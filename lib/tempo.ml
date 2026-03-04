@@ -980,6 +980,15 @@ let execute_timeline ?instants ~inputs main :
         ('input, 'output) timeline_instant))
     !timeline_rev
 
+module Observe = struct
+  type nonrec ('input, 'output) timeline_instant = ('input, 'output) timeline_instant
+  type nonrec inspector_snapshot = inspector_snapshot
+
+  let execute_trace = execute_trace
+  let execute_timeline = execute_timeline
+  let execute_inspect = execute_inspect
+end
+
 (* helper functions *)
 
 let new_signal : unit -> 'a signal =
@@ -1135,115 +1144,24 @@ module Tick_tags = struct
   let clear t = t.marks_rev <- []
 end
 
-type packed_state = Pack : {
-  id : int;
-  dump : unit -> string;
-  restore : string -> unit;
-} -> packed_state
-
-let state_id_counter = ref 0
-let state_registry : packed_state list ref = ref []
-
-type 'a state = {
-  mutable value : 'a;
-  updates : ('a, 'a option) agg_signal;
-}
-
-let new_state initial =
-  let id = !state_id_counter in
-  incr state_id_counter;
-  let st =
-    {
-      value = initial;
-      updates = new_signal_agg ~initial:None ~combine:(fun _ v -> Some v);
-    }
-  in
-  state_registry :=
-    Pack
-      {
-        id;
-        dump = (fun () -> Marshal.to_string st.value []);
-        restore =
-          (fun blob ->
-            let v = Marshal.from_string blob 0 in
-            st.value <- v);
-      }
-    :: !state_registry;
-  st
-
-let get_state st = st.value
-
-let set_state st v =
-  st.value <- v;
-  emit st.updates v
-
-let modify_state st f =
-  let next = f st.value in
-  set_state st next
-
-let rec await_state st =
-  match await st.updates with
-  | Some v -> v
-  | None -> await_state st
-
-module State = struct
-  type 'a t = 'a state
-
-  let create = new_state
-  let get = get_state
-  let set = set_state
-  let modify = modify_state
-  let await = await_state
-
-  let update_and_get st f =
-    modify st f;
-    get st
-end
-
-module State_cell = State
-
 module Runtime_snapshot = struct
   type t = {
     frame : int;
-    states : (int * string) list;
     tags : string list;
   }
 
   let capture ?tags ~frame () =
-    let states = List.rev_map (fun (Pack p) -> (p.id, p.dump ())) !state_registry in
     let tags =
       match tags with
       | None -> []
       | Some t -> Tick_tags.all t
     in
-    { frame; states; tags }
+    { frame; tags }
 
-  let restore snapshot =
-    List.iter
-      (fun (id, blob) ->
-        match List.find_opt (fun (Pack p) -> p.id = id) !state_registry with
-        | None -> ()
-        | Some (Pack p) -> p.restore blob)
-      snapshot.states
+  let restore _snapshot = ()
 
   let frame s = s.frame
   let tags s = s.tags
-end
-
-module Dynamic = struct
-  type handle = {
-    kill : kill;
-    thread : thread;
-  }
-
-  let spawn proc =
-    let k = new_kill () in
-    let t = fork (fun () -> with_kill k proc) in
-    { kill = k; thread = t }
-
-  let stop h = abort_kill h.kill
-  let join h = join h.thread
-  let spawn_many ps = List.map spawn ps
 end
 
 module Game = struct
@@ -1336,48 +1254,25 @@ module Reactive = struct
     in
     loop ()
 
-  let hold_last initial s =
-    let st = new_state initial in
-    ignore
-      (fork (fun () ->
-           let rec loop () =
-             let v = await s in
-             set_state st v;
-             loop ()
-           in
-           loop ()));
-    st
-
-  let sample_on st trigger =
-    let out = new_signal () in
-    ignore
-      (fork (fun () ->
-           let rec loop () =
-             let trig = await trigger in
-             emit out (get_state st, trig);
-             loop ()
-           in
-           loop ()));
-    out
-
-  let toggle_on ?(initial = false) trigger =
-    let st = new_state initial in
-    ignore
-      (fork (fun () ->
-           let rec loop () =
-             let _ = await trigger in
-             modify_state st not;
-             loop ()
-           in
-           loop ()));
-    st
-
   let pulse_n n =
     let out = new_signal () in
     ignore (fork (fun () -> Game.every_n n (fun () -> emit out ())));
     out
 
   let supervise_until stop procs = watch stop (fun () -> parallel procs)
+end
+
+module Constructs = struct
+  let present_then_else = present_then_else
+  let after_n = Game.after_n
+  let every_n = Game.every_n
+  let timeout = Game.timeout
+  let cooldown = Game.cooldown
+  let rising_edge = Reactive.rising_edge
+  let falling_edge = Reactive.falling_edge
+  let edge_by = Reactive.edge_by
+  let pulse_n = Reactive.pulse_n
+  let supervise_until = Reactive.supervise_until
 end
 
 module App = struct
@@ -1586,13 +1481,6 @@ module Input_map = struct
   let resolve t raw = match Hashtbl.find_opt t.table raw with Some v -> Some v | None -> t.default
 end
 
-module Event_bus = struct
-  type 'a channel = ('a, 'a list) agg_signal
-  let channel () = new_signal_agg ~initial:[] ~combine:(fun acc v -> v :: acc)
-  let publish ch v = emit ch v
-  let await_batch ch = List.rev (await ch)
-end
-
 module Fixed_step = struct
   type accumulator = { leftover : float }
   let empty = { leftover = 0.0 }
@@ -1626,7 +1514,7 @@ module Netcode = struct
   }
 
   let snapshot ~frame state = { frame; state }
-  let rollback st snap = set_state st snap.state
+  let rollback _snap = ()
 end
 
 module Profiler = struct
@@ -1653,36 +1541,37 @@ end
 
 module Entity_set = struct
   type ('id, 'entity) t = {
-    items : ('id, ('entity * Dynamic.handle)) Hashtbl.t;
+    items : ('id, ('entity * kill * thread)) Hashtbl.t;
   }
 
   let create () = { items = Hashtbl.create 16 }
 
   let spawn t ~id ~entity ~process =
     (match Hashtbl.find_opt t.items id with
-    | Some (_, h) ->
-        Dynamic.stop h;
-        Dynamic.join h
+    | Some (_, k, thread) ->
+        abort_kill k;
+        join thread
     | None -> ());
-    let h = Dynamic.spawn (fun () -> process entity) in
-    Hashtbl.replace t.items id (entity, h)
+    let k = new_kill () in
+    let thread = fork (fun () -> with_kill k (fun () -> process entity)) in
+    Hashtbl.replace t.items id (entity, k, thread)
 
   let despawn t id =
     match Hashtbl.find_opt t.items id with
     | None -> ()
-    | Some (_, h) ->
-        Dynamic.stop h;
-        Dynamic.join h;
+    | Some (_, k, thread) ->
+        abort_kill k;
+        join thread;
         Hashtbl.remove t.items id
 
-  let broadcast t f = Hashtbl.iter (fun _ (entity, _) -> f entity) t.items
+  let broadcast t f = Hashtbl.iter (fun _ (entity, _, _) -> f entity) t.items
   let ids t = Hashtbl.fold (fun id _ acc -> id :: acc) t.items []
 
   let despawn_all t =
     Hashtbl.iter
-      (fun _ (_, h) ->
-        Dynamic.stop h;
-        Dynamic.join h)
+      (fun _ (_, k, thread) ->
+        abort_kill k;
+        join thread)
       t.items;
     Hashtbl.reset t.items
 end
@@ -1751,6 +1640,12 @@ let require_api_level n =
     invalid_arg
       (Printf.sprintf "Tempo API level %d required, current level is %d" n api_level)
 
+module Meta = struct
+  let version_string = version_string
+  let api_level = api_level
+  let require_api_level = require_api_level
+end
+
 module Dev_hud = struct
   let to_lines (snap : inspector_snapshot) =
     [
@@ -1775,16 +1670,13 @@ module Extensions = struct
   module Temporal = struct
     module Game = Game
     module Reactive = Reactive
+    module Constructs = Constructs
     module Fixed_step = Fixed_step
     module Rng = Rng
     module Netcode = Netcode
   end
 
   module Runtime = struct
-    module Dynamic = Dynamic
-    module State_cell = State_cell
-    module State = State
-    module Event_bus = Event_bus
     module Profiler = Profiler
     module Entity_set = Entity_set
     module Timeline_json = Timeline_json
@@ -1794,27 +1686,26 @@ module Extensions = struct
     module Dev_hud = Dev_hud
   end
 
-  module Dynamic = Dynamic
   module Game = Game
   module Reactive = Reactive
+  module Constructs = Constructs
   module App = App
   module Loop = Loop
   module Scene = Scene
   module Resource = Resource
   module Input_map = Input_map
-  module Event_bus = Event_bus
   module Fixed_step = Fixed_step
   module Rng = Rng
   module Netcode = Netcode
   module Profiler = Profiler
   module Entity_set = Entity_set
-  module State = State
-  module State_cell = State_cell
   module Timeline_json = Timeline_json
   module Tick_tags = Tick_tags
   module Runtime_snapshot = Runtime_snapshot
   module Error_bus = Error_bus
   module Dev_hud = Dev_hud
+  module Observe = Observe
+  module Meta = Meta
 end
 
 module Layer2 = Extensions

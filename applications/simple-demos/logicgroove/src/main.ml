@@ -124,7 +124,7 @@ let main input output =
         suggestions = [];
       }
   in
-  let repairs = Event_bus.channel () in
+  let repairs = new_signal_agg ~initial:[] ~combine:(fun acc evt -> evt :: acc) in
 
   let apply_suggestion (sug : suggestion) =
     State.modify state (fun s ->
@@ -158,13 +158,13 @@ let main input output =
           let verdict = if ok then "?" else "False" in
           let violations = if ok then s.violations else s.violations + 1 in
           State.set state { s with step; verdict; violations; suggestions };
-          if not r1_ok then Event_bus.publish repairs "NeedSnare";
-          if not r2_ok then Event_bus.publish repairs "NoDoubleSnare"))
+          if not r1_ok then emit repairs "NeedSnare";
+          if not r2_ok then emit repairs "NoDoubleSnare"))
   in
 
   let repair_engine () =
     let rec loop () =
-      let _events = Event_bus.await_batch repairs in
+      let _events = List.rev (await repairs) in
       let s = State.get state in
       match (s.mode, s.suggestions) with
       | Strict, sug :: _ -> apply_suggestion sug

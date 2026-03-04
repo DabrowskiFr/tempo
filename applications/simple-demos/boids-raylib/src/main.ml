@@ -146,15 +146,15 @@ let render (frame : frame) =
       draw_circle_lines (int_of_float b.pos.x) (int_of_float b.pos.y) 5.0 (Color.create 14 14 14 180))
     frame.boids;
   let panel =
-    Tempo_game.Hud.panel
-      ~rect:{ Tempo_game.Ui.x = 8.0; y = 8.0; w = 560.0; h = 54.0 }
+    Tempo_game_raylib.Hud.panel
+      ~rect:{ Tempo_game_raylib.Ui.x = 8.0; y = 8.0; w = 560.0; h = 54.0 }
       ~title:""
   in
   Tempo_game_raylib.Hud.draw_panel panel;
   Tempo_game_raylib.Hud.draw_badge ~x:20 ~y:20
-    (Tempo_game.Hud.badge ~label:"Boids" ~value:(string_of_int (List.length frame.boids)));
+    (Tempo_game_raylib.Hud.badge ~label:"Boids" ~value:(string_of_int (List.length frame.boids)));
   Tempo_game_raylib.Hud.draw_badge ~x:170 ~y:20
-    (Tempo_game.Hud.badge
+    (Tempo_game_raylib.Hud.badge
        ~label:"Etat"
        ~value:(if frame.paused then "PAUSED" else "RUNNING"));
   draw_text "SPACE pause/resume | R reset | ESC quit" 330 24 16 (Color.create 194 221 241 255);

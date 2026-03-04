@@ -3,9 +3,9 @@ open Tempo
 let () =
   let p = Profiler.create () in
   Profiler.measure p ~name:"100k_inc" (fun () ->
-      let st = State.create 0 in
+      let st = ref 0 in
       for _ = 1 to 100_000 do
-        State.modify st (fun x -> x + 1)
+        incr st
       done);
   List.iter
     (fun s ->

@@ -785,7 +785,7 @@ let draw_model m =
   let comp_pos = [| (170, 220); (410, 150); (650, 220); (410, 360); (890, 220); (890, 360) |] in
   begin_drawing ();
   clear_background (Color.create 14 24 38 255);
-  let panel = Tempo_game.Hud.panel ~rect:{ Tempo_game.Ui.x = 14.0; y = 10.0; w = 1092.0; h = 124.0 } ~title:"" in
+  let panel = Tempo_game_raylib.Hud.panel ~rect:{ Tempo_game_raylib.Ui.x = 14.0; y = 10.0; w = 1092.0; h = 124.0 } ~title:"" in
   Tempo_game_raylib.Hud.draw_panel panel;
   draw_text "Reactive Reconfiguration Engine V6 (Declarative Concerto-style)" 22 18 24 (Color.create 220 238 252 255);
   draw_text
@@ -998,11 +998,13 @@ let read_ui_input () =
 
 let run_reactive_loop init =
   let stop = new_signal () in
-  let cmd_bus : msg Event_bus.channel = Event_bus.channel () in
+  let cmd_bus : (msg, msg list) agg_signal =
+    new_signal_agg ~initial:[] ~combine:(fun acc msg -> msg :: acc)
+  in
   let model_updates : model signal = new_signal () in
   let mode_scene =
     Scene.create
-      ~on_enter:(fun m -> Event_bus.publish cmd_bus (Set_mode m))
+      ~on_enter:(fun m -> emit cmd_bus (Set_mode m))
       ~on_exit:(fun _ -> ())
       ()
   in
@@ -1010,17 +1012,17 @@ let run_reactive_loop init =
     let i = await input_sig in
     if i.quit then emit stop ()
     else (
-      if i.t then Event_bus.publish cmd_bus Queue_next_template;
-      if i.r then Event_bus.publish cmd_bus Reload_specs;
-      if i.p then Event_bus.publish cmd_bus Toggle_partition;
-      if i.l then Event_bus.publish cmd_bus Loss_up;
-      if i.k then Event_bus.publish cmd_bus Loss_down;
-      if i.y then Event_bus.publish cmd_bus Next_policy;
-      if i.u then Event_bus.publish cmd_bus Next_scenario;
+      if i.t then emit cmd_bus Queue_next_template;
+      if i.r then emit cmd_bus Reload_specs;
+      if i.p then emit cmd_bus Toggle_partition;
+      if i.l then emit cmd_bus Loss_up;
+      if i.k then emit cmd_bus Loss_down;
+      if i.y then emit cmd_bus Next_policy;
+      if i.u then emit cmd_bus Next_scenario;
       input_proc input_sig)
   in
   let tick_proc () =
-    Game.every_n 1 (fun () -> Event_bus.publish cmd_bus Tick)
+    Game.every_n 1 (fun () -> emit cmd_bus Tick)
   in
   let rec monitor_proc current_mode =
     let m = await model_updates in
@@ -1033,7 +1035,7 @@ let run_reactive_loop init =
     monitor_proc next_mode
   in
   let rec model_proc output_sig m =
-    let cmds = Event_bus.await_batch cmd_bus in
+    let cmds = List.rev (await cmd_bus) in
     let m' = List.fold_left (fun acc cmd -> fst (update acc cmd)) m cmds in
     emit output_sig m';
     emit model_updates m';
@@ -1047,7 +1049,7 @@ let run_reactive_loop init =
               parallel
                 [
                   (fun () ->
-                    Event_bus.publish cmd_bus Boot;
+                    emit cmd_bus Boot;
                     model_proc output_sig init);
                   (fun () -> tick_proc ());
                   (fun () -> input_proc input_sig);

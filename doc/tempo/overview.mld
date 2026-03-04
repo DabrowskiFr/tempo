@@ -11,7 +11,6 @@ The intended reading order is:
 
 Primary companion packages:
 - `tempo-app` for lightweight application structure
-- `tempo-async` for mailbox-style async ingress
 - `tempo-frp` for FRP/SF combinators
 - `tempo-jobs` for external jobs running on domains
 

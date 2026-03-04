@@ -3,11 +3,10 @@ open Tempo_frp
 
 let fail msg = failwith msg
 
-let test_map_filter_fold () =
+let test_map_filter () =
   let src = new_signal () in
   let mapped = Frp.map (fun x -> x + 1) src in
   let even = Frp.filter (fun x -> x mod 2 = 0) mapped in
-  let sum = Frp.fold ~initial:0 ( + ) even in
   let producer () =
     emit src 0;
     pause ();
@@ -21,9 +20,7 @@ let test_map_filter_fold () =
     let a = await even in
     if a <> 2 then fail "map/filter first mismatch";
     let b = await even in
-    if b <> 4 then fail "map/filter second mismatch";
-    pause ();
-    if State.get sum <> 6 then fail "fold mismatch"
+    if b <> 4 then fail "map/filter second mismatch"
   in
   parallel [ producer; consumer ]
 
@@ -51,7 +48,7 @@ let test_once_edge () =
   let b = new_signal () in
   let edges = Frp.edge b in
   let first = Frp.once edges in
-  let count = State.create 0 in
+  let seen = new_signal () in
   let producer () =
     emit b false;
     pause ();
@@ -65,20 +62,27 @@ let test_once_edge () =
   in
   let consumer () =
     let _ = await first in
-    State.modify count (fun x -> x + 1);
-    Game.after_n 4 (fun () -> if State.get count <> 1 then fail "once should emit once")
+    emit seen ();
+    Game.after_n 4 (fun () ->
+        when_ seen (fun () -> ());
+        let rec wait_second () =
+          when_ seen (fun () -> fail "once should emit once");
+          pause ();
+          wait_second ()
+        in
+        wait_second ())
   in
   parallel [ producer; consumer ]
 
 let test_switch_once () =
   let trigger = new_signal () in
-  let st = State.create 0 in
+  let ticks = new_signal () in
   let switcher () =
     Frp.switch_once trigger (fun v () ->
-        State.modify st (fun x -> x + v);
+        emit ticks v;
         let rec loop () =
           pause ();
-          State.modify st (fun x -> x + 1);
+          emit ticks 1;
           loop ()
         in
         loop ())
@@ -90,15 +94,22 @@ let test_switch_once () =
     emit trigger 9
   in
   let checker () =
-    Game.after_n 6 (fun () ->
-        let v = State.get st in
-        if v < 8 || v > 12 then fail "switch_once range mismatch")
+    let total = ref 0 in
+    let rec collect n =
+      if n <= 0 then (
+        if !total < 8 || !total > 12 then fail "switch_once range mismatch")
+      else
+        let v = await ticks in
+        total := !total + v;
+        collect (n - 1)
+    in
+    collect 4
   in
   parallel [ switcher; producer; checker ]
 
 let () =
   execute ~instants:40 (fun _ _ ->
-      test_map_filter_fold ();
+      test_map_filter ();
       test_throttle ();
       test_once_edge ();
       test_switch_once ())

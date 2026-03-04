@@ -26,7 +26,7 @@ let cols = 44
 let rows = 30
 let width = cols * cell
 let height = rows * cell
-let restart_rect = { Tempo_game.Ui.x = float_of_int (width - 150); y = 14.0; w = 126.0; h = 34.0 }
+let restart_rect = { Tempo_game_raylib.Ui.x = float_of_int (width - 150); y = 14.0; w = 126.0; h = 34.0 }
 let last_score = ref 0
 let last_alive = ref true
 
@@ -100,7 +100,7 @@ let input () =
   let click_restart =
     if is_mouse_button_pressed MouseButton.Left then
       let i = Tempo_game_raylib.Ui.interaction_from_mouse () in
-      Tempo_game.Ui.contains restart_rect i.pointer
+      Tempo_game_raylib.Ui.contains restart_rect i.pointer
     else false
   in
   if is_key_pressed Key.R then Some Restart
@@ -115,28 +115,28 @@ let input () =
 let draw_model (m : model) =
   if m.score > !last_score then
     Tempo_game_raylib.Audio.play_cue
-      (Tempo_game.Audio.cue ~freq_hz:740.0 ~duration_s:0.08 ~volume:0.3);
+      (Tempo_game_raylib.Audio.cue ~freq_hz:740.0 ~duration_s:0.08 ~volume:0.3);
   if !last_alive && not m.alive then
     Tempo_game_raylib.Audio.play_cue
-      (Tempo_game.Audio.cue ~freq_hz:190.0 ~duration_s:0.2 ~volume:0.35);
+      (Tempo_game_raylib.Audio.cue ~freq_hz:190.0 ~duration_s:0.2 ~volume:0.35);
   last_score := m.score;
   last_alive := m.alive;
   begin_drawing ();
   clear_background (Color.create 18 22 24 255);
   let panel =
-    Tempo_game.Hud.panel
-      ~rect:{ Tempo_game.Ui.x = 8.0; y = 6.0; w = float_of_int (width - 16); h = 56.0 }
+    Tempo_game_raylib.Hud.panel
+      ~rect:{ Tempo_game_raylib.Ui.x = 8.0; y = 6.0; w = float_of_int (width - 16); h = 56.0 }
       ~title:""
   in
   Tempo_game_raylib.Hud.draw_panel panel;
   Tempo_game_raylib.Hud.draw_badge ~x:20 ~y:16
-    (Tempo_game.Hud.badge ~label:"Score" ~value:(string_of_int m.score));
+    (Tempo_game_raylib.Hud.badge ~label:"Score" ~value:(string_of_int m.score));
   Tempo_game_raylib.Hud.draw_badge ~x:170 ~y:16
-    (Tempo_game.Hud.badge
+    (Tempo_game_raylib.Hud.badge
        ~label:"Etat"
        ~value:(if m.paused then "PAUSE" else if m.alive then "RUNNING" else "GAME OVER"));
   draw_text "Arrows move | P/SPACE pause | ESC quit" 20 38 16 (Color.create 194 221 241 255);
-  let restart_btn = Tempo_game.Ui.button ~id:"restart" restart_rect ~label:"Restart (R)" () in
+  let restart_btn = Tempo_game_raylib.Ui.button ~id:"restart" restart_rect ~label:"Restart (R)" () in
   Tempo_game_raylib.Ui.draw_button ~active:true restart_btn;
   List.iter
     (fun (x, y) ->

@@ -1,6 +1,6 @@
 open Tempo
 open Raylib
-open Tempo_game
+open Tempo_game_raylib
 
 (* -------------------------------------------------------------------------- *)
 (* Part 1: Domain logic (model, editing, view data)                           *)

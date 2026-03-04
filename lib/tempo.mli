@@ -365,60 +365,6 @@ module Low_level : sig
   val peek : 'a signal -> 'a option
 end
 
-type 'a state
-
-module State : sig
-  type 'a t = 'a state
-
-  (** Minimal state cell example:
-      {[
-        let score = State.create 0 in
-        State.modify score (fun s -> s + 10);
-        let now = State.get score in
-        Format.printf "score=%d@." now
-      ]} *)
-  val create : 'a -> 'a t
-  val get : 'a t -> 'a
-  val set : 'a t -> 'a -> unit
-  val modify : 'a t -> ('a -> 'a) -> unit
-  val await : 'a t -> 'a
-  val update_and_get : 'a t -> ('a -> 'a) -> 'a
-end
-
-module State_cell : sig
-  type 'a t = 'a state
-
-  val create : 'a -> 'a t
-  val get : 'a t -> 'a
-  val set : 'a t -> 'a -> unit
-  val modify : 'a t -> ('a -> 'a) -> unit
-  val await : 'a t -> 'a
-  val update_and_get : 'a t -> ('a -> 'a) -> 'a
-end
-
-module Dynamic : sig
-  type handle
-
-  (** [spawn p] starts [p] as a managed process.
-      Example:
-      {[
-        let h = Dynamic.spawn (fun () -> while true do pause () done) in
-        (* ... later ... *)
-        Dynamic.stop h;
-        Dynamic.join h
-      ]} *)
-  val spawn : (unit -> unit) -> handle
-
-  (** [stop h] requests termination of [h]. *)
-  val stop : handle -> unit
-
-  (** [join h] waits for process completion. *)
-  val join : handle -> unit
-
-  (** [spawn_many ps] starts all processes and returns their handles. *)
-  val spawn_many : (unit -> unit) list -> handle list
-end
-
 module Game : sig
   (** [after_n n body] executes [body] after [n] logical instants. *)
   val after_n : int -> (unit -> unit) -> unit
@@ -454,18 +400,6 @@ module Reactive : sig
       two consecutive values read from [input]. *)
   val edge_by : ('a -> 'a -> bool) -> 'a signal -> unit signal -> unit
 
-  (** [hold_last initial s] stores the latest value seen on [s] in a state cell,
-      initialized with [initial]. *)
-  val hold_last : 'a -> 'a signal -> 'a state
-
-  (** [sample_on st trigger] emits [(current_state, trigger_value)] whenever
-      [trigger] occurs. *)
-  val sample_on : 'a state -> 'b signal -> ('a * 'b) signal
-
-  (** [toggle_on ?initial trigger] returns a boolean state that toggles on each
-      occurrence of [trigger]. *)
-  val toggle_on : ?initial:bool -> unit signal -> bool state
-
   (** [pulse_n n] creates an event signal that emits [()] every [n] logical
       instants.
       Example:
@@ -480,6 +414,25 @@ module Reactive : sig
 
   (** [supervise_until stop procs] runs [procs] in synchronous parallel and
       aborts all of them when [stop] becomes present. *)
+  val supervise_until :
+    ('emit, 'agg, 'mode) signal_core -> (unit -> unit) list -> unit
+end
+
+module Constructs : sig
+  val present_then_else :
+    ('emit, 'agg, 'mode) signal_core ->
+    (unit -> unit) ->
+    (unit -> unit) ->
+    unit
+  val after_n : int -> (unit -> unit) -> unit
+  val every_n : int -> (unit -> unit) -> unit
+  val timeout : int -> on_timeout:(unit -> unit) -> (unit -> unit) -> unit
+  val cooldown :
+    int -> ('emit, 'agg, 'mode) signal_core -> ('agg -> unit) -> unit
+  val rising_edge : ('a -> bool) -> 'a signal -> unit signal -> unit
+  val falling_edge : ('a -> bool) -> 'a signal -> unit signal -> unit
+  val edge_by : ('a -> 'a -> bool) -> 'a signal -> unit signal -> unit
+  val pulse_n : int -> unit signal
   val supervise_until :
     ('emit, 'agg, 'mode) signal_core -> (unit -> unit) list -> unit
 end
@@ -620,27 +573,6 @@ module Input_map : sig
   val resolve : ('raw, 'action) t -> 'raw -> 'action option
 end
 
-module Event_bus : sig
-  type 'a channel = ('a, 'a list) agg_signal
-
-  (** Batch event collection per logical instant.
-      {[
-        let bus = Event_bus.channel () in
-        parallel
-          [
-            (fun () -> emit frame_done ());
-            (fun () -> Event_bus.publish bus `Move_left);
-            (fun () -> Event_bus.publish bus `Jump);
-          ];
-        let intents = Event_bus.await_batch bus in
-        (* intents = [`Move_left; `Jump] at next instant *)
-        ignore intents
-      ]} *)
-  val channel : unit -> 'a channel
-  val publish : 'a channel -> 'a -> unit
-  val await_batch : 'a channel -> 'a list
-end
-
 module Fixed_step : sig
   type accumulator = { leftover : float }
 
@@ -666,7 +598,7 @@ module Netcode : sig
   }
 
   val snapshot : frame:int -> 's -> 's snapshot
-  val rollback : 's state -> 's snapshot -> unit
+  val rollback : 's snapshot -> unit
 end
 
 module Profiler : sig
@@ -697,6 +629,31 @@ val execute_inspect :
   on_instant:(inspector_snapshot -> unit) ->
   ('input signal -> 'output signal -> unit) ->
   unit
+
+module Observe : sig
+  type nonrec ('input, 'output) timeline_instant = ('input, 'output) timeline_instant
+  type nonrec inspector_snapshot = inspector_snapshot
+
+  val execute_trace :
+    ?instants:int ->
+    inputs:'input option list ->
+    ('input signal -> 'output signal -> unit) ->
+    'output list
+
+  val execute_timeline :
+    ?instants:int ->
+    inputs:'input option list ->
+    ('input signal -> 'output signal -> unit) ->
+    ('input, 'output) timeline_instant list
+
+  val execute_inspect :
+    ?instants:int ->
+    ?input:(unit -> 'input option) ->
+    ?output:('output -> unit) ->
+    on_instant:(inspector_snapshot -> unit) ->
+    ('input signal -> 'output signal -> unit) ->
+    unit
+end
 
 module Entity_set : sig
   type ('id, 'entity) t
@@ -778,6 +735,12 @@ val version_string : string
 val api_level : int
 val require_api_level : int -> unit
 
+module Meta : sig
+  val version_string : string
+  val api_level : int
+  val require_api_level : int -> unit
+end
+
 module Dev_hud : sig
   val to_lines : inspector_snapshot -> string list
   val to_string : inspector_snapshot -> string
@@ -798,16 +761,13 @@ module Extensions : sig
   module Temporal : sig
     module Game = Game
     module Reactive = Reactive
+    module Constructs = Constructs
     module Fixed_step = Fixed_step
     module Rng = Rng
     module Netcode = Netcode
   end
 
   module Runtime : sig
-    module Dynamic = Dynamic
-    module State_cell = State_cell
-    module State = State
-    module Event_bus = Event_bus
     module Profiler = Profiler
     module Entity_set = Entity_set
     module Timeline_json = Timeline_json
@@ -817,27 +777,26 @@ module Extensions : sig
     module Dev_hud = Dev_hud
   end
 
-  module Dynamic = Dynamic
   module Game = Game
   module Reactive = Reactive
+  module Constructs = Constructs
   module App = App
   module Loop = Loop
   module Scene = Scene
   module Resource = Resource
   module Input_map = Input_map
-  module Event_bus = Event_bus
   module Fixed_step = Fixed_step
   module Rng = Rng
   module Netcode = Netcode
   module Profiler = Profiler
   module Entity_set = Entity_set
-  module State = State
-  module State_cell = State_cell
   module Timeline_json = Timeline_json
   module Tick_tags = Tick_tags
   module Runtime_snapshot = Runtime_snapshot
   module Error_bus = Error_bus
   module Dev_hud = Dev_hud
+  module Observe = Observe
+  module Meta = Meta
 end
 
 (** Backward-compatible alias of {!module:Extensions}. *)

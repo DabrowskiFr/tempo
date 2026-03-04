@@ -20,11 +20,7 @@ Categories:
   simple-demos:
     snake-raylib
     boids-raylib
-    ca-continuous-raylib
-    lenia-raylib
-    solar-system-raylib
-    logicgroove
-    temporalsim
+    score-player-raylib
 EOT
   exit 0
 fi
@@ -42,7 +38,7 @@ case "$APP" in
   tempo-core-studio)
     TARGET="$ROOT_DIR/advanced/tempo-core-studio/run"
     ;;
-  snake-raylib|boids-raylib|ca-continuous-raylib|lenia-raylib|solar-system-raylib|logicgroove|temporalsim)
+  snake-raylib|boids-raylib|score-player-raylib)
     TARGET="$ROOT_DIR/simple-demos/$APP/run"
     ;;
   *)

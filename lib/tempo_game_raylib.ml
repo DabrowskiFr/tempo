@@ -2,8 +2,176 @@ open Raylib
 
 let to_int f = int_of_float f
 
-let rect_contains (r : Tempo_game.Ui.rect) (p : Tempo_game.Ui.pointer) =
-  p.x >= r.x && p.x <= r.x +. r.w && p.y >= r.y && p.y <= r.y +. r.h
+module Ui_model = struct
+  type rect = { x : float; y : float; w : float; h : float }
+  type pointer = { x : float; y : float }
+
+  type interaction = {
+    pointer : pointer;
+    down : bool;
+    pressed : bool;
+  }
+
+  type button = {
+    id : string;
+    rect : rect;
+    label : string;
+    enabled : bool;
+  }
+
+  let button ~id rect ~label ?(enabled = true) () = { id; rect; label; enabled }
+
+  let contains (r : rect) (p : pointer) =
+    p.x >= r.x && p.x <= r.x +. r.w && p.y >= r.y && p.y <= r.y +. r.h
+
+  let button_pressed i b = b.enabled && i.pressed && contains b.rect i.pointer
+
+  type int_stepper = {
+    id : string;
+    dec_rect : rect;
+    inc_rect : rect;
+    value : int;
+    min_value : int;
+    max_value : int;
+    step : int;
+  }
+
+  let stepper_int ~id rect ~value ~min_value ~max_value ~step =
+    let half = rect.w /. 2.0 in
+    {
+      id;
+      dec_rect = { x = rect.x; y = rect.y; w = half; h = rect.h };
+      inc_rect = { x = rect.x +. half; y = rect.y; w = half; h = rect.h };
+      value;
+      min_value;
+      max_value;
+      step;
+    }
+
+  let stepper_delta i s =
+    if i.pressed && contains s.dec_rect i.pointer then -s.step
+    else if i.pressed && contains s.inc_rect i.pointer then s.step
+    else 0
+
+  type slider = {
+    id : string;
+    rect : rect;
+    t : float;
+  }
+
+  let slider_v ~id ~rect ~t =
+    let t = if t < 0.0 then 0.0 else if t > 1.0 then 1.0 else t in
+    { id; rect; t }
+
+  let slider_set i s =
+    if i.down && contains s.rect i.pointer then
+      let local = (i.pointer.y -. s.rect.y) /. s.rect.h in
+      let t = 1.0 -. local in
+      let t = if t < 0.0 then 0.0 else if t > 1.0 then 1.0 else t in
+      Some t
+    else None
+end
+
+module Hud_model = struct
+  type panel = {
+    rect : Ui_model.rect;
+    title : string;
+  }
+
+  type badge = {
+    label : string;
+    value : string;
+  }
+
+  type bar = {
+    label : string;
+    value : float;
+    max_value : float;
+  }
+
+  type timer = {
+    seconds_left : int;
+  }
+
+  let panel ~rect ~title = { rect; title }
+  let badge ~label ~value = { label; value }
+  let bar ~label ~value ~max_value = { label; value; max_value }
+  let timer ~seconds_left = { seconds_left = max 0 seconds_left }
+
+  let timer_text t =
+    let m = t.seconds_left / 60 in
+    let s = t.seconds_left mod 60 in
+    Printf.sprintf "%02d:%02d" m s
+end
+
+module Fx_model = struct
+  type kind =
+    | Success
+    | Warn
+    | Error_kind
+    | Info
+
+  type toast = {
+    text : string;
+    kind : kind;
+    ttl : int;
+  }
+
+  type floating_text = {
+    text : string;
+    x : float;
+    y : float;
+    kind : kind;
+    ttl : int;
+  }
+
+  type screen_pulse = {
+    kind : kind;
+    ttl : int;
+  }
+
+  type item =
+    | Toast of toast
+    | Floating_text of floating_text
+    | Screen_pulse of screen_pulse
+
+  type t = item list
+
+  let empty = []
+  let add st fx = fx :: st
+  let toast ~ttl ~text ~kind = Toast { ttl; text; kind }
+  let floating_text ~ttl ~text ~x ~y ~kind = Floating_text { ttl; text; x; y; kind }
+  let screen_pulse ~ttl ~kind = Screen_pulse { ttl; kind }
+
+  let update_one = function
+    | Toast t when t.ttl > 1 -> Some (Toast { t with ttl = t.ttl - 1 })
+    | Floating_text t when t.ttl > 1 ->
+        Some (Floating_text { t with ttl = t.ttl - 1; y = t.y -. 1.0 })
+    | Screen_pulse p when p.ttl > 1 -> Some (Screen_pulse { p with ttl = p.ttl - 1 })
+    | _ -> None
+
+  let update st = List.filter_map update_one st
+  let active st = List.rev st
+end
+
+module Audio_model = struct
+  type cue = {
+    freq_hz : float;
+    duration_s : float;
+    volume : float;
+  }
+
+  let cue ~freq_hz ~duration_s ~volume = { freq_hz; duration_s; volume }
+end
+
+module Tempo_game = struct
+  module Ui = Ui_model
+  module Hud = Hud_model
+  module Fx = Fx_model
+  module Audio = Audio_model
+end
+
+let rect_contains (r : Ui_model.rect) (p : Ui_model.pointer) = Ui_model.contains r p
 
 module Backend = struct
   module Input = struct
@@ -215,43 +383,15 @@ module Backend = struct
 end
 
 module Ui = struct
+  include Ui_model
   let interaction_from_mouse = Backend.Input.interaction_from_mouse
   let draw_button = Backend.Ui_draw.draw_button
   let draw_stepper_int = Backend.Ui_draw.draw_stepper_int
   let draw_slider_v = Backend.Ui_draw.draw_slider_v
 end
 
-module Sync = struct
-  let rec pump_actions poll bus =
-    List.iter (Tempo_game.Sync.publish bus) (poll ());
-    Tempo.pause ();
-    pump_actions poll bus
-
-  let pump_mouse_interaction decode bus =
-    pump_actions
-      (fun () ->
-        let i = Backend.Input.interaction_from_mouse () in
-        decode i)
-      bus
-end
-
-module External_api = struct
-  type raw_input = Tempo_game.Ui.interaction
-  type output_cmd = unit -> unit
-
-  let read = Backend.Input.interaction_from_mouse
-  let write cmds = List.iter (fun cmd -> cmd ()) cmds
-end
-
-module As_backend = struct
-  type raw_input = External_api.raw_input
-  type output_cmd = External_api.output_cmd
-
-  let read = External_api.read
-  let write = External_api.write
-end
-
 module Hud = struct
+  include Hud_model
   let draw_panel = Backend.Hud_draw.draw_panel
   let draw_badge = Backend.Hud_draw.draw_badge
   let draw_bar = Backend.Hud_draw.draw_bar
@@ -260,10 +400,12 @@ module Hud = struct
 end
 
 module Fx = struct
+  include Fx_model
   let draw = Backend.Fx_draw.draw
 end
 
 module Audio = struct
+  include Audio_model
   let init = Backend.Audio_backend.init
   let shutdown = Backend.Audio_backend.shutdown
   let make_tone = Backend.Audio_backend.make_tone
