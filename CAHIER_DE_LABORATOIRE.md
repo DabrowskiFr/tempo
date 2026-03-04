@@ -253,3 +253,40 @@ reconstruction locale cohérente de la vitrine réactive recherchée.
     package dans l'écosystème Tempo
 - validation :
   - `dune build @doc`
+
+### 2026-03-04 - Bascule du build actif sur le runtime reconstruit
+
+- objectif : ne plus dépendre du runtime monolithique historique récupéré via
+  Git, et faire construire `tempo` directement depuis la version reconstruite
+  sous `lib/core`
+- changement retenu :
+  - activation de la bibliothèque publique `tempo` dans `lib/core/dune`
+  - retrait du stanza `tempo` historique de `lib/dune`
+  - maintien des bibliothèques périphériques (`tempo-app`, `tempo-jobs`,
+    `tempo-frp`, `tempo-raylib`, `tempo-fluidsynth`) au-dessus de ce nouveau
+    noyau actif
+- travaux complémentaires nécessaires pour que la bascule soit viable :
+  - réécriture de `tempo-app` comme vraie bibliothèque autonome, au lieu d'un
+    simple alias vers `Tempo.App`
+  - migration des usages actifs vers `Tempo_app.App` et `Tempo.Constructs`
+  - suppression du build des tests qui dépendaient encore d'API retirées
+    (`Error_bus`, ancienne `Timeline_json`, ancienne inspection runtime)
+- tentative abandonnée :
+  - conserver les anciens tests d'inspection sans réadapter `Observe`
+  - échec : ces tests dépendaient d'un contrat plus riche que l'API
+    reconstruite ; la conservation stricte bloquait la bascule vers `lib/core`
+- corrections apportées pendant la bascule :
+  - `emit_from_host` est redevenu générique pour accepter aussi les signaux
+    agrégés, ce qui était nécessaire pour `tempo-jobs`
+  - `Observe.execute_timeline` reconstruit maintenant explicitement les
+    instants silencieux, au lieu de n'enregistrer que les sorties présentes
+  - `jobs_api` a été réécrit en scénario batch déterministe pour valider le
+    bridge sans dépendre d'un timing réel de wakeup
+- impact :
+  - le build actif n'utilise plus `lib/tempo*.ml`, `lib/tempo_engine*.ml`,
+    `lib/tempo_signal*.ml`, etc. comme source de vérité pour le package
+    public `tempo`
+  - ces fichiers historiques peuvent désormais être traités comme restes du
+    runtime récupéré, et non plus comme dépendance active
+- validation :
+  - `dune build @install @runtest @doc`

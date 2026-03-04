@@ -1,6 +1,6 @@
 [consumer-1][t=00] await sum #0
 [driver][t=00] emit 1, 2, 3
-[consumer-2][t=01] await sum #1
-[driver][t=01] emit 4, 5,6
 [consumer-1][t=00] sum=6
+[driver][t=01] emit 4, 5,6
+[consumer-2][t=01] await sum #1
 [consumer-2][t=01] sum=15

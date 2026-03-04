@@ -5,9 +5,8 @@
   emit_agg_collect
   emit_agg_sum
   emit_event_wakes_awaiters
-  app_api
+ app_api
   execute_timeline
-  error_bus_api
   frp_api
   emit_once_await_immediate
   emit_once_await_many
@@ -28,8 +27,5 @@
   when_tick_tock
   await_immediate_parallel_order
   sf_api
-  timeline_json_api
-  runtime_instant_observable_order
-  runtime_instant_current_empty
   jobs_api)
- (libraries tempo tempo-frp tempo-jobs))
+ (libraries tempo tempo-app tempo-frp tempo-jobs))

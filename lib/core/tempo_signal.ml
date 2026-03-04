@@ -85,18 +85,23 @@ let update_signal : type emit agg mode.
       s.value <- Some acc);
   Tempo_task.wake_guard_waiters st s
 
-(* Emits an event signal initiated by the host (outside the effect handler), 
-   waking awaiters immediately. *)
-let emit_event_from_host : type a.
-    Tempo_types.scheduler_state -> (a, a, event) signal_core -> a -> unit =
+(* Emits a signal initiated by the host (outside the effect handler). Event
+   signals wake their awaiters immediately; aggregate signals are imported and
+   finalized at the next instant boundary. *)
+let emit_from_host : type emit agg mode.
+    Tempo_types.scheduler_state -> (emit, agg, mode) signal_core -> emit -> unit =
  fun st s value ->
-  if s.present then invalid_arg "Emit : multiple emission";
-  s.present <- true;
-  s.value <- Some value;
-  let resumes = s.awaiters in
-  s.awaiters <- [];
-  List.iter (fun resume -> resume value) resumes;
-  Tempo_task.wake_guard_waiters st s
+  match s.kind with
+  | Event_signal ->
+      if s.present then invalid_arg "Emit : multiple emission";
+      s.present <- true;
+      s.value <- Some value;
+      let resumes = s.awaiters in
+      s.awaiters <- [];
+      List.iter (fun resume -> resume value) resumes;
+      Tempo_task.wake_guard_waiters st s
+  | Aggregate_signal _ ->
+      update_signal st s value
 
 let finalize_signals (st : Tempo_types.scheduler_state) =
   List.iter

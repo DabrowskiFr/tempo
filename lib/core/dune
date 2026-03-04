@@ -1,3 +1,18 @@
-; Snapshot of the refactored runtime kept for comparison/reconstruction.
-; The active public [tempo] library on branch [develop] still builds from
-; [lib/tempo.ml] and companion modules.
+(library
+ (name tempo)
+ (public_name tempo)
+ (modules
+  tempo_types
+  tempo_log
+  tempo_thread
+  tempo_task
+  tempo_signal
+  tempo_low_level
+  tempo_base
+  tempo_core_api
+  tempo_constructs
+  tempo_observe
+  tempo_meta
+  tempo_engine
+  tempo)
+ (libraries logs mtime mtime.clock threads))

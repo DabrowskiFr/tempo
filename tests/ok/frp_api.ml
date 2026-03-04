@@ -63,7 +63,7 @@ let test_once_edge () =
   let consumer () =
     let _ = await first in
     emit seen ();
-    Game.after_n 4 (fun () ->
+    Constructs.after_n 4 (fun () ->
         when_ seen (fun () -> ());
         let rec wait_second () =
           when_ seen (fun () -> fail "once should emit once");

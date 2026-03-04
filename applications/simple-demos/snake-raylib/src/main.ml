@@ -1,6 +1,8 @@
 open Tempo
 open Raylib
 
+module App = Tempo_app.App
+
 type dir = Up | Down | Left | Right
 
 type msg =

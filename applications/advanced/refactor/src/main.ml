@@ -1,6 +1,9 @@
 open Tempo
 open Raylib
 
+module App = Tempo_app.App
+module Scene = Tempo_app.Scene
+
 type comp_state = Stopped | Running | Updating
 type scenario = Baseline | Lossy | Partitioned
 type runtime_mode = Normal | Degraded | Recovery
@@ -1022,7 +1025,7 @@ let run_reactive_loop init =
       input_proc input_sig)
   in
   let tick_proc () =
-    Game.every_n 1 (fun () -> emit cmd_bus Tick)
+    Constructs.every_n 1 (fun () -> emit cmd_bus Tick)
   in
   let rec monitor_proc current_mode =
     let m = await model_updates in

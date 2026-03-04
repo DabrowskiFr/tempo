@@ -33,10 +33,10 @@ val update_signal :
   -> 'emit
   -> unit
 
-val emit_event_from_host :
+val emit_from_host :
      Tempo_types.scheduler_state
-  -> ('a, 'a, Tempo_types.event) Tempo_types.signal_core
-  -> 'a
+  -> ('emit, 'agg, 'mode) Tempo_types.signal_core
+  -> 'emit
   -> unit
 
 val finalize_signals : Tempo_types.scheduler_state -> unit

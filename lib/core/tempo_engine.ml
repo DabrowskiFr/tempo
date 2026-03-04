@@ -79,7 +79,7 @@ let emit_from_host signal value =
   match !current_host_runtime with
   | None -> invalid_arg "emit_from_host requires an active Tempo runtime"
   | Some runtime ->
-      emit_event_from_host runtime.scheduler signal value;
+      Tempo_signal.emit_from_host runtime.scheduler signal value;
       (match runtime.wakeup with
       | None -> ()
       | Some wakeup -> notify_wakeup wakeup)
@@ -328,7 +328,7 @@ let rec run_interactive_loop ~output ~(input : 'input interactive_source) ~wakeu
   let before_step () =
     match input.poll () with
     | None -> ()
-    | Some payload -> emit_event_from_host st input_signal payload
+    | Some payload -> Tempo_signal.emit_from_host st input_signal payload
   in
   let after_step () =
     match output_signal.value with
@@ -368,7 +368,7 @@ let execute ?instants ?(input = fun () -> None) ?(output = fun _ -> ()) initial 
   let before_step () =
     match input () with
     | None -> ()
-    | Some payload -> emit_event_from_host st input_signal payload
+    | Some payload -> Tempo_signal.emit_from_host st input_signal payload
   in
   let after_step () =
       match output_signal.value with

@@ -1,17 +1,4 @@
 (library
- (name tempo)
- (public_name tempo)
- (modules
-  tempo_types
-  tempo_log
-  tempo_thread
-  tempo_task
-  tempo_signal
-  tempo_engine
-  tempo)
- (libraries logs mtime mtime.clock threads))
-
-(library
  (name tempo_game_raylib)
  (public_name tempo-raylib)
  (modules tempo_game_raylib)

@@ -4,8 +4,7 @@
 [body] step 0
 [body] step 1
 [driver] override emitted
-[body] step 2
+[body] inner watch exited
 [driver] stop emitted
 [driver] done
-[body] inner watch exited
 [body] outer watch exited

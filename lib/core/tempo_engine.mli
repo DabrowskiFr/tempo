@@ -28,7 +28,7 @@ val notify_wakeup : wakeup -> unit
 val register_wakeup_poller : wakeup -> (unit -> bool) -> unit
 
 val emit_from_host :
-  ('a, 'a, Tempo_types.event) Tempo_types.signal_core -> 'a -> unit
+  ('emit, 'agg, 'mode) Tempo_types.signal_core -> 'emit -> unit
 
 val execute :
      ?instants:int

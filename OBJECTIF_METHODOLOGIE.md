@@ -58,6 +58,10 @@ en priorité sur :
     lisibles sans supposer que l'utilisateur ouvre l'implémentation ; en cas de
     conflit avec les contraintes d'odoc, préférer une documentation simple qui
     génère proprement plutôt qu'un commentaire fin qui casse la build doc
+12. lorsqu'un runtime reconstruit coexiste avec un runtime historique, traiter
+    la migration comme un vrai basculement de source de vérité : activer le
+    nouveau build, adapter les dépendants actifs, puis seulement conserver ou
+    supprimer l'ancien code comme archive
 
 ## Points d'attention
 
