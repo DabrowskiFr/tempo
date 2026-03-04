@@ -77,7 +77,7 @@ dune build
 ### Execute the test suite
 
 ```sh
-dune test
+dune runtest
 ```
 
 ### Run an example
@@ -90,8 +90,8 @@ Passing --log-level enables logging of logical instants, making it possible to t
 
 ### Generate the documentation 
 
-```sh 
-dune ocaml doc
+```sh
+dune build @doc
 ```
 
 To use Tempo in your own project, add `tempo` to your dune file and `open Tempo` to your source file. 

@@ -7,3 +7,20 @@ It contains:
 - backend interpreters in {!module-Tempo_game_raylib.Backend}
 
 It is a specialized package and not part of the core reactive runtime.
+
+Typical usage:
+
+- build pure UI/HUD values in Tempo code;
+- render them with the Raylib interpreters in this package;
+- keep gameplay logic in Tempo and backend code in Raylib adapters.
+
+Minimal example:
+
+{[
+  let button =
+    Tempo_game_raylib.Ui.button
+      ~id:"start"
+      { Tempo_game_raylib.Ui.x = 20.0; y = 20.0; w = 120.0; h = 36.0 }
+      ~label:"Start"
+      ()
+]}

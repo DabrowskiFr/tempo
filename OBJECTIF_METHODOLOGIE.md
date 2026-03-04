@@ -54,6 +54,10 @@ en priorité sur :
     plusieurs processus Tempo plutôt qu'une grosse boucle unique mutable, même
     si une petite quantité d'état partagé reste nécessaire pour composer la
     frame finale
+11. pour les interfaces publiques et l'odoc, viser des signatures directement
+    lisibles sans supposer que l'utilisateur ouvre l'implémentation ; en cas de
+    conflit avec les contraintes d'odoc, préférer une documentation simple qui
+    génère proprement plutôt qu'un commentaire fin qui casse la build doc
 
 ## Points d'attention
 

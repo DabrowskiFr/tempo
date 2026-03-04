@@ -1,7 +1,14 @@
 (** Raylib presentation helpers and lightweight game-oriented models.
     This package is intentionally backend-facing: it provides small pure UI/HUD
     data types together with Raylib interpreters for rendering and simple audio
-    cues. *)
+    cues.
+
+    The package is best read in this order:
+    - {!module:Ui} for interactions and small widgets,
+    - {!module:Hud} for panels, badges and timers,
+    - {!module:Fx} for transient feedback items,
+    - {!module:Audio} for lightweight cues,
+    - {!module:Backend} for the Raylib-specific interpreters. *)
 
 module Ui : sig
   type rect = { x : float; y : float; w : float; h : float }
@@ -51,6 +58,8 @@ module Ui : sig
   val slider_v : id:string -> rect:rect -> t:float -> slider
   val slider_set : interaction -> slider -> float option
 
+  (** [interaction_from_mouse ()] reads the current Raylib mouse state and
+      converts it to a pure interaction value. *)
   val interaction_from_mouse : unit -> interaction
   val draw_button : ?active:bool -> button -> unit
   val draw_stepper_int : int_stepper -> unit

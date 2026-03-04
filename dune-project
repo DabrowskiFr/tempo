@@ -15,7 +15,7 @@
 
 (license "GPL-3.0-or-later")
 
-(documentation https://url/to/documentation)
+(documentation https://dabrowskifr.github.io/tempo/)
 
 (package
  (name tempo)
@@ -25,8 +25,8 @@
 
 (package
  (name tempo-raylib)
- (synopsis "Raylib adapters and rendering helpers for Tempo games")
- (description "Optional Raylib integration layer for Tempo. Install this package only if you build games with Raylib.")
+ (synopsis "Raylib helpers for Tempo demos and graphical applications")
+ (description "Optional Raylib integration layer for Tempo. It provides lightweight UI/HUD/FX/audio helpers and rendering backends for graphical Tempo applications.")
  (depends
   (ocaml (>= 5.3.0))
   (dune (>= 3.0))
@@ -35,8 +35,8 @@
 
 (package
  (name tempo-frp)
- (synopsis "Optional FRP/SF combinator layer for Tempo")
- (description "Optional FRP layer for Tempo. Provides Frp and SF combinators as a separate package.")
+ (synopsis "FRP and signal-function encoding on top of Tempo")
+ (description "Optional FRP/SF encoding built on top of Tempo. This package is specialized and not the main recommended entry point to the runtime.")
  (depends
   (ocaml (>= 5.3.0))
   (dune (>= 3.0))

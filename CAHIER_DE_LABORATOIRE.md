@@ -218,3 +218,38 @@ reconstruction locale cohérente de la vitrine réactive recherchée.
   - `dune build applications/advanced/game-univ/src/main.exe applications/advanced/game-univ/src/headless_runner.exe`
   - `dune exec ./applications/advanced/game-univ/src/headless_runner.exe`
   - `dune build && dune runtest && dune build @doc`
+
+### Rattrapage documentation et packaging
+
+- objectif : récupérer une partie du polish documentaire et des métadonnées de
+  package qui avaient été reconstruits avant la perte
+- améliorations reportées :
+  - mise à jour de l'URL de documentation dans `dune-project`
+  - descriptions de packages clarifiées pour `tempo-raylib` et `tempo-frp`
+  - enrichissement des interfaces publiques :
+    - `lib/app/tempo_app.mli`
+    - `lib/jobs/tempo_jobs.mli`
+    - `lib/tempo_game_raylib.mli`
+- difficulté rencontrée :
+  - certaines docstrings fines de `tempo_game_raylib.mli` déclenchaient
+    `warning 50 [unexpected-docstring]` avec l'odoc actuel
+- résolution :
+  - conserver la documentation structurante au niveau du module
+  - retirer les deux commentaires ambigus qui bloquaient la génération
+- validation :
+  - `dune build && dune runtest && dune build @doc`
+
+### Enrichissement des pages odoc de package
+
+- objectif : récupérer une partie de la hiérarchie documentaire et des exemples
+  minimaux présents dans la reconstruction
+- travail reporté :
+  - enrichissement de
+    - `doc/tempo-app/index.mld`
+    - `doc/tempo-jobs/index.mld`
+    - `doc/tempo-raylib/index.mld`
+    - `doc/tempo-fluidsynth/index.mld`
+  - ajout de courts exemples et d'un positionnement plus explicite de chaque
+    package dans l'écosystème Tempo
+- validation :
+  - `dune build @doc`
