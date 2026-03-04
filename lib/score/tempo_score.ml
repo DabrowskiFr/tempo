@@ -30,6 +30,8 @@ type t = {
   initial_bpm : int;
 }
 
+exception Parse_error of string
+
 let min_bpm = 50
 let max_bpm = 180
 let default_bpm = 108
@@ -312,3 +314,271 @@ let of_midi_file path =
 let note_count (score : t) =
   Array.fold_left (fun acc (voice : voice) -> acc + Array.length voice.notes) 0
     score.voices
+
+let clamp lo hi v = max lo (min hi v)
+
+let parse_int ~line ~field raw =
+  match int_of_string_opt raw with
+  | Some n -> n
+  | None ->
+      raise
+        (Parse_error
+           (Printf.sprintf "line %d: invalid integer for %s: %S" line field raw))
+
+let strip_quotes s =
+  let len = String.length s in
+  if len >= 2 && s.[0] = '"' && s.[len - 1] = '"' then
+    String.sub s 1 (len - 2)
+  else s
+
+let split_kv ~line token =
+  match String.split_on_char ':' token with
+  | [ key; value ] -> (String.trim key, String.trim value)
+  | _ ->
+      raise
+        (Parse_error
+           (Printf.sprintf "line %d: expected key:value token, got %S" line token))
+
+let parse_meter ~line raw =
+  match String.split_on_char '/' (String.trim raw) with
+  | [ n; d ] ->
+      let num = parse_int ~line ~field:"meter numerator" (String.trim n) in
+      let den = parse_int ~line ~field:"meter denominator" (String.trim d) in
+      if num <= 0 || den <= 0 then
+        raise
+          (Parse_error
+             (Printf.sprintf "line %d: meter must be strictly positive" line));
+      (num, den)
+  | _ ->
+      raise
+        (Parse_error
+           (Printf.sprintf "line %d: expected meter as N/D, got %S" line raw))
+
+let parse_unit_fraction unit_label =
+  match String.split_on_char '/' (String.trim unit_label) with
+  | [ "1"; d ] -> int_of_string_opt (String.trim d)
+  | _ -> None
+
+let derive_units_per_bar ~num ~den ~unit_label =
+  match parse_unit_fraction unit_label with
+  | Some unit_den when unit_den > 0 && unit_den mod den = 0 ->
+      max 1 (num * (unit_den / den))
+  | _ -> 16
+
+let of_text content =
+  let lines = String.split_on_char '\n' content in
+  let header_seen = ref false in
+  let title = ref "Untitled score" in
+  let meter_num = ref 4 in
+  let meter_den = ref 4 in
+  let unit_label = ref "1/16" in
+  let units_per_bar = ref None in
+  let initial_bpm = ref default_bpm in
+  let voices_rev = ref [] in
+  let current_voice : (string * instrument * note list ref) option ref = ref None in
+  let push_current () =
+    match !current_voice with
+    | None -> ()
+    | Some (name, instrument, notes_ref) ->
+        let notes =
+          !notes_ref
+          |> List.rev
+          |> List.sort (fun a b ->
+                 match compare a.start_unit b.start_unit with
+                 | 0 -> compare a.midi b.midi
+                 | n -> n)
+          |> Array.of_list
+        in
+        voices_rev := { name; instrument; notes } :: !voices_rev;
+        current_voice := None
+  in
+  List.iteri
+    (fun idx raw_line ->
+      let line_no = idx + 1 in
+      let line = String.trim raw_line in
+      if line <> "" && line.[0] <> '#' then
+        if not !header_seen then
+          if String.equal line "tempo-score v1" then header_seen := true
+          else
+            raise
+              (Parse_error
+                 (Printf.sprintf "line %d: expected header `tempo-score v1`" line_no))
+        else if String.starts_with ~prefix:"title:" line then
+          title := strip_quotes (String.trim (String.sub line 6 (String.length line - 6)))
+        else if String.starts_with ~prefix:"meter:" line then
+          let raw = String.trim (String.sub line 6 (String.length line - 6)) in
+          let num, den = parse_meter ~line:line_no raw in
+          meter_num := num;
+          meter_den := den
+        else if String.starts_with ~prefix:"unit:" line then
+          unit_label :=
+            strip_quotes (String.trim (String.sub line 5 (String.length line - 5)))
+        else if String.starts_with ~prefix:"units_per_bar:" line then
+          units_per_bar :=
+            Some
+              (parse_int ~line:line_no ~field:"units_per_bar"
+                 (String.trim
+                    (String.sub line 14 (String.length line - 14))))
+        else if String.starts_with ~prefix:"bpm:" line then
+          initial_bpm :=
+            clamp min_bpm max_bpm
+              (parse_int ~line:line_no ~field:"bpm"
+                 (String.trim (String.sub line 4 (String.length line - 4))))
+        else if String.starts_with ~prefix:"voice:" line then (
+          push_current ();
+          let payload = String.trim (String.sub line 6 (String.length line - 6)) in
+          let parts = List.map String.trim (String.split_on_char '|' payload) in
+          match parts with
+          | [] ->
+              raise
+                (Parse_error
+                   (Printf.sprintf "line %d: missing voice description" line_no))
+          | name_raw :: attrs ->
+              let name = strip_quotes name_raw in
+              let channel = ref 0 in
+              let bank = ref 0 in
+              let preset = ref 0 in
+              List.iter
+                (fun attr_block ->
+                  String.split_on_char ' ' attr_block
+                  |> List.filter (fun t -> String.trim t <> "")
+                  |> List.iter (fun token ->
+                         let key, value = split_kv ~line:line_no token in
+                         match key with
+                         | "ch" | "channel" ->
+                             channel :=
+                               parse_int ~line:line_no ~field:"voice channel" value
+                         | "bank" ->
+                             bank := parse_int ~line:line_no ~field:"voice bank" value
+                         | "prog" | "preset" ->
+                             preset := parse_int ~line:line_no ~field:"voice preset" value
+                         | _ ->
+                             raise
+                               (Parse_error
+                                  (Printf.sprintf
+                                     "line %d: unsupported voice field %S"
+                                     line_no key))))
+                attrs;
+              current_voice :=
+                Some
+                  ( name,
+                    { channel = !channel; bank = !bank; preset = !preset },
+                    ref [] ))
+        else if String.starts_with ~prefix:"note " line then (
+          match !current_voice with
+          | None ->
+              raise
+                (Parse_error
+                   (Printf.sprintf
+                      "line %d: note declared before any voice section" line_no))
+          | Some (_name, _instrument, notes_ref) ->
+              let payload = String.sub line 5 (String.length line - 5) in
+              let fields = Hashtbl.create 8 in
+              String.split_on_char ' ' payload
+              |> List.filter (fun t -> String.trim t <> "")
+              |> List.iter (fun token ->
+                     let key, value = split_kv ~line:line_no token in
+                     Hashtbl.replace fields key value);
+              let get key =
+                match Hashtbl.find_opt fields key with
+                | Some v -> v
+                | None ->
+                    raise
+                      (Parse_error
+                         (Printf.sprintf "line %d: missing note field %S" line_no key))
+              in
+              let start_unit =
+                parse_int ~line:line_no ~field:"note start" (get "start")
+              in
+              let duration_units =
+                parse_int ~line:line_no ~field:"note dur" (get "dur")
+              in
+              let midi = parse_int ~line:line_no ~field:"note midi" (get "midi") in
+              let velocity = parse_int ~line:line_no ~field:"note vel" (get "vel") in
+              notes_ref :=
+                {
+                  start_unit = max 0 start_unit;
+                  duration_units = max 1 duration_units;
+                  midi = clamp 0 127 midi;
+                  volume = float_of_int (clamp 1 127 velocity) /. 127.0;
+                }
+                :: !notes_ref)
+        else
+          raise
+            (Parse_error
+               (Printf.sprintf "line %d: unsupported directive %S" line_no line)))
+    lines;
+  if not !header_seen then
+    raise (Parse_error "missing header `tempo-score v1`");
+  push_current ();
+  let voices = Array.of_list (List.rev !voices_rev) in
+  let total_units =
+    Array.fold_left
+      (fun acc (v : voice) ->
+        Array.fold_left
+          (fun local (n : note) -> max local (n.start_unit + n.duration_units))
+          acc v.notes)
+      0 voices
+  in
+  {
+    title = !title;
+    voices;
+    total_units = max 1 total_units;
+    unit_label = !unit_label;
+    time_signature_num = !meter_num;
+    time_signature_den = !meter_den;
+    units_per_bar =
+      Option.value !units_per_bar
+        ~default:
+          (derive_units_per_bar ~num:!meter_num ~den:!meter_den
+             ~unit_label:!unit_label);
+    initial_bpm = !initial_bpm;
+  }
+
+let of_text_file path =
+  let ic = open_in_bin path in
+  Fun.protect
+    ~finally:(fun () -> close_in_noerr ic)
+    (fun () ->
+      let len = in_channel_length ic in
+      let content = really_input_string ic len in
+      of_text content)
+
+let velocity_of_volume volume =
+  let raw = int_of_float (volume *. 127.0) in
+  clamp 1 127 raw
+
+let maybe_quote s =
+  if String.contains s '|' || String.contains s ':' then Printf.sprintf "%S" s
+  else s
+
+let to_text (score : t) =
+  let b = Buffer.create 1024 in
+  let add fmt = Printf.ksprintf (Buffer.add_string b) fmt in
+  add "tempo-score v1\n";
+  add "title: %s\n" (maybe_quote score.title);
+  add "meter: %d/%d\n" score.time_signature_num score.time_signature_den;
+  add "unit: %s\n" (maybe_quote score.unit_label);
+  add "units_per_bar: %d\n" score.units_per_bar;
+  add "bpm: %d\n\n" score.initial_bpm;
+  Array.iteri
+    (fun idx (voice : voice) ->
+      add "voice: %s | ch:%d bank:%d prog:%d\n"
+        (maybe_quote voice.name)
+        voice.instrument.channel voice.instrument.bank voice.instrument.preset;
+      Array.iter
+        (fun (n : note) ->
+          add "note start:%d dur:%d midi:%d vel:%d\n" n.start_unit n.duration_units
+            n.midi (velocity_of_volume n.volume))
+        voice.notes;
+      if idx < Array.length score.voices - 1 then add "\n")
+    score.voices;
+  Buffer.contents b
+
+let write_text_file ~path score =
+  let oc = open_out_bin path in
+  Fun.protect
+    ~finally:(fun () -> close_out_noerr oc)
+    (fun () ->
+      output_string oc (to_text score);
+      output_char oc '\n')

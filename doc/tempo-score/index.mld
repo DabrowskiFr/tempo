@@ -4,8 +4,10 @@
 - logical units (`start_unit`, `duration_units`) suitable for Tempo instants
 - voices grouped by MIDI channel/bank/program
 - transport metadata (meter, initial bpm, units per bar)
+- a compact textual format (`tempo-score v1`) for editing and exchange
 
 Typical usage:
 - import a MIDI file with {!Tempo_score.of_midi_file}
+- optionally serialize with {!Tempo_score.to_text} or parse with {!Tempo_score.of_text}
 - schedule `note_on` / `note_off` in Tempo from unit indices
 - keep Tempo as timeline owner (pause/restart/interactive control)

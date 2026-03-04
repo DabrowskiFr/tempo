@@ -46,3 +46,18 @@ val of_midi_file : string -> t
 
 val note_count : t -> int
 (** Total number of notes across all voices. *)
+
+exception Parse_error of string
+(** Raised when textual score parsing fails. *)
+
+val of_text : string -> t
+(** Parse a score from the compact textual format. *)
+
+val of_text_file : string -> t
+(** Parse a score from a text file in the compact textual format. *)
+
+val to_text : t -> string
+(** Serialize a score to the compact textual format. *)
+
+val write_text_file : path:string -> t -> unit
+(** Write a score to a text file in the compact textual format. *)

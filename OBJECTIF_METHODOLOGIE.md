@@ -106,6 +106,16 @@ en priorité sur :
     conversion MIDI -> score logique), l'extraire du binaire applicatif vers
     un package dédié documenté, puis recâbler l'application comme simple
     consommateur de ce package
+24. pour un format d'échange destiné à l'édition humaine, préférer un format
+    texte compact mais auto-descriptif (clés explicites sur chaque note),
+    plutôt qu'un format ultra-concis qui perd le sens métier
+25. lorsqu'un convertisseur est fourni via `dune exec`, documenter et tester
+    avec des chemins absolus pour éviter les ambiguïtés de répertoire de
+    travail dans les scripts/outils
+26. pour éviter les doublons de catalogue dans une application qui supporte un
+    format source et un format dérivé, séparer physiquement les assets
+    (`mid/` vs `tscore/`) et charger uniquement le format opérationnel en
+    runtime
 
 ## Points d'attention
 

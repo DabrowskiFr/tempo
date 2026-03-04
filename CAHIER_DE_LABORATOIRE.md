@@ -29,6 +29,46 @@
   - `dune build ./applications/advanced/music_score_player/src/main.exe`
     passe avec la nouvelle extraction
 
+### Représentation textuelle `tempo-score v1`
+
+- objectif du lot: permettre d'éditer/charger une partition Tempo sans passer
+  par MIDI, et fournir une conversion MIDI -> texte
+- réalisation:
+  - ajout dans `Tempo_score`:
+    - `of_text` / `of_text_file`
+    - `to_text` / `write_text_file`
+    - exception `Parse_error`
+  - format retenu (compact + explicite):
+    - en-tête `tempo-score v1`
+    - métadonnées `title`, `meter`, `unit`, `units_per_bar`, `bpm`
+    - sections `voice` puis lignes `note start:.. dur:.. midi:.. vel:..`
+  - ajout d'un convertisseur CLI:
+    [score_convert.ml](/Users/fredericdabrowski/Repos/tempo/tempo-dev/tempo/applications/advanced/music_score_player/src/score_convert.ml)
+  - adaptation du player pour charger aussi `.tscore` / `.tempo-score`
+- tentative/constat:
+  - écriture vers chemin relatif via `dune exec` observée dans le contexte
+    d'exécution dune, pas forcément dans l'arborescence attendue
+  - correction: utiliser un chemin absolu pour la conversion
+- validation:
+  - `dune build ./applications/advanced/music_score_player/src/main.exe ./applications/advanced/music_score_player/src/score_convert.exe`
+  - conversion testée sur `bach_prelude_c.mid` vers le format texte
+
+### Réorganisation des assets musique (MIDI vs tscore)
+
+- objectif du lot: éviter les doublons dans l'UI en séparant clairement
+  sources MIDI et partitions Tempo textuelles
+- réalisation:
+  - création de:
+    - `applications/advanced/music_score_player/assets/mid/`
+    - `applications/advanced/music_score_player/assets/tscore/`
+  - déplacement de tous les `.mid` existants vers `assets/mid/`
+  - conversion de tous ces MIDI en `.tscore` vers `assets/tscore/`
+  - adaptation du player: la liste déroulante charge uniquement
+    `assets/tscore/` (plus de mix midi/tscore dans l'UI)
+  - mise à jour README de l'application
+- validation:
+  - `dune build ./applications/advanced/music_score_player/src/main.exe ./applications/advanced/music_score_player/src/score_convert.exe`
+
 ### Objectif
 
 Repartir du dernier commit restauré après suppression accidentelle et reconstruire

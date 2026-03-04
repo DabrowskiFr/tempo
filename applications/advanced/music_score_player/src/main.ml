@@ -121,19 +121,20 @@ let viewport_of_frame (score : score_data) (frame : frame) =
   in
   { cell_w; visible_start; visible_units }
 
-let midi_asset_paths () =
-  let root = "applications/advanced/music_score_player/assets" in
+let score_asset_paths () =
+  let root = "applications/advanced/music_score_player/assets/tscore" in
   if not (Sys.file_exists root) then []
   else
     Sys.readdir root |> Array.to_list
     |> List.filter (fun name ->
-           Filename.check_suffix name ".mid" || Filename.check_suffix name ".midi")
+           Filename.check_suffix name ".tscore"
+           || Filename.check_suffix name ".tempo-score")
     |> List.sort String.compare
     |> List.map (Filename.concat root)
 
 let score_choices () =
   let file_choices =
-    midi_asset_paths ()
+    score_asset_paths ()
     |> List.map (fun path -> { label = Filename.basename path; path = Some path })
   in
   Array.of_list ({ label = "Built-in score"; path = None } :: file_choices)
@@ -141,7 +142,7 @@ let score_choices () =
 let score_of_choice (choice : score_choice) =
   match choice.path with
   | None -> Score.default
-  | Some path -> Score.of_midi_file path
+  | Some path -> Score.of_text_file path
 
 let score_note_count (score : score_data) =
   Score.note_count score
