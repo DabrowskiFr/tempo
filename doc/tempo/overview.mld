@@ -16,7 +16,6 @@ Primary companion packages:
 
 Specialized packages:
 - `tempo-raylib` for Raylib-based demos and presentation helpers
-- `tempo-fluidsynth` for SoundFont playback and MIDI import
 - `tempo-score` for a Tempo-native score model derived from MIDI
 
 Advanced applications in this repository include:

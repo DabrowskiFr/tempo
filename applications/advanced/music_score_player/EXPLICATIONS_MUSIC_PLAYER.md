@@ -128,7 +128,7 @@ partition "graveur" sans interprétation supplémentaire.
 
 ## 2) Comment on interprète MIDI pour jouer effectivement les notes
 
-Dans `tempo-fluidsynth`, l'import construit:
+Dans le backend FluidSynth interne, l'import construit:
 
 - `division`,
 - tempo initial + liste des changements de tempo,
@@ -664,7 +664,7 @@ Vue d'ensemble de la chaîne de production sonore:
    - ordonnancement stable des commandes dans l'instant,
    - protections anti-coupure.
 6. **Synthèse**
-   - appels `tempo-fluidsynth` (`note_on`, `note_off`, `control_change`),
+   - appels du backend FluidSynth (`note_on`, `note_off`, `control_change`),
    - rendu sonore final.
 
 ---

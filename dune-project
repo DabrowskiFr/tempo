@@ -2,7 +2,7 @@
 
 (name tempo)
 
-(version "0.1.0")
+(version "0.2.0")
 
 (generate_opam_files true)
 
@@ -59,20 +59,7 @@
   (ocaml (>= 5.3.0))
   (dune (>= 3.0))
   (tempo (= :version))
-  threads))
-
-(package
- (name tempo-fluidsynth)
- (synopsis "FluidSynth backend for Tempo music applications")
- (description "SoundFont-based music rendering and MIDI import for Tempo applications.")
- (depends
-  (ocaml (>= 5.3.0))
-  (dune (>= 3.0))
-  (tempo (= :version))
-  dune-configurator
-  ctypes
-  ctypes-foreign
-  unix))
+  base-threads))
 
 (package
  (name tempo-score)
@@ -81,4 +68,8 @@
  (depends
   (ocaml (>= 5.3.0))
   (dune (>= 3.0))
-  (tempo-fluidsynth (= :version))))
+  (tempo (= :version))
+  dune-configurator
+  ctypes
+  ctypes-foreign
+  base-unix))

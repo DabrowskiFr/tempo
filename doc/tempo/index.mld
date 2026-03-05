@@ -15,5 +15,4 @@ See also:
 - the dedicated `tempo-app` package for lightweight application structure
 - the dedicated `tempo-jobs` package for external jobs on domains
 - the dedicated `tempo-raylib` package for Raylib helpers
-- the dedicated `tempo-fluidsynth` package for musical demos
 - the dedicated `tempo-score` package for Tempo-native score conversion

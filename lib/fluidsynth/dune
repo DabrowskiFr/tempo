@@ -10,7 +10,7 @@
 
 (library
  (name tempo_fluidsynth)
- (public_name tempo-fluidsynth)
+ (package tempo-score)
  (modules tempo_fluidsynth)
  (foreign_stubs
   (language c)
