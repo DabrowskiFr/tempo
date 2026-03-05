@@ -32,6 +32,10 @@ Result: patch applied (`apt` + `brew`), pending remote CI confirmation.
 Result: failure is now in `dune runtest` (`tests/ok/jobs_api.expected` mismatch: empty output on Ubuntu).
 - Attempt 10: remove artificial instant cap (`~instants:20`) in `jobs_api` test so the job has enough time to publish updates on slower scheduling.
 Result: local tests pass (`opam exec -- dune runtest`).
+- Attempt 11: inspect latest CI run after test stabilization.
+Result: `ubuntu-latest` passes; `macos-latest` fails on transient fetch of `fpath` while resolving `--with-doc` dependencies (odoc stack), not on project code.
+- Attempt 12: reduce CI dependency surface by removing `--with-doc` from `opam install . --deps-only`.
+Result: workflow patched; pending remote confirmation.
 
 ### Root cause analysis
 `threads` is not an opam package dependency name for CI solver use in this context.

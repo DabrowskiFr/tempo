@@ -14,6 +14,7 @@ Diagnostiquer et corriger un echec CI GitHub sur la branche `release/0.2.0` avec
 6. Commit/push cible pour relancer la CI distante.
 7. Re-boucler tant que la CI expose une nouvelle cause racine.
 8. Distinguer dependances opam et dependances systeme (C headers/libs) pour les bindings natifs.
+9. Limiter la surface des dependances CI aux besoins de build/test pour reduire les echecs reseau non essentiels.
 
 ## Procedure pratique
 1. `gh run list --limit 8`
