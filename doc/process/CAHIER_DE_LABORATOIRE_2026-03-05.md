@@ -24,11 +24,16 @@ Result: new conflict surfaced (`deps-of-tempo-jobs -> deps-of-tempo >= 0.2.0`), 
 Result: conflict on `tempo-jobs` resolved, but a new dependency issue surfaced (`tempo-fluidsynth -> unix` unknown package).
 - Attempt 6: patch dependency from `unix` to `base-unix` in `dune-project` and `tempo-fluidsynth.opam`.
 Result: local metadata corrected; CI rerun required.
+- Attempt 7: inspect next CI failure after metadata fixes.
+Result: failure moved to compile step (`fluidsynth.h` not found) on both Ubuntu and macOS.
+- Attempt 8: install system FluidSynth development libraries in CI workflow.
+Result: patch applied (`apt` + `brew`), pending remote CI confirmation.
 
 ### Root cause analysis
 `threads` is not an opam package dependency name for CI solver use in this context.
 The expected dependency is `base-threads`.
 Additionally, `unix` must be declared as `base-unix` in opam package dependencies.
+Finally, building `tempo-fluidsynth` requires the external C development headers for FluidSynth; opam dependency resolution alone is insufficient.
 
 ### Applied fix
 - Updated package declaration in `dune-project` for `tempo-jobs`.

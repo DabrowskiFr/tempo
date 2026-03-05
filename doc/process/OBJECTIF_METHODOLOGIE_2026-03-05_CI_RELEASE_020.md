@@ -13,6 +13,7 @@ Diagnostiquer et corriger un echec CI GitHub sur la branche `release/0.2.0` avec
 5. Valider localement avec checks rapides et deterministes (`opam lint`, `dune build`).
 6. Commit/push cible pour relancer la CI distante.
 7. Re-boucler tant que la CI expose une nouvelle cause racine.
+8. Distinguer dependances opam et dependances systeme (C headers/libs) pour les bindings natifs.
 
 ## Procedure pratique
 1. `gh run list --limit 8`
@@ -25,4 +26,5 @@ Diagnostiquer et corriger un echec CI GitHub sur la branche `release/0.2.0` avec
 ## Criteres de succes
 - Plus d'erreur solveur opam sur `deps-of-tempo-jobs -> threads`.
 - Plus d'erreur solveur opam sur `deps-of-tempo-fluidsynth -> unix`.
+- Plus d'erreur compilation C sur `fluidsynth.h` manquant.
 - Jobs CI `ubuntu-latest` et `macos-latest` passent le step `opam install . --deps-only --with-doc --with-test`.
