@@ -72,7 +72,7 @@
   dune-configurator
   ctypes
   ctypes-foreign
-  unix))
+  base-unix))
 
 (package
  (name tempo-score)
