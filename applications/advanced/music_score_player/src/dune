@@ -1,0 +1,14 @@
+(executable
+ (name main)
+ (modules main)
+ (libraries tempo tempo-fluidsynth tempo-score raylib unix))
+
+(executable
+ (name score_convert)
+ (modules score_convert)
+ (libraries tempo-score))
+
+(executable
+ (name score_show_text)
+ (modules score_show_text)
+ (libraries tempo-score))

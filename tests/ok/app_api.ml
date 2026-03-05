@@ -1,4 +1,4 @@
-open Tempo
+module App = Tempo_app.App
 
 let fail msg = failwith msg
 

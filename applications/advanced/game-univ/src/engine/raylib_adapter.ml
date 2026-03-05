@@ -125,7 +125,7 @@ let play_tone_cached freq duration volume =
     | None ->
         let s =
           Tempo_game_raylib.Audio.make_tone
-            (Tempo_game.Audio.cue ~freq_hz:freq ~duration_s:duration ~volume)
+            (Tempo_game_raylib.Audio.cue ~freq_hz:freq ~duration_s:duration ~volume)
         in
         Hashtbl.add tone_cache key s;
         s
@@ -272,8 +272,8 @@ let draw_hud (h : hud_payload) =
   let combo_seconds = h.combo_window_left / 60 in
   let difficulty = difficulty_level_of_factor h.cheat_window_factor in
   let panel =
-    Tempo_game.Hud.panel
-      ~rect:{ Tempo_game.Ui.x = 18.0; y = 8.0; w = 924.0; h = 80.0 }
+    Tempo_game_raylib.Hud.panel
+      ~rect:{ Tempo_game_raylib.Ui.x = 18.0; y = 8.0; w = 924.0; h = 80.0 }
       ~title:""
   in
   let draw_data_box x y w h =
@@ -304,7 +304,7 @@ let draw_hud (h : hud_payload) =
   draw_text (Printf.sprintf "Best x%d | Precision %.0f%%" h.combo_best precision) 426 47 17 c_chalk;
   draw_text "ENERGIE" 632 20 13 c_chalk_soft;
   Tempo_game_raylib.Hud.draw_bar ~x:744 ~y:16 ~w:ew ~h:12
-    (Tempo_game.Hud.bar ~label:"" ~value:h.energy ~max_value:100.0);
+    (Tempo_game_raylib.Hud.bar ~label:"" ~value:h.energy ~max_value:100.0);
   draw_text (Printf.sprintf "%d%%" e) 890 14 13 c_chalk;
   draw_text
     (Printf.sprintf "Difficulte %s" (difficulty_label_of_factor h.cheat_window_factor))
@@ -480,18 +480,18 @@ let draw_student_cartoon ~id ~x ~y ~cheating ~in_range ~suspicion ~profile ~tell
     draw_rectangle (x - 1) (y - 19) 2 2 (Color.create 255 232 213 255))
 
 let fx_kind_of_action = function
-  | Flagrant -> Tempo_game.Fx.Success
-  | False_positive -> Tempo_game.Fx.Error_kind
-  | Empty_check -> Tempo_game.Fx.Warn
+  | Flagrant -> Tempo_game_raylib.Fx.Success
+  | False_positive -> Tempo_game_raylib.Fx.Error_kind
+  | Empty_check -> Tempo_game_raylib.Fx.Warn
 
 let draw_action_feedback (pos : vec2) kind label ttl =
   let k = fx_kind_of_action kind in
   let fx =
-    Tempo_game.Fx.empty
+    Tempo_game_raylib.Fx.empty
     |> fun st ->
-    Tempo_game.Fx.add st (Tempo_game.Fx.floating_text ~ttl ~text:label ~x:(pos.x -. 58.0) ~y:(pos.y -. 36.0) ~kind:k)
+    Tempo_game_raylib.Fx.add st (Tempo_game_raylib.Fx.floating_text ~ttl ~text:label ~x:(pos.x -. 58.0) ~y:(pos.y -. 36.0) ~kind:k)
     |> fun st ->
-    Tempo_game.Fx.add st (Tempo_game.Fx.screen_pulse ~ttl:(min ttl 16) ~kind:k)
+    Tempo_game_raylib.Fx.add st (Tempo_game_raylib.Fx.screen_pulse ~ttl:(min ttl 16) ~kind:k)
   in
   Tempo_game_raylib.Fx.draw fx
 
@@ -689,5 +689,6 @@ let spec : (input_state, frame) Raylib_platform.spec =
     on_init = init_audio_assets;
     on_shutdown = shutdown_audio_assets;
     read_input;
+    wait_input = None;
     render = render_frame;
   }

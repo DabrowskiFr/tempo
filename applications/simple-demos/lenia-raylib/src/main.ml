@@ -322,23 +322,23 @@ let main input output =
   let toggle_edge = new_signal () in
   let process_tick = new_signal () in
   let process_updates = new_signal_agg ~initial:[] ~combine:(fun acc v -> v :: acc) in
-  let paused = new_state false in
-  let preset_idx = new_state 0 in
-  let mode_state = new_state Matrix in
-  let kernel_state = new_state (make_kernel presets.(0)) in
-  let proc_level = new_state 2 in
-  let start_x, start_y = process_candidates.(get_state proc_level) in
-  let grid_state = new_state (make_field start_x start_y) in
-  let frame_count = new_state 0 in
-  let phase = new_state 0.0 in
-  let matrix_ms = new_state 0.0 in
-  let process_ms = new_state 0.0 in
-  let proc_hi = new_state 0 in
-  let proc_lo = new_state 0 in
+  let paused = State.create false in
+  let preset_idx = State.create 0 in
+  let mode_state = State.create Matrix in
+  let kernel_state = State.create (make_kernel presets.(0)) in
+  let proc_level = State.create 2 in
+  let start_x, start_y = process_candidates.(State.get proc_level) in
+  let grid_state = State.create (make_field start_x start_y) in
+  let frame_count = State.create 0 in
+  let phase = State.create 0.0 in
+  let matrix_ms = State.create 0.0 in
+  let process_ms = State.create 0.0 in
+  let proc_hi = State.create 0 in
+  let proc_lo = State.create 0 in
 
   let resize_to_level lvl =
     let nx, ny = process_candidates.(lvl) in
-    set_state grid_state (resample_field (get_state grid_state) nx ny)
+    State.set grid_state (resample_field (State.get grid_state) nx ny)
   in
 
   let edge_proc () = Reactive.rising_edge (fun i -> i.toggle_down) input toggle_edge in
@@ -347,16 +347,16 @@ let main input output =
     let rec loop () =
       let i = await input in
       if i.reset then (
-        let gx, gy = process_candidates.(get_state proc_level) in
-        set_state grid_state (make_field gx gy));
+        let gx, gy = process_candidates.(State.get proc_level) in
+        State.set grid_state (make_field gx gy));
       if i.next_preset then (
-        modify_state preset_idx (fun idx -> (idx + 1) mod Array.length presets);
-        set_state kernel_state (make_kernel presets.(get_state preset_idx)));
+        State.modify preset_idx (fun idx -> (idx + 1) mod Array.length presets);
+        State.set kernel_state (make_kernel presets.(State.get preset_idx)));
       if i.prev_preset then (
-        modify_state preset_idx (fun idx -> (idx + Array.length presets - 1) mod Array.length presets);
-        set_state kernel_state (make_kernel presets.(get_state preset_idx)));
+        State.modify preset_idx (fun idx -> (idx + Array.length presets - 1) mod Array.length presets);
+        State.set kernel_state (make_kernel presets.(State.get preset_idx)));
       if i.switch_mode then
-        modify_state mode_state (function Matrix -> Processes | Processes -> Matrix);
+        State.modify mode_state (function Matrix -> Processes | Processes -> Matrix);
       loop ()
     in
     loop ()
@@ -365,7 +365,7 @@ let main input output =
   let toggle_proc () =
     let rec loop () =
       let _ = await toggle_edge in
-      modify_state paused not;
+      State.modify paused not;
       loop ()
     in
     loop ()
@@ -374,12 +374,12 @@ let main input output =
   let cell_process x y () =
     let rec loop () =
       let _ = await process_tick in
-      let g = get_state grid_state in
+      let g = State.get grid_state in
       let gx, gy = dims g in
       if x < gx && y < gy then (
-        let p = presets.(get_state preset_idx) in
-        let k = get_state kernel_state in
-        let ph = get_state phase in
+        let p = presets.(State.get preset_idx) in
+        let k = State.get kernel_state in
+        let ph = State.get phase in
         let v = cell_next p k g ph x y in
         emit process_updates (x, y, v));
       loop ()
@@ -399,70 +399,70 @@ let main input output =
 
   let sim_proc () =
     let rec loop () =
-      let p = presets.(get_state preset_idx) in
-      let ph = get_state phase +. 0.02 in
-      set_state phase ph;
-      if not (get_state paused) then (
-        let g = get_state grid_state in
+      let p = presets.(State.get preset_idx) in
+      let ph = State.get phase +. 0.02 in
+      State.set phase ph;
+      if not (State.get paused) then (
+        let g = State.get grid_state in
         let t0 = now_ms () in
         let next =
-          match get_state mode_state with
+          match State.get mode_state with
           | Matrix ->
-              let g' = step_field p (get_state kernel_state) g ph in
-              set_state matrix_ms (ema_update (get_state matrix_ms) (now_ms () -. t0));
+              let g' = step_field p (State.get kernel_state) g ph in
+              State.set matrix_ms (ema_update (State.get matrix_ms) (now_ms () -. t0));
               g'
           | Processes ->
               emit process_tick ();
               let g' = apply_updates g (await process_updates) in
               let dt = now_ms () -. t0 in
-              set_state process_ms (ema_update (get_state process_ms) dt);
+              State.set process_ms (ema_update (State.get process_ms) dt);
               let fps = get_fps () in
               let too_slow = dt > (budget_ms *. 1.08) || fps < (target_fps - 2) in
               let very_fast = dt < (budget_ms *. 0.68) && fps >= target_fps in
               if too_slow then (
-                set_state proc_hi (get_state proc_hi + 1);
-                set_state proc_lo 0)
+                State.set proc_hi (State.get proc_hi + 1);
+                State.set proc_lo 0)
               else if very_fast then (
-                set_state proc_lo (get_state proc_lo + 1);
-                set_state proc_hi 0)
+                State.set proc_lo (State.get proc_lo + 1);
+                State.set proc_hi 0)
               else (
-                set_state proc_hi 0;
-                set_state proc_lo 0);
-              if get_state proc_hi >= 12 && get_state proc_level > 0 then (
-                let lvl = get_state proc_level - 1 in
-                set_state proc_level lvl;
-                set_state proc_hi 0;
-                set_state proc_lo 0;
+                State.set proc_hi 0;
+                State.set proc_lo 0);
+              if State.get proc_hi >= 12 && State.get proc_level > 0 then (
+                let lvl = State.get proc_level - 1 in
+                State.set proc_level lvl;
+                State.set proc_hi 0;
+                State.set proc_lo 0;
                 resize_to_level lvl)
-              else if get_state proc_lo >= 80 && get_state proc_level < Array.length process_candidates - 1 then (
-                let lvl = get_state proc_level + 1 in
-                set_state proc_level lvl;
-                set_state proc_hi 0;
-                set_state proc_lo 0;
+              else if State.get proc_lo >= 80 && State.get proc_level < Array.length process_candidates - 1 then (
+                let lvl = State.get proc_level + 1 in
+                State.set proc_level lvl;
+                State.set proc_hi 0;
+                State.set proc_lo 0;
                 resize_to_level lvl);
               g'
         in
-        let fc = get_state frame_count + 1 in
-        set_state frame_count fc;
+        let fc = State.get frame_count + 1 in
+        State.set frame_count fc;
         if fc mod p.reseed_period = 0 then inject_blob next;
         let activity, diversity = stats next in
         if activity < 0.009 || diversity < 0.035 then (
           for _ = 1 to 3 do
             inject_blob next
           done);
-        set_state grid_state next);
-      let activity, diversity = stats (get_state grid_state) in
+        State.set grid_state next);
+      let activity, diversity = stats (State.get grid_state) in
       emit output
         {
-          grid = get_state grid_state;
-          paused = get_state paused;
-          preset_idx = get_state preset_idx;
-          mode = get_state mode_state;
+          grid = State.get grid_state;
+          paused = State.get paused;
+          preset_idx = State.get preset_idx;
+          mode = State.get mode_state;
           activity;
           diversity;
-          matrix_ms = get_state matrix_ms;
-          process_ms = get_state process_ms;
-          proc_level = get_state proc_level;
+          matrix_ms = State.get matrix_ms;
+          process_ms = State.get process_ms;
+          proc_level = State.get proc_level;
         };
       pause ();
       loop ()

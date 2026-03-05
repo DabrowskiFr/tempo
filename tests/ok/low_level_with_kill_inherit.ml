@@ -4,25 +4,25 @@ let () =
   let run () =
     execute_trace ~instants:10 ~inputs:[ None ] (fun _input output ->
         let kill = Low_level.new_kill () in
-        let parent_steps = new_state 0 in
-        let child_steps = new_state 0 in
-        let parent_continued = new_state false in
+        let parent_steps = State.create 0 in
+        let child_steps = State.create 0 in
+        let parent_continued = State.create false in
         let parent () =
           Low_level.with_kill kill (fun () ->
-              modify_state parent_steps (fun x -> x + 1);
+              State.modify parent_steps (fun x -> x + 1);
               let _ =
                 Low_level.fork (fun () ->
-                    modify_state child_steps (fun x -> x + 1);
+                    State.modify child_steps (fun x -> x + 1);
                     pause ();
-                    modify_state child_steps (fun x -> x + 1000))
+                    State.modify child_steps (fun x -> x + 1000))
               in
               pause ();
-              modify_state parent_steps (fun x -> x + 1000));
-          set_state parent_continued true
+              State.modify parent_steps (fun x -> x + 1000));
+          State.set parent_continued true
         in
         let killer () = Low_level.abort_kill kill in
         parallel [ parent; killer ];
-        emit output (get_state parent_steps, get_state child_steps, get_state parent_continued))
+        emit output (State.get parent_steps, State.get child_steps, State.get parent_continued))
   in
   let a = run () in
   let b = run () in

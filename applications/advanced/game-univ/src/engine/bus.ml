@@ -2,15 +2,23 @@ open Types
 
 type t = {
   input : input_state Tempo.signal;
+  restart : unit Tempo.signal;
+  status : (string list, string list) Tempo.agg_signal;
+  energy : (float list, float list) Tempo.agg_signal;
   draw : (draw_cmd list, draw_cmd list) Tempo.agg_signal;
   evt : (event list, event list) Tempo.agg_signal;
+  audio : (audio_cmd list, audio_cmd list) Tempo.agg_signal;
   output : frame Tempo.signal;
 }
 
 let create ~input ~output =
   {
     input;
+    restart = Tempo.new_signal ();
+    status = Tempo.new_signal_agg ~initial:[] ~combine:(fun acc msgs -> msgs @ acc);
+    energy = Tempo.new_signal_agg ~initial:[] ~combine:(fun acc deltas -> deltas @ acc);
     draw = Tempo.new_signal_agg ~initial:[] ~combine:(fun acc cmds -> cmds @ acc);
     evt = Tempo.new_signal_agg ~initial:[] ~combine:(fun acc evs -> evs @ acc);
+    audio = Tempo.new_signal_agg ~initial:[] ~combine:(fun acc cmds -> cmds @ acc);
     output;
   }

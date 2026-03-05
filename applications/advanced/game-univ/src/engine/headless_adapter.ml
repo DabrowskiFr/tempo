@@ -39,6 +39,7 @@ let create ?(default_input = Some idle_input) (script : input_state option array
       Game_io.init = (fun () -> ());
       shutdown = (fun () -> ());
       read_input;
+      wait_input = (fun () -> ());
       write_output;
     }
   in

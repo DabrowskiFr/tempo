@@ -4,6 +4,29 @@
 
 Jeu 2D Tempo + Raylib: vous incarnez un professeur qui doit détecter les étudiants en train de tricher.
 
+## Pourquoi cette application est une vitrine Tempo
+
+`game-univ` met l'accent sur les fonctionnalités du coeur Tempo plutôt que sur
+`tempo-app`.
+
+- orchestration principale avec `Tempo.parallel`
+- supervision avec `Tempo.Constructs.supervise_until`
+- runtime interactif via `Tempo.run_interactive`
+- sous-systèmes séparés et synchronisés par signaux agrégés :
+  - contrôle
+  - horloge de manche
+  - agents étudiants
+  - suspense / suspicion
+  - feedback visuel
+  - logique audio
+  - rendu de frame
+- usage explicite de `Tempo.Constructs.every_n` et `Tempo.Constructs.timeout`
+  pour des patterns temporels lisibles
+
+`Tempo_jobs` n'est volontairement pas utilisé ici : l'application n'a pas de
+vrai besoin de travail externe parallèle. Le garder hors du chemin principal
+évite d'ajouter une complexité qui ne sert pas le gameplay.
+
 ## Controls / Inputs
 
 - Clavier:
@@ -41,7 +64,14 @@ dune exec ./applications/advanced/game-univ/run
 
 ## Headless / Reproducible Mode
 
-- Pas de mode headless public standardisé.
+Runner headless disponible :
+
+```bash
+dune exec ./applications/advanced/game-univ/src/headless_runner.exe
+```
+
+Il sert à vérifier rapidement que l'orchestration Tempo produit bien des frames,
+des commandes HUD et des événements audio sans dépendre de Raylib.
 
 ## Troubleshooting
 

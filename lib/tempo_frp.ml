@@ -21,28 +21,6 @@ module Frp = struct
     ignore (Low_level.fork loop);
     out
 
-  let fold ~initial f s =
-    let st = new_state initial in
-    let rec loop () =
-      let v = await s in
-      modify_state st (fun acc -> f acc v);
-      loop ()
-    in
-    ignore (Low_level.fork loop);
-    st
-
-  let hold ~initial s =
-    let st = new_state initial in
-    let rec loop () =
-      let v = await s in
-      set_state st v;
-      loop ()
-    in
-    ignore (Low_level.fork loop);
-    st
-
-  let sample st = get_state st
-
   let once s =
     let out = new_signal () in
     let proc () =
@@ -83,35 +61,6 @@ module Frp = struct
       loop ()
     in
     ignore (Low_level.fork loop);
-    out
-
-  let debounce_n n s =
-    if n < 0 then invalid_arg "Tempo_frp.Frp.debounce_n: n must be >= 0";
-    let out = new_signal () in
-    let restart = new_signal () in
-    let latest = new_state None in
-    let collector () =
-      let rec loop () =
-        let v = await s in
-        set_state latest (Some v);
-        emit restart ();
-        loop ()
-      in
-      loop ()
-    in
-    let timers () =
-      let rec loop () =
-        let _ = await restart in
-        ignore
-          (Low_level.fork (fun () ->
-               watch restart (fun () ->
-                   Game.after_n n (fun () ->
-                       match get_state latest with Some v -> emit out v | None -> ()))));
-        loop ()
-      in
-      loop ()
-    in
-    ignore (Low_level.fork (fun () -> parallel [ collector; timers ]));
     out
 
   let switch_once trigger make =

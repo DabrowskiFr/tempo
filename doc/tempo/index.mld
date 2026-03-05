@@ -1,0 +1,19 @@
+{0 Tempo}
+
+Tempo is the primary package of the project.
+
+It exposes:
+- {!module-Tempo.Core}: the canonical synchronous programming API
+- {!module-Tempo.Constructs}: higher-level reactive operators built on the core
+- {!module-Tempo.Observe}: tracing and runtime inspection helpers
+- {!module-Tempo.Meta}: version and API-level metadata
+- {!module-Tempo.Low_level}: advanced scheduler primitives for extension authors
+
+See also:
+- {!page-overview}
+- {!page-runtime_layers}
+- the dedicated `tempo-app` package for lightweight application structure
+- the dedicated `tempo-jobs` package for external jobs on domains
+- the dedicated `tempo-raylib` package for Raylib helpers
+- the dedicated `tempo-fluidsynth` package for musical demos
+- the dedicated `tempo-score` package for Tempo-native score conversion

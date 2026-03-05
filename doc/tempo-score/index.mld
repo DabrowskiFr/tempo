@@ -1,0 +1,19 @@
+{0 tempo-score}
+
+`tempo-score` provides a Tempo-oriented musical representation:
+- logical units (`start_unit`, `duration_units`) suitable for Tempo instants
+- voices grouped by MIDI channel/bank/program
+- transport metadata (meter, initial bpm, units per bar)
+- timeline events for tempo changes and piano controls (CC64/66/67)
+- a compact textual format (`tempo-score v2`, v1-compatible on read) for
+  editing and exchange (`subdivision: 1/N`, no MIDI tick leak)
+- a binary format (`tempo-score` binary v2, v1-compatible on read) for faster
+  loading in applications (current writer emits v3; reader keeps v1/v2/v3
+  compatibility)
+
+Typical usage:
+- import a MIDI file with {!Tempo_score.of_midi_file}
+- optionally serialize with {!Tempo_score.to_text} or parse with {!Tempo_score.of_text}
+- or serialize/load in binary with {!Tempo_score.to_binary}/{!Tempo_score.of_binary}
+- schedule `note_on` / `note_off` in Tempo from unit indices
+- keep Tempo as timeline owner (pause/restart/interactive control)

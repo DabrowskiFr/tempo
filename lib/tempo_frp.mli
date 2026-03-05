@@ -3,13 +3,9 @@ open Tempo
 module Frp : sig
   val map : ('a -> 'b) -> 'a signal -> 'b signal
   val filter : ('a -> bool) -> 'a signal -> 'a signal
-  val fold : initial:'s -> ('s -> 'a -> 's) -> 'a signal -> 's state
-  val hold : initial:'a -> 'a signal -> 'a state
-  val sample : 'a state -> 'a
   val once : ('emit, 'agg, 'mode) signal_core -> 'agg signal
   val edge : bool signal -> unit signal
   val throttle_n : int -> ('emit, 'agg, 'mode) signal_core -> 'agg signal
-  val debounce_n : int -> ('emit, 'agg, 'mode) signal_core -> 'agg signal
   val switch_once : 'a signal -> ('a -> unit -> unit) -> unit
   val switch_latest : 'a signal -> ('a -> unit -> unit) -> unit
 end

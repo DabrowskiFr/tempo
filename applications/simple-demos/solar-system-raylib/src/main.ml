@@ -48,16 +48,16 @@ let render (f : frame) =
 let main input output =
   let stop = new_signal () in
   let toggle_edge = new_signal () in
-  let paused = new_state false in
-  let planet_angle = new_state 0.0 in
-  let moon_angle = new_state 0.0 in
+  let paused = State.create false in
+  let planet_angle = State.create 0.0 in
+  let moon_angle = State.create 0.0 in
 
   let input_proc () = Reactive.rising_edge (fun i -> i.toggle_down) input toggle_edge in
 
   let toggle_proc () =
     let rec loop () =
       let _ = await toggle_edge in
-      modify_state paused not;
+      State.modify paused not;
       loop ()
     in
     loop ()
@@ -65,15 +65,15 @@ let main input output =
 
   let anim_proc () =
     let rec loop () =
-      let p_speed = if get_state paused then 0.0 else planet_speed in
-      modify_state planet_angle (fun a -> a +. p_speed);
-      modify_state moon_angle (fun a -> a +. moon_speed);
-      let p_a = get_state planet_angle in
-      let m_a = get_state moon_angle in
+      let p_speed = if State.get paused then 0.0 else planet_speed in
+      State.modify planet_angle (fun a -> a +. p_speed);
+      State.modify moon_angle (fun a -> a +. moon_speed);
+      let p_a = State.get planet_angle in
+      let m_a = State.get moon_angle in
       let px, py = to_xy planet_orbit p_a in
       let mx = px + int_of_float (moon_orbit *. cos m_a) in
       let my = py + int_of_float (moon_orbit *. sin m_a) in
-      emit output { planet = (px, py); moon = (mx, my); paused = get_state paused };
+      emit output { planet = (px, py); moon = (mx, my); paused = State.get paused };
       pause ();
       loop ()
     in

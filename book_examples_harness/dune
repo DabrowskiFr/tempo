@@ -1,0 +1,13 @@
+(executable
+ (name run_book_examples)
+ (libraries tempo))
+
+(executable
+ (name generate_book_traces)
+ (modules
+  generate_book_traces
+  emit_await_example
+  await_immediate_example
+  when_watch_parallel_example
+  execute_trace_example)
+ (libraries tempo unix))

@@ -1,0 +1,28 @@
+{0 tempo-jobs}
+
+`tempo-jobs` runs external jobs on OCaml domains and bridges their updates into
+Tempo.
+
+Guarantees:
+- updates are imported into Tempo at inter-instant boundaries
+- jobs can wake an interactive runtime without busy waiting
+
+Non-guarantees:
+- the arrival time of external updates is not deterministic in the same sense
+  as the pure Tempo core
+
+Minimal example:
+
+{[
+  let pool = Tempo_jobs.create_pool ~domains:2 ()
+
+  let handle =
+    Tempo_jobs.start ~pool
+      ~work:(fun ~report_progress ~is_cancelled ->
+        for i = 1 to 10 do
+          if is_cancelled () then raise Exit;
+          report_progress i
+        done;
+        "done")
+      ()
+]}

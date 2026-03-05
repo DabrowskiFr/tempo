@@ -1,0 +1,5 @@
+(library
+ (name tempo_app)
+ (public_name tempo-app)
+ (modules tempo_app)
+ (libraries tempo))

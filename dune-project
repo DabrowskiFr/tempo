@@ -15,7 +15,7 @@
 
 (license "GPL-3.0-or-later")
 
-(documentation https://url/to/documentation)
+(documentation https://dabrowskifr.github.io/tempo/)
 
 (package
  (name tempo)
@@ -25,8 +25,8 @@
 
 (package
  (name tempo-raylib)
- (synopsis "Raylib adapters and rendering helpers for Tempo games")
- (description "Optional Raylib integration layer for Tempo. Install this package only if you build games with Raylib.")
+ (synopsis "Raylib helpers for Tempo demos and graphical applications")
+ (description "Optional Raylib integration layer for Tempo. It provides lightweight UI/HUD/FX/audio helpers and rendering backends for graphical Tempo applications.")
  (depends
   (ocaml (>= 5.3.0))
   (dune (>= 3.0))
@@ -35,18 +35,50 @@
 
 (package
  (name tempo-frp)
- (synopsis "Optional FRP/SF combinator layer for Tempo")
- (description "Optional FRP layer for Tempo. Provides Frp and SF combinators as a separate package.")
+ (synopsis "FRP and signal-function encoding on top of Tempo")
+ (description "Optional FRP/SF encoding built on top of Tempo. This package is specialized and not the main recommended entry point to the runtime.")
  (depends
   (ocaml (>= 5.3.0))
   (dune (>= 3.0))
   (tempo (= :version))))
 
 (package
- (name tempo-async)
- (synopsis "Optional async bridge utilities for Tempo")
- (description "Optional async mailbox bridge for Tempo. Keeps asynchronous producers outside Tempo and injects events synchronously at tick boundaries.")
+ (name tempo-app)
+ (synopsis "Application-oriented helpers for Tempo")
+ (description "tempo-app provides App, Loop and Scene helpers built on top of the Tempo runtime.")
  (depends
   (ocaml (>= 5.3.0))
   (dune (>= 3.0))
   (tempo (= :version))))
+
+(package
+ (name tempo-jobs)
+ (synopsis "Parallel external jobs bridged into Tempo")
+ (description "tempo-jobs runs external jobs on OCaml domains and imports their progress and completion into Tempo at inter-instant boundaries.")
+ (depends
+  (ocaml (>= 5.3.0))
+  (dune (>= 3.0))
+  (tempo (= :version))
+  threads))
+
+(package
+ (name tempo-fluidsynth)
+ (synopsis "FluidSynth backend for Tempo music applications")
+ (description "SoundFont-based music rendering and MIDI import for Tempo applications.")
+ (depends
+  (ocaml (>= 5.3.0))
+  (dune (>= 3.0))
+  (tempo (= :version))
+  dune-configurator
+  ctypes
+  ctypes-foreign
+  unix))
+
+(package
+ (name tempo-score)
+ (synopsis "Tempo-native musical score model and MIDI conversion")
+ (description "Converts MIDI files into a Tempo logical score representation (units, note spans, voices) for scheduling notes with Tempo processes.")
+ (depends
+  (ocaml (>= 5.3.0))
+  (dune (>= 3.0))
+  (tempo-fluidsynth (= :version))))

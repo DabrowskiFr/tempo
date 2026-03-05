@@ -1,21 +1,17 @@
 open Types
 
+let zone_label = function
+  | 0 -> "Gauche"
+  | 1 -> "Centre"
+  | _ -> "Droite"
+
 let frame_process (bus : Bus.t) (world : world) =
   let rec loop () =
     let _ = Tempo.await bus.input in
-    if world.started && (not world.paused) && not world.game_over then (
-      world.round_left <- max 0 (world.round_left - 1);
-      if world.round_left = 0 then
-        if world.round_index + 1 < world.rounds_total then (
-          world.round_index <- world.round_index + 1;
-          world.round_left <- world.round_frames;
-          world.message <- Printf.sprintf "Manche %d/%d" (world.round_index + 1) world.rounds_total)
-        else (
-          world.game_over <- true;
-          world.message <- "Partie terminee - appuyez sur R pour rejouer"));
     Tempo.emit bus.draw
       [
         Draw_room;
+        Draw_hot_zone world.hot_zone;
         Draw_hud
           {
             score = world.score;
@@ -30,8 +26,8 @@ let frame_process (bus : Bus.t) (world : world) =
             energy = world.energy;
             focus_left = world.focus_left;
             cheat_window_factor = world.cheat_window_factor;
-            hot_zone_label = "N/A";
-            hot_zone_left = 0;
+            hot_zone_label = zone_label world.hot_zone;
+            hot_zone_left = world.hot_zone_left;
             catches = world.catches;
             false_positives = world.false_positives;
             empty_checks = world.empty_checks;
@@ -50,10 +46,15 @@ let frame_process (bus : Bus.t) (world : world) =
 let flush (bus : Bus.t) (world : world) =
   let rec loop () =
     let cmds = Tempo.await bus.draw in
+    let audio =
+      match Tempo.Low_level.peek bus.audio with
+      | None -> []
+      | Some cmds -> List.rev cmds
+    in
     let frame =
       {
         draw = List.rev cmds;
-        audio = [];
+        audio;
         score = world.score;
         flagged = world.flagged;
         message = world.message;

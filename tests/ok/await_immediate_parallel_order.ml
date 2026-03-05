@@ -1,7 +1,15 @@
 open Tempo
 
 let run_case ~producer_first =
-  execute_trace ~instants:2 ~inputs:[ None; None ] (fun _input output ->
+  let inputs = ref [ None; None ] in
+  Observe.execute_trace ~instants:2
+    ~input:(fun () ->
+      match !inputs with
+      | [] -> None
+      | x :: xs ->
+          inputs := xs;
+          x)
+    (fun _input output ->
       let s = new_signal () in
       let waiter () =
         let v = await_immediate s in

@@ -1,0 +1,26 @@
+{0 tempo-app}
+
+`tempo-app` provides small application-oriented helpers built on top of
+Tempo:
+
+- {!module-Tempo_app.App}
+- {!module-Tempo_app.Loop}
+- {!module-Tempo_app.Scene}
+
+Minimal use cases:
+
+- use {!module-Tempo_app.App} when the program is naturally expressed as
+  model/update/command;
+- use {!module-Tempo_app.Loop} when a single ticked reducer is enough;
+- use {!module-Tempo_app.Scene} when scene transitions must remain explicit.
+
+Example:
+
+{[
+  type msg = Tick
+  type model = { ticks : int }
+
+  let update model = function
+    | `Input () -> (model, Tempo_app.App.none)
+    | `Message Tick -> ({ ticks = model.ticks + 1 }, Tempo_app.App.every_n 1 Tick)
+]}

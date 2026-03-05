@@ -12,4 +12,9 @@ let process (bus : Bus.t) (world : world) =
     if flagged_now > 0 then world.flagged <- world.flagged + flagged_now;
     loop ()
   in
-  loop ()
+  let rec restart_loop () =
+    let () = Tempo.await bus.restart in
+    world.flagged <- 0;
+    restart_loop ()
+  in
+  Tempo.parallel [ loop; restart_loop ]

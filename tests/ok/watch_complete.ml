@@ -4,15 +4,15 @@ let () =
   let run ~swap =
     execute_trace ~instants:12 ~inputs:[ None ] (fun _input output ->
         let trigger = new_signal () in
-        let ticks = new_state 0 in
-        let finished = new_state false in
+        let ticks = State.create 0 in
+        let finished = State.create false in
         let body () =
           watch trigger (fun () ->
               for _ = 1 to 3 do
-                modify_state ticks (fun x -> x + 1);
+                State.modify ticks (fun x -> x + 1);
                 pause ()
               done);
-          set_state finished true
+          State.set finished true
         in
         let driver () =
           pause ();
@@ -22,7 +22,7 @@ let () =
         in
         let procs = [ body; driver ] in
         parallel (if swap then List.rev procs else procs);
-        emit output (get_state ticks, get_state finished))
+        emit output (State.get ticks, State.get finished))
   in
   let a = run ~swap:false in
   let b = run ~swap:true in

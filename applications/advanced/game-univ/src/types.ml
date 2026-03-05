@@ -42,6 +42,7 @@ type event =
   | Cheating_start of int
   | Cheating_stop of int
   | Student_flagged of int
+  | Student_caught of int
   | Ask_success of int
   | Ask_miss of int option
   | Ask_feedback of vec2 * bool * string

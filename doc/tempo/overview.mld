@@ -1,0 +1,25 @@
+{0 Overview}
+
+Tempo is a synchronous runtime for OCaml.
+
+The intended reading order is:
+1. {!module-Tempo.Core}
+2. {!module-Tempo.Constructs}
+3. {!module-Tempo.Observe}
+4. {!module-Tempo.Meta}
+5. {!module-Tempo.Low_level}
+
+Primary companion packages:
+- `tempo-app` for lightweight application structure
+- `tempo-frp` for FRP/SF combinators
+- `tempo-jobs` for external jobs running on domains
+
+Specialized packages:
+- `tempo-raylib` for Raylib-based demos and presentation helpers
+- `tempo-fluidsynth` for SoundFont playback and MIDI import
+- `tempo-score` for a Tempo-native score model derived from MIDI
+
+Advanced applications in this repository include:
+- `applications/advanced/music_score_player`
+- `applications/advanced/game-univ`
+- `applications/advanced/tempo-core-studio`

@@ -340,24 +340,24 @@ let poll_input () =
 let main input output =
   let stop = new_signal () in
   let toggle_edge = new_signal () in
-  let paused = new_state false in
-  let grid_state = new_state (make_grid ()) in
-  let preset_idx = new_state 0 in
-  let stale_frames = new_state 0 in
-  let feed_bias = new_state 0.0 in
-  let kill_bias = new_state 0.0 in
-  let phase = new_state 0.0 in
-  let inject_counter = new_state 0 in
+  let paused = State.create false in
+  let grid_state = State.create (make_grid ()) in
+  let preset_idx = State.create 0 in
+  let stale_frames = State.create 0 in
+  let feed_bias = State.create 0.0 in
+  let kill_bias = State.create 0.0 in
+  let phase = State.create 0.0 in
+  let inject_counter = State.create 0 in
 
   let edge_proc () = Reactive.rising_edge (fun i -> i.toggle_down) input toggle_edge in
 
   let input_proc () =
     let rec loop () =
       let i = await input in
-      if i.reset then set_state grid_state (make_grid ());
-      if i.next_preset then modify_state preset_idx (fun idx -> (idx + 1) mod Array.length presets);
+      if i.reset then State.set grid_state (make_grid ());
+      if i.next_preset then State.modify preset_idx (fun idx -> (idx + 1) mod Array.length presets);
       if i.prev_preset then
-        modify_state preset_idx (fun idx -> (idx + Array.length presets - 1) mod Array.length presets);
+        State.modify preset_idx (fun idx -> (idx + Array.length presets - 1) mod Array.length presets);
       loop ()
     in
     loop ()
@@ -366,7 +366,7 @@ let main input output =
   let toggle_proc () =
     let rec loop () =
       let _ = await toggle_edge in
-      modify_state paused not;
+      State.modify paused not;
       loop ()
     in
     loop ()
@@ -374,37 +374,37 @@ let main input output =
 
   let sim_proc () =
     let rec loop () =
-      let activity = ref (activity_score (get_state grid_state)) in
-      if not (get_state paused) then (
-        let p0 = presets.(get_state preset_idx) in
+      let activity = ref (activity_score (State.get grid_state)) in
+      if not (State.get paused) then (
+        let p0 = presets.(State.get preset_idx) in
         let a0 = !activity in
         let lo = 0.03 in
         let hi = 0.09 in
         let fb, kb =
-          if a0 < lo then (get_state feed_bias +. 0.00008, get_state kill_bias -. 0.00005)
-          else if a0 > hi then (get_state feed_bias -. 0.00006, get_state kill_bias +. 0.00004)
-          else (get_state feed_bias *. 0.985, get_state kill_bias *. 0.985)
+          if a0 < lo then (State.get feed_bias +. 0.00008, State.get kill_bias -. 0.00005)
+          else if a0 > hi then (State.get feed_bias -. 0.00006, State.get kill_bias +. 0.00004)
+          else (State.get feed_bias *. 0.985, State.get kill_bias *. 0.985)
         in
-        set_state feed_bias (clamp fb (-0.008) 0.012);
-        set_state kill_bias (clamp kb (-0.01) 0.01);
-        let ph = get_state phase +. 0.015 in
-        set_state phase ph;
+        State.set feed_bias (clamp fb (-0.008) 0.012);
+        State.set kill_bias (clamp kb (-0.01) 0.01);
+        let ph = State.get phase +. 0.015 in
+        State.set phase ph;
         let wave = sin ph *. 0.0015 in
         let p =
           {
             p0 with
-            feed = clamp (p0.feed +. get_state feed_bias +. wave) 0.005 0.09;
-            kill = clamp (p0.kill +. get_state kill_bias -. (0.5 *. wave)) 0.02 0.09;
+            feed = clamp (p0.feed +. State.get feed_bias +. wave) 0.005 0.09;
+            kill = clamp (p0.kill +. State.get kill_bias -. (0.5 *. wave)) 0.02 0.09;
           }
         in
-        let g = step_grid p (get_state grid_state) |> copy_grid in
+        let g = step_grid p (State.get grid_state) |> copy_grid in
         activity := activity_score g;
-        let ic = get_state inject_counter + 1 in
-        set_state inject_counter ic;
+        let ic = State.get inject_counter + 1 in
+        State.set inject_counter ic;
         let timed_reseed = ic >= p0.inject_every in
         let stale =
-          if !activity < 0.018 then get_state stale_frames + 1
-          else max 0 (get_state stale_frames - 4)
+          if !activity < 0.018 then State.get stale_frames + 1
+          else max 0 (State.get stale_frames - 4)
         in
         if stale > 60 || timed_reseed then (
           let bursts =
@@ -413,16 +413,16 @@ let main input output =
           for _ = 1 to bursts do
             inject_spot g
           done;
-          set_state stale_frames 18;
-          set_state inject_counter 0;
+          State.set stale_frames 18;
+          State.set inject_counter 0;
           activity := activity_score g)
-        else set_state stale_frames stale;
-        set_state grid_state g);
+        else State.set stale_frames stale;
+        State.set grid_state g);
       emit output
         {
-          grid = get_state grid_state;
-          paused = get_state paused;
-          preset_idx = get_state preset_idx;
+          grid = State.get grid_state;
+          paused = State.get paused;
+          preset_idx = State.get preset_idx;
           activity = !activity;
           calibrated_ms = !calibration_ms;
           calibrated_grid = !calibration_grid;
