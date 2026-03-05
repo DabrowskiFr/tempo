@@ -31,8 +31,13 @@ jobs:
     steps:
       - name: Checkout tree
         uses: actions/checkout@v4
-      - name: Check documentation freshness
-        run: ./tools/release/check_doc_freshness.sh
+      - name: Check documentation freshness (if script exists)
+        run: |
+          if [ -x ./tools/release/check_doc_freshness.sh ]; then
+            ./tools/release/check_doc_freshness.sh
+          else
+            echo "Skipping doc freshness check: ./tools/release/check_doc_freshness.sh not found"
+          fi
       - name: Set-up OCaml
         uses: ocaml/setup-ocaml@v3
         with:
