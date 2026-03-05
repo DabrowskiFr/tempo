@@ -8,7 +8,7 @@ This is the showcase version of the score player:
 - sustain pedal (`CC64`) scheduled by Tempo from MIDI/text score events
 - piano controls (`CC64`, `CC66`, `CC67`) scheduled by Tempo
 - tempo map events (`tempo_change`) applied on the logical timeline
-- MIDI import through `tempo-fluidsynth`
+- MIDI import through the internal FluidSynth backend used by this app
 - Tempo binary score import (`.tscore`)
 - SoundFont rendering through FluidSynth
 

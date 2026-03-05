@@ -2,4 +2,4 @@
  (name tempo_score)
  (public_name tempo-score)
  (modules tempo_score)
- (libraries tempo-fluidsynth))
+ (libraries tempo_fluidsynth))

@@ -62,7 +62,7 @@ val default : t
 val of_midi_file : string -> t
 (** Convert a MIDI file into a Tempo score.
 
-    The function keeps MIDI parsing concerns in [tempo-fluidsynth], then derives
+    The function keeps MIDI parsing concerns in the internal FluidSynth backend, then derives
     a Tempo logical unit so notes can be scheduled by Tempo processes. *)
 
 val note_count : t -> int

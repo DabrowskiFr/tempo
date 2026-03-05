@@ -1,7 +1,7 @@
 (executable
  (name main)
  (modules main)
- (libraries tempo tempo-fluidsynth tempo-score raylib unix))
+ (libraries tempo tempo_fluidsynth tempo-score raylib unix))
 
 (executable
  (name score_convert)

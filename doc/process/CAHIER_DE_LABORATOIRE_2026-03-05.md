@@ -36,6 +36,10 @@ Result: local tests pass (`opam exec -- dune runtest`).
 Result: `ubuntu-latest` passes; `macos-latest` fails on transient fetch of `fpath` while resolving `--with-doc` dependencies (odoc stack), not on project code.
 - Attempt 12: reduce CI dependency surface by removing `--with-doc` from `opam install . --deps-only`.
 Result: workflow patched; pending remote confirmation.
+- Attempt 13: remove `tempo-fluidsynth` as a public package and keep FluidSynth as an internal backend used by music score features.
+Result: `tempo-fluidsynth` package stanza removed from `dune-project`, `tempo-fluidsynth.opam` removed, library switched to private/internal (`tempo_fluidsynth`) and consumers rewired (`tempo-score`, `music_score_player`).
+- Attempt 14: adjust package metadata/documentation after package removal.
+Result: `tempo-score` now carries the required native deps (`dune-configurator`, `ctypes`, `ctypes-foreign`, `base-unix`) and public docs no longer list `tempo-fluidsynth` as a dedicated package.
 
 ### Root cause analysis
 `threads` is not an opam package dependency name for CI solver use in this context.

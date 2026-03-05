@@ -4,6 +4,7 @@ Date: 2026-03-05
 
 ## Objectif
 Diagnostiquer et corriger un echec CI GitHub sur la branche `release/0.2.0` avec correction minimale, explicable et verifiable.
+Retirer `tempo-fluidsynth` des packages publics pour le conserver comme backend interne rattache au parcours music-score.
 
 ## Methodologie
 1. Identifier un run en echec recent via `gh run list`.
@@ -15,6 +16,7 @@ Diagnostiquer et corriger un echec CI GitHub sur la branche `release/0.2.0` avec
 7. Re-boucler tant que la CI expose une nouvelle cause racine.
 8. Distinguer dependances opam et dependances systeme (C headers/libs) pour les bindings natifs.
 9. Limiter la surface des dependances CI aux besoins de build/test pour reduire les echecs reseau non essentiels.
+10. Quand un composant est juge "application-specific", le sortir des packages publics et reaffecter ses dependances au package public restant.
 
 ## Procedure pratique
 1. `gh run list --limit 8`
