@@ -28,12 +28,17 @@ Result: local metadata corrected; CI rerun required.
 Result: failure moved to compile step (`fluidsynth.h` not found) on both Ubuntu and macOS.
 - Attempt 8: install system FluidSynth development libraries in CI workflow.
 Result: patch applied (`apt` + `brew`), pending remote CI confirmation.
+- Attempt 9: inspect remaining Ubuntu-only failure after FluidSynth fix.
+Result: failure is now in `dune runtest` (`tests/ok/jobs_api.expected` mismatch: empty output on Ubuntu).
+- Attempt 10: remove artificial instant cap (`~instants:20`) in `jobs_api` test so the job has enough time to publish updates on slower scheduling.
+Result: local tests pass (`opam exec -- dune runtest`).
 
 ### Root cause analysis
 `threads` is not an opam package dependency name for CI solver use in this context.
 The expected dependency is `base-threads`.
 Additionally, `unix` must be declared as `base-unix` in opam package dependencies.
 Finally, building `tempo-fluidsynth` requires the external C development headers for FluidSynth; opam dependency resolution alone is insufficient.
+The `jobs_api` test had a platform-sensitive timing assumption due to a fixed small instant budget.
 
 ### Applied fix
 - Updated package declaration in `dune-project` for `tempo-jobs`.

@@ -5,7 +5,7 @@ let () =
   Fun.protect
     ~finally:(fun () -> Tempo_jobs.shutdown_pool pool)
     (fun () ->
-      execute ~instants:20 (fun _ _ ->
+      execute (fun _ _ ->
           let handle =
             Tempo_jobs.start ~pool
               ~work:(fun ~report_progress ~is_cancelled:_ ->

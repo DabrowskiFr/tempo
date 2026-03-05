@@ -28,3 +28,4 @@ Diagnostiquer et corriger un echec CI GitHub sur la branche `release/0.2.0` avec
 - Plus d'erreur solveur opam sur `deps-of-tempo-fluidsynth -> unix`.
 - Plus d'erreur compilation C sur `fluidsynth.h` manquant.
 - Jobs CI `ubuntu-latest` et `macos-latest` passent le step `opam install . --deps-only --with-doc --with-test`.
+- Plus de faux negatif de test lie a un budget d'instants trop court (`jobs_api`).
