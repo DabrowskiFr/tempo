@@ -19,12 +19,19 @@
 open Tempo_types
 
 val kills_alive : kill list -> bool
+val task_guards_ok : task -> bool
+val task_kills_alive : task -> bool
+val bump_kill_epoch : unit -> unit
+val bump_guard_epoch : unit -> unit
 val enqueue_now : scheduler_state -> task -> unit
 val enqueue_next : scheduler_state -> task -> unit
 val block_on_guards : scheduler_state -> task -> unit
+val block_on_guards_with_missing :
+  scheduler_state -> task -> any_signal list -> unit
 
 val spawn_now :
-     scheduler_state
+     ?parent:task
+  -> scheduler_state
   -> thread
   -> any_signal list
   -> kill list
@@ -32,7 +39,9 @@ val spawn_now :
   -> task
 
 val spawn_next :
-     scheduler_state
+     ?parent:task
+  ->
+  scheduler_state
   -> thread
   -> any_signal list
   -> kill list

@@ -27,6 +27,7 @@ type ('emit, 'agg, 'mode) signal_core = {
   ; mutable value : 'agg option
   ; mutable awaiters : ('agg -> unit) list
   ; mutable guard_waiters : task list
+  ; mutable kill_watchers : kill list
   ; kind : ('emit, 'agg, 'mode) signal_kind
 }
 
@@ -42,6 +43,10 @@ and task = {
     t_id : int
   ; guards : any_signal list
   ; kills : kill list
+  ; mutable guards_checked_epoch : int
+  ; mutable guards_ok_cached : bool
+  ; mutable kills_checked_epoch : int
+  ; mutable kills_alive_cached : bool
   ; thread : thread
   ; run : unit -> unit
   ; mutable queued : bool
@@ -59,6 +64,8 @@ type thread_state = {
   ; mutable waiters : (unit -> unit) list
 }
 
+type thread_table = { mutable states : thread_state option array }
+
 type debug_info = {
     mutable sig_counter : int
   ; mutable task_counter : int
@@ -72,9 +79,8 @@ type scheduler_state = {
   ; mutable blocked : task list
   ; mutable signals : any_signal list
   ; mutable thread_counter : int
-  ; threads : (thread, thread_state) Hashtbl.t
+  ; threads : thread_table
   ; debug : debug_info
-  ; mutable waiting : (thread * thread) list
 }
 
 type _ Effect.t +=

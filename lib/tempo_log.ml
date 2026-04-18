@@ -83,6 +83,8 @@ module Tempo_log = struct
         rank current >= rank level
     | None -> false
 
+  let should_log ?(level = Backend_logs.Debug) () = level_enabled level
+
   let log ?(level = Backend_logs.Debug) ?task ?signal _ctx scope fmt =
     let printer =
       if level_enabled level then
@@ -298,24 +300,26 @@ module Tempo_log = struct
     let iter f = Hashtbl.iter (fun scope data -> f scope data) table
   end
 
-  let record_duration scope span = Scope_metrics.record scope span
+  let record_duration scope span =
+    if level_enabled Backend_logs.Debug then Scope_metrics.record scope span
 
   let log_duration_summary () =
-    Scope_metrics.iter (fun scope data ->
-        let avg =
-          if data.count = 0 then Mtime.Span.zero
-          else
-            let avg_ns =
-              Mtime.Span.to_float_ns data.total /. float data.count
-            in
-            match Mtime.Span.of_float_ns avg_ns with
-            | Some span -> span
-            | None -> Mtime.Span.zero
-        in
-        log
-          (context ~instant:0 ~step:0)
-          "metrics" "[%s] count=%d total=%a avg=%a max=%a" scope data.count
-          pp_span data.total pp_span avg pp_span data.max)
+    if level_enabled Backend_logs.Debug then
+      Scope_metrics.iter (fun scope data ->
+          let avg =
+            if data.count = 0 then Mtime.Span.zero
+            else
+              let avg_ns =
+                Mtime.Span.to_float_ns data.total /. float data.count
+              in
+              match Mtime.Span.of_float_ns avg_ns with
+              | Some span -> span
+              | None -> Mtime.Span.zero
+          in
+          log
+            (context ~instant:0 ~step:0)
+            "metrics" "[%s] count=%d total=%a avg=%a max=%a" scope data.count
+            pp_span data.total pp_span avg pp_span data.max)
 
   (* --- Log-level selection / reporter init -------------------------------- *)
   type log_level = Quiet | Error | Warning | Info | Debug

@@ -17,26 +17,41 @@
  *---------------------------------------------------------------------------*)
 
 type thread_state = Tempo_types.thread_state
+type thread_table = Tempo_types.thread_table
 
-let ensure (threads : (Tempo_types.thread, thread_state) Hashtbl.t)
-    (thread : Tempo_types.thread) =
-  match Hashtbl.find_opt threads thread with
+let create () : thread_table = { states = Array.make 16 None }
+
+let ensure_capacity (threads : thread_table) (thread : Tempo_types.thread) =
+  if thread >= Array.length threads.states then (
+    let new_len = ref (Array.length threads.states) in
+    while thread >= !new_len do
+      new_len := !new_len * 2
+    done;
+    let resized = Array.make !new_len None in
+    Array.blit threads.states 0 resized 0 (Array.length threads.states);
+    threads.states <- resized)
+
+let ensure (threads : thread_table) (thread : Tempo_types.thread) =
+  ensure_capacity threads thread;
+  match threads.states.(thread) with
   | Some ts -> ts
   | None ->
       let ts = Tempo_types.{ active = 0; completed = false; waiters = [] } in
-      Hashtbl.add threads thread ts;
+      threads.states.(thread) <- Some ts;
       ts
 
-let find (threads : (Tempo_types.thread, thread_state) Hashtbl.t)
-    (thread : Tempo_types.thread) =
-  match Hashtbl.find_opt threads thread with
-  | Some ts -> ts
-  | None -> invalid_arg (Printf.sprintf "unknown thread %d" thread)
+let find (threads : thread_table) (thread : Tempo_types.thread) =
+  if thread < 0 || thread >= Array.length threads.states then
+    invalid_arg (Printf.sprintf "unknown thread %d" thread)
+  else
+    match threads.states.(thread) with
+    | Some ts -> ts
+    | None -> invalid_arg (Printf.sprintf "unknown thread %d" thread)
 
-let add_join_waiter threads (thread : Tempo_types.thread) waiter =
+let add_join_waiter (threads : thread_table) (thread : Tempo_types.thread) waiter
+    =
   let state = find threads thread in
-  if state.completed then waiter ()
-  else state.waiters <- waiter :: state.waiters
+  if state.completed then waiter () else state.waiters <- waiter :: state.waiters
 
 let new_thread_id (st : Tempo_types.scheduler_state) =
   let id = st.thread_counter in
@@ -44,7 +59,7 @@ let new_thread_id (st : Tempo_types.scheduler_state) =
   let _ = ensure st.threads id in
   id
 
-let finish_task threads (thread : Tempo_types.thread) =
+let finish_task (threads : thread_table) (thread : Tempo_types.thread) =
   let rec resume_waiters waiters =
     match waiters with
     | [] -> ()

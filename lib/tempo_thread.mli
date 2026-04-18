@@ -17,24 +17,20 @@
  *---------------------------------------------------------------------------*)
 
 type thread_state = Tempo_types.thread_state
+type thread_table = Tempo_types.thread_table
 
-val ensure :
-     (Tempo_types.thread, thread_state) Hashtbl.t
-  -> Tempo_types.thread
-  -> thread_state
+val create : unit -> thread_table
 
-val find :
-     (Tempo_types.thread, thread_state) Hashtbl.t
-  -> Tempo_types.thread
-  -> thread_state
+val ensure : thread_table -> Tempo_types.thread -> thread_state
+
+val find : thread_table -> Tempo_types.thread -> thread_state
 
 val add_join_waiter :
-     (Tempo_types.thread, thread_state) Hashtbl.t
+     thread_table
   -> Tempo_types.thread
   -> (unit -> unit)
   -> unit
 
 val new_thread_id : Tempo_types.scheduler_state -> Tempo_types.thread
 
-val finish_task :
-  (Tempo_types.thread, thread_state) Hashtbl.t -> Tempo_types.thread -> unit
+val finish_task : thread_table -> Tempo_types.thread -> unit

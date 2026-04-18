@@ -195,6 +195,10 @@ val watch : ('emit, 'agg, 'mode) signal_core -> (unit -> unit) -> unit
     and waits for all of them to finish (using {!val:Low_level.join}). *)
 val parallel : (unit -> unit) list -> unit
 
+(** [fork_join2 a b] is a fast path for the common two-branch case:
+    it forks [b], executes [a] in the current task, then joins [b]. *)
+val fork_join2 : (unit -> unit) -> (unit -> unit) -> unit
+
 (** [present_then s then_branch else_branch] implements the classic Boussinot
     [present] statement. If [s] is present in the current instant,
     [then_branch] runs immediately within the same instant; otherwise,

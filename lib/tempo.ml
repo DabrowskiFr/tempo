@@ -50,7 +50,10 @@ module Low_level = struct
   let new_kill () = { alive = ref true; cleanup = None }
 
   let abort_kill (k : kill) =
-    if !(k.alive) then k.alive := false;
+    if !(k.alive) then begin
+      k.alive := false;
+      Tempo_task.bump_kill_epoch ()
+    end;
     match k.cleanup with
     | None -> ()
     | Some cleanup ->
@@ -67,7 +70,7 @@ let when_ (s : ('emit, 'agg, 'mode) signal_core) (body : unit -> unit) : unit =
 
 let watch (s : ('emit, 'agg, 'mode) signal_core) (body : unit -> unit) : unit =
   let kill = Low_level.new_kill () in
-  let _ = fork (fun () -> when_ s (fun () -> Low_level.abort_kill kill)) in
+  Tempo_signal.register_kill_watcher s kill;
   Low_level.with_kill kill body;
   if !(kill.alive) then Low_level.abort_kill kill
 
@@ -89,9 +92,30 @@ let present_then_else (s : ('emit, 'agg, 'mode) signal_core)
   if not !seen then else_ ();
   Low_level.abort_kill kill
 
+let fork_join2 a b =
+  let t = fork b in
+  a ();
+  join t
+
 let parallel procs =
-  let threads = List.map fork procs in
-  List.iter join threads
+  let rec spawn acc = function
+    | [] -> acc
+    | p :: ps -> spawn (fork p :: acc) ps
+  in
+  let rec join_all = function
+    | [] -> ()
+    | t :: ts ->
+        join t;
+        join_all ts
+  in
+  match procs with
+  | [] -> ()
+  | [ p ] -> p ()
+  | [ a; b ] -> fork_join2 a b
+  | p :: ps ->
+      let threads = spawn [] ps in
+      p ();
+      join_all threads
 
 (* Toggle a process on/off each time [toggle] is emitted. Starts stopped. *)
 
