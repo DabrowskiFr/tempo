@@ -120,6 +120,40 @@ let parallel procs =
       p ();
       join_all threads
 
+(* Toggle a process on/off each time [toggle] is emitted. Starts stopped. *)
+let rec loop_helper p () =
+  p ();
+  pause ();
+  loop_helper p ()
+
+let rec idle_helper () =
+  pause ();
+  idle_helper ()
+
+let control_helper (toggle : unit signal) (proc : unit -> unit) =
+  let rec loop_control running =
+    if running then (
+      await toggle;
+      loop_control false)
+    else (
+      await toggle;
+      let _ = fork (fun () -> watch toggle proc) in
+      loop_control true)
+  in
+  loop_control false
+
+(* Toggle between two behaviors each time [toggle] is emitted.
+   Starts immediately with [proc_a], then switches on every toggle. *)
+let alternate_helper (toggle : unit signal) (proc_a : unit -> unit)
+    (proc_b : unit -> unit) =
+  let rec loop_alternate use_a =
+    let proc = if use_a then proc_a else proc_b in
+    let _ = fork (fun () -> watch toggle proc) in
+    await toggle;
+    loop_alternate (not use_a)
+  in
+  loop_alternate true
+
 module Constructs = struct
   let present_then_else = present_then_else
 
@@ -172,6 +206,11 @@ module Constructs = struct
           every_n n (fun () -> emit s ()))
     in
     s
+
+  let loop = loop_helper
+  let idle = idle_helper
+  let control = control_helper
+  let alternate = alternate_helper
 end
 
 let after_n = Constructs.after_n
@@ -180,40 +219,5 @@ let timeout = Constructs.timeout
 let cooldown = Constructs.cooldown
 let supervise_until = Constructs.supervise_until
 let pulse_n = Constructs.pulse_n
-
-(* Toggle a process on/off each time [toggle] is emitted. Starts stopped. *)
-
-let rec loop p () =
-  p ();
-  pause ();
-  loop p ()
-
-let rec idle () =
-  pause ();
-  idle ()
-
-let control (toggle : unit signal) (proc : unit -> unit) =
-  let rec loop running =
-    if running then (
-      await toggle;
-      loop false)
-    else (
-      await toggle;
-      let _ = fork (fun () -> watch toggle proc) in
-      loop true)
-  in
-  loop false
-
-(* Toggle between two behaviors each time [toggle] is emitted.
-   Starts immediately with [proc_a], then switches on every toggle. *)
-let alternate (toggle : unit signal) (proc_a : unit -> unit)
-    (proc_b : unit -> unit) =
-  let rec loop use_a =
-    let proc = if use_a then proc_a else proc_b in
-    let _ = fork (fun () -> watch toggle proc) in
-    await toggle;
-    loop (not use_a)
-  in
-  loop true
 
 let execute = Tempo_engine.execute

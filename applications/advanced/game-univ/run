@@ -8,8 +8,7 @@ TARGET="cheat_detector_game"
 if [ "${1:-}" = "help" ] || [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
   cat <<'EOT'
 Usage:
-  dune exec ./applications/run -- game-univ [-- <app-args...>]
-  dune exec ./applications/advanced/game-univ/run -- [<app-args...>]
+  sh applications/advanced/game-univ/run [-- <app-args...>]
 
 Notes:
   - Additional arguments are forwarded to the app executable.
@@ -22,6 +21,10 @@ if [ -n "${DUNE_SOURCEROOT:-}" ]; then
   cd "${DUNE_SOURCEROOT}/applications/advanced/game-univ"
 else
   cd "$(dirname "$0")"
+fi
+
+if [ "${1:-}" = "--" ]; then
+  shift
 fi
 
 exec dune exec "cheat_detector_game" -- "$@"

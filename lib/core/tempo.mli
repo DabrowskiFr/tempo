@@ -219,15 +219,13 @@ module Constructs : sig
   val supervise_until :
     ('emit, 'agg, 'mode) signal_core -> (unit -> unit) -> unit
   val pulse_n : int -> unit signal
+
+  val loop : (unit -> unit) -> unit -> 'a
+  val idle : unit -> 'a
+  val control :
+    (unit, unit, Tempo_types.event) signal_core -> (unit -> unit) -> 'a
+  val alternate : unit signal -> (unit -> unit) -> (unit -> unit) -> 'a
 end
-
-val loop : (unit -> unit) -> unit -> 'a
-
-val idle : unit -> 'a
-
-val control : (unit, unit, Tempo_types.event) signal_core -> (unit -> unit) -> 'a
-
-val alternate : unit signal -> (unit -> unit) -> (unit -> unit) -> 'a
 
 (** [execute ?instants ?input ?output main] starts the synchronous execution of a
     top-level process. The callback [main input_signal output_signal] receives:

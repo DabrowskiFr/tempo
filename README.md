@@ -13,10 +13,11 @@ All three are grounded in the idea that deterministic concurrency can be made tr
 - [Installation](#installation)
 - [Build](#build)
 - [Run tests](#run-tests)
-- [Run applications (Raylib)](#run-applications-raylib)
+- [Run applications](#run-applications)
+- [Advanced applications: dependencies and Tempo libraries](#advanced-applications-dependencies-and-tempo-libraries)
 - [Run sample applications](#run-sample-applications)
-- [Run graphical demos](#run-graphical-demos)
 - [Create and run your own Tempo application](#create-and-run-your-own-tempo-application)
+- [Documentation](#documentation)
 - [Logging and runtime flags](#logging-and-runtime-flags)
 - [Other useful commands](#other-useful-commands)
 
@@ -83,7 +84,7 @@ let heartbeat = Constructs.pulse_n 10
 
 ## Control helpers
 
-A few helpers are built on top of the primitives and exported by `Tempo`:
+A few helpers are built on top of the primitives and available under `Tempo.Constructs`:
 
 - `loop f` — repeat `f` forever with a `pause` between iterations.
 - `idle` — a `pause`-forever process.
@@ -113,11 +114,13 @@ opam pin add tempo . --no-action
 opam install . --deps-only --with-test --with-doc
 ```
 
-Optional packages used by applications/examples:
+Optional packages used by graphical applications:
 
 ```sh
-opam install raylib tsdl tsdl-ttf ctypes ctypes-foreign dune-configurator
-brew install fluid-synth   # macOS (for tempo-fluidsynth / music_score_player)
+opam install raylib
+opam install ./tempo-raylib.opam --deps-only
+opam install ./tempo-fluidsynth.opam ./tempo-score.opam --deps-only
+brew install fluid-synth   # macOS (needed for tempo-fluidsynth / music_score_player)
 ```
 
 ---
@@ -160,7 +163,7 @@ dune exec tests/ok/emit_once_await_one.exe
 
 ---
 
-## Run applications (Raylib)
+## Run applications
 
 From repository root, use the project switch first:
 
@@ -168,25 +171,22 @@ From repository root, use the project switch first:
 eval $(opam env --switch 5.4.1+options --set-switch)
 ```
 
-Then launch applications:
+Then launch simple demos:
 
 ```sh
-sh applications/simple-demos/boids-raylib/run
-sh applications/simple-demos/snake-raylib/run
 sh applications/simple-demos/ca-continuous-raylib/run
-sh applications/simple-demos/lenia-raylib/run
-sh applications/simple-demos/logicgroove/run
+sh applications/simple-demos/cloth-raylib/run
+sh applications/simple-demos/nbody-raylib/run
+sh applications/simple-demos/pendulums-raylib/run
 sh applications/simple-demos/solar-system-raylib/run
-sh applications/simple-demos/temporalsim/run
-sh applications/advanced/game-univ/run
-sh applications/advanced/tempo-core-studio/run
 ```
 
-`music_score_player` currently has no `run` script:
+Launch advanced applications:
 
 ```sh
-cd applications/advanced/music_score_player
-dune exec ./src/main.exe --
+sh applications/advanced/game-univ/run
+sh applications/advanced/tempo-core-studio/run
+sh applications/advanced/music_score_player/run
 ```
 
 Headless mode example (tempo-core-studio):
@@ -194,6 +194,39 @@ Headless mode example (tempo-core-studio):
 ```sh
 sh applications/advanced/tempo-core-studio/run -- --headless --instants 32
 ```
+
+---
+
+## Advanced applications: dependencies and Tempo libraries
+
+`examples/` has been removed. Interactive/graphical apps now live in `applications/simple-demos/` and `applications/advanced/`.
+
+For advanced apps, install the runtime stack once:
+
+```sh
+opam install raylib
+opam install ./tempo-raylib.opam --deps-only
+opam install ./tempo-fluidsynth.opam ./tempo-score.opam --deps-only
+brew install fluid-synth   # macOS
+```
+
+If you want the Tempo libraries installed in your switch as opam packages:
+
+```sh
+opam pin add tempo . --no-action
+opam pin add tempo-raylib . --no-action
+opam pin add tempo-fluidsynth . --no-action
+opam pin add tempo-score . --no-action
+opam install tempo tempo-raylib tempo-fluidsynth tempo-score
+```
+
+Application dependency map:
+
+| Application | Required Tempo libraries | Other OCaml deps | System deps |
+| --- | --- | --- | --- |
+| `applications/advanced/tempo-core-studio` | `tempo`, `tempo-raylib` | `raylib` | none beyond Raylib runtime |
+| `applications/advanced/game-univ` | `tempo`, `tempo-raylib` | `raylib`, `unix` | none beyond Raylib runtime |
+| `applications/advanced/music_score_player` | `tempo`, `tempo-score`, `tempo-fluidsynth` | `raylib`, `unix`, `ctypes`, `ctypes-foreign`, `dune-configurator` | FluidSynth (`fluid-synth` on macOS), SoundFont (`.sf2`/`.sf3`) |
 
 ---
 
@@ -217,34 +250,6 @@ You can also run tests as small scenario applications from `tests/ok/`:
 ```sh
 dune exec tests/ok/watch_nested.exe -- --log-level info
 ```
-
----
-
-## Run graphical demos
-
-The `examples/` directory contains TSDL-based demos.
-
-Available executables include:
-
-- `boids_tsdl`
-- `snake_tsdl`
-- `solar_system_tsdl`
-- `ca_continuous_tsdl`
-- `nbody_tsdl`
-- `cloth_tsdl`
-- `pendulums_tsdl`
-- `traffic_tsdl`
-- `fire_smoke_tsdl`
-- `chamber_orbs_tsdl`
-- `mage_arena_tsdl`
-
-Run one demo:
-
-```sh
-dune exec examples/boids_tsdl.exe
-```
-
-Note: these demos require `tsdl`, `tsdl-ttf`, and a working graphical environment.
 
 ---
 
@@ -279,6 +284,29 @@ Run it:
 
 ```sh
 dune exec path/to/my_app.exe
+```
+
+---
+
+## Documentation
+
+Generate API documentation:
+
+```sh
+dune build @doc
+```
+
+Open the generated documentation index:
+
+```sh
+open _build/default/_doc/_html/index.html      # macOS
+xdg-open _build/default/_doc/_html/index.html  # Linux
+```
+
+The Tempo library entry page is:
+
+```text
+_build/default/_doc/_html/tempo/index.html
 ```
 
 ---
