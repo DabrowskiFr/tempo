@@ -7,10 +7,20 @@ All three are grounded in the idea that deterministic concurrency can be made tr
 
 - [Instants and execution model](#instants-and-execution-model)
 - [Fundamental primitives](#fundamental-primitives)
-- [Derived functions](#derived-functions)
+- [Construct primitives](#construct-primitives)
+- [Control helpers](#control-helpers)
 - [Guards and preemption](#guards-and-preemption)
-- [Installation & usage](#installation--usage)
-- [Examples](#examples)
+- [Installation](#installation)
+- [Build](#build)
+- [Run tests](#run-tests)
+- [Run applications](#run-applications)
+- [Application screenshots](#application-screenshots)
+- [Advanced applications: dependencies and Tempo libraries](#advanced-applications-dependencies-and-tempo-libraries)
+- [Run sample applications](#run-sample-applications)
+- [Create and run your own Tempo application](#create-and-run-your-own-tempo-application)
+- [Documentation](#documentation)
+- [Logging and runtime flags](#logging-and-runtime-flags)
+- [Other useful commands](#other-useful-commands)
 
 ---
 
@@ -46,11 +56,37 @@ Reactive programs are built from seven primitive operations:
 - **`watch signal body`** executes body until signal is emitted. Such an emission causes body to be terminated at the end of the current instant, implementing weak preemption.
 
 --- 
-## Derived functions
+## Construct primitives
 
-A few helpers are built on top of the primitives and exported by `Tempo`:
+High-level reactive operators are available both:
+
+- at top-level (`Tempo.after_n`, `Tempo.timeout`, ...),
+- and under `Tempo.Constructs` (`Tempo.Constructs.after_n`, ...).
+
+These constructs are built on top of the seven fundamental primitives.
 
 - `present_then_else s then_ else_` — run `then_` if `s` is present in the current instant, otherwise run `else_` in the next instant.
+- `after_n n body` — wait `n` logical instants, then run `body`.
+- `every_n n body` — run `body` every `n` logical instants forever.
+- `timeout n ~on_timeout body` — run `body` under weak preemption, cancel it after `n` instants, then run `on_timeout`.
+- `cooldown n s body` — run `body` when `s` is observed, then ignore subsequent occurrences for `n` instants.
+- `supervise_until stop body` — alias for a weak preemption scope (`watch stop body`).
+- `pulse_n n` — create a unit signal that is emitted periodically every `n` instants.
+
+Example:
+
+```ocaml
+open Tempo
+
+let heartbeat = Constructs.pulse_n 10
+```
+
+---
+
+## Control helpers
+
+A few helpers are built on top of the primitives and available under `Tempo.Constructs`:
+
 - `loop f` — repeat `f` forever with a `pause` between iterations.
 - `idle` — a `pause`-forever process.
 - `control toggle proc` — start/stop `proc` each time `toggle` is emitted (starts stopped).
@@ -58,46 +94,294 @@ A few helpers are built on top of the primitives and exported by `Tempo`:
 
 ---
 
-> **Warning**  
-> Tempo also exposes a low-level module, Tempo.Low_level, intended for advanced use cases. This module provides direct access to primitive operations such as task termination (kill), explicit fork/join, and manual guard management. Unless you are implementing custom control structures, the high-level primitives should be preferred.
+## Installation
+
+Requirements:
+
+- OCaml >= 5.3
+- dune >= 3
+- opam (recommended)
+
+From the repository root:
+
+```sh
+opam install . --deps-only --with-test --with-doc
+```
+
+If you want to pin this local checkout:
+
+```sh
+opam pin add tempo . --no-action
+opam install . --deps-only --with-test --with-doc
+```
+
+Optional packages used by graphical applications:
+
+```sh
+opam install raylib
+opam install ./tempo-raylib.opam --deps-only
+opam install ./tempo-fluidsynth.opam ./tempo-score.opam --deps-only
+brew install fluid-synth   # macOS (needed for tempo-fluidsynth / music_score_player)
+```
 
 ---
 
+## Build
 
-## Installation & usage
-
-Dependencies: OCaml 5.3 or later and dune.
-
-### Build the library
+Build everything:
 
 ```sh
 dune build
 ```
 
-### Execute the test suite
+Build only the public library/installable targets:
+
+```sh
+dune build @install
+```
+
+---
+
+## Run tests
+
+Run the full test suite:
+
+```sh
+dune runtest
+```
+
+Equivalent shorthand:
 
 ```sh
 dune test
 ```
 
-### Run an example
+Run a single test executable:
 
 ```sh
-dune exec tests/ok/emit_once_await_one.exe -- --log-level info
+dune exec tests/ok/emit_once_await_one.exe
 ```
-
-Passing --log-level enables logging of logical instants, making it possible to trace the progression of instants during execution.
-
-### Generate the documentation 
-
-```sh 
-dune ocaml doc
-```
-
-To use Tempo in your own project, add `tempo` to your dune file and `open Tempo` to your source file. 
 
 ---
 
-## Examples 
+## Run applications
 
-See examples in `tests/ok`
+From repository root, use the project switch first:
+
+```sh
+eval $(opam env --switch 5.4.1+options --set-switch)
+```
+
+Then launch simple demos:
+
+```sh
+sh applications/simple-demos/ca-continuous-raylib/run
+sh applications/simple-demos/cloth-raylib/run
+sh applications/simple-demos/nbody-raylib/run
+sh applications/simple-demos/pendulums-raylib/run
+sh applications/simple-demos/solar-system-raylib/run
+```
+
+Launch advanced applications:
+
+```sh
+sh applications/advanced/game-univ/run
+sh applications/advanced/tempo-core-studio/run
+sh applications/advanced/music_score_player/run
+```
+
+Headless mode example (tempo-core-studio):
+
+```sh
+sh applications/advanced/tempo-core-studio/run -- --headless --instants 32
+```
+
+---
+
+## Application screenshots
+
+### Simple demos
+
+`solar-system-raylib`  
+![solar-system-raylib](docs/screenshots/solar-system-raylib.png)
+
+`ca-continuous-raylib`  
+![ca-continuous-raylib](docs/screenshots/ca-continuous-raylib.png)
+
+`nbody-raylib`  
+![nbody-raylib](docs/screenshots/nbody-raylib.png)
+
+`pendulums-raylib`  
+![pendulums-raylib](docs/screenshots/pendulums-raylib.png)
+
+`cloth-raylib`  
+![cloth-raylib](docs/screenshots/cloth-raylib.png)
+
+### Advanced applications
+
+`tempo-core-studio`  
+![tempo-core-studio](docs/screenshots/tempo-core-studio.png)
+
+`game-univ`  
+![game-univ](docs/screenshots/game-univ.png)
+
+`music-score-player`  
+![music-score-player](docs/screenshots/music-score-player.png)
+
+---
+
+## Advanced applications: dependencies and Tempo libraries
+
+`examples/` has been removed. Interactive/graphical apps now live in `applications/simple-demos/` and `applications/advanced/`.
+
+For advanced apps, install the runtime stack once:
+
+```sh
+opam install raylib
+opam install ./tempo-raylib.opam --deps-only
+opam install ./tempo-fluidsynth.opam ./tempo-score.opam --deps-only
+brew install fluid-synth   # macOS
+```
+
+If you want the Tempo libraries installed in your switch as opam packages:
+
+```sh
+opam pin add tempo . --no-action
+opam pin add tempo-raylib . --no-action
+opam pin add tempo-fluidsynth . --no-action
+opam pin add tempo-score . --no-action
+opam install tempo tempo-raylib tempo-fluidsynth tempo-score
+```
+
+Application dependency map:
+
+| Application | Required Tempo libraries | Other OCaml deps | System deps |
+| --- | --- | --- | --- |
+| `applications/advanced/tempo-core-studio` | `tempo`, `tempo-raylib` | `raylib` | none beyond Raylib runtime |
+| `applications/advanced/game-univ` | `tempo`, `tempo-raylib` | `raylib`, `unix` | none beyond Raylib runtime |
+| `applications/advanced/music_score_player` | `tempo`, `tempo-score`, `tempo-fluidsynth` | `raylib`, `unix`, `ctypes`, `ctypes-foreign`, `dune-configurator` | FluidSynth (`fluid-synth` on macOS), SoundFont (`.sf2`/`.sf3`) |
+
+---
+
+## Run sample applications
+
+The `samples/` directory contains small CLI-oriented programs:
+
+- `emit_twice`
+- `when_emit_parallel`
+- `awaiters_log`
+- `all_effects_log`
+
+Run one sample:
+
+```sh
+dune exec samples/all_effects_log.exe -- --log-level info
+```
+
+You can also run tests as small scenario applications from `tests/ok/`:
+
+```sh
+dune exec tests/ok/watch_nested.exe -- --log-level info
+```
+
+---
+
+## Create and run your own Tempo application
+
+In your dune file:
+
+```lisp
+(executable
+ (name my_app)
+ (libraries tempo))
+```
+
+In your OCaml file:
+
+```ocaml
+open Tempo
+
+let program _input _output =
+  let s = new_signal () in
+  parallel [
+    (fun () ->
+       let v = await s in
+       Format.printf "received %d@." v);
+    (fun () -> emit s 42)
+  ]
+
+let () = execute program
+```
+
+Run it:
+
+```sh
+dune exec path/to/my_app.exe
+```
+
+---
+
+## Documentation
+
+Generate API documentation:
+
+```sh
+dune build @doc
+```
+
+Open the generated documentation index:
+
+```sh
+open _build/default/_doc/_html/index.html      # macOS
+xdg-open _build/default/_doc/_html/index.html  # Linux
+```
+
+The Tempo library entry page is:
+
+```text
+_build/default/_doc/_html/tempo/index.html
+```
+
+---
+
+## Logging and runtime flags
+
+Tempo supports runtime logging with CLI flags and environment variables.
+
+CLI:
+
+- `--log-level debug|info|warning|error|quiet`
+
+Environment variables:
+
+- `RML_LOG_LEVEL=debug|info|warning|error|off`
+- `RML_LOG_COLOR=0|1` (disable/enable ANSI colors)
+- `RML_TRACE_GUARDS=0|1` (extra guard tracing)
+
+Example:
+
+```sh
+RML_LOG_LEVEL=debug RML_TRACE_GUARDS=1 dune exec samples/awaiters_log.exe
+```
+
+---
+
+## Other useful commands
+
+Format project:
+
+```sh
+dune fmt
+```
+
+Clean build artifacts:
+
+```sh
+dune clean
+```
+
+Build and run docs:
+
+```sh
+dune build @doc
+```

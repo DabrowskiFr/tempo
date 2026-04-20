@@ -1,0 +1,22 @@
+#!/bin/sh
+set -eu
+
+if [ "${1:-}" = "help" ] || [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+  cat <<'EOT'
+Usage:
+  sh applications/simple-demos/cloth-raylib/run [-- <app-args...>]
+EOT
+  exit 0
+fi
+
+if [ -n "${DUNE_SOURCEROOT:-}" ]; then
+  cd "${DUNE_SOURCEROOT}/applications/simple-demos/cloth-raylib"
+else
+  cd "$(dirname "$0")"
+fi
+
+if [ "${1:-}" = "--" ]; then
+  shift
+fi
+
+exec dune exec "./src/main.exe" -- "$@"

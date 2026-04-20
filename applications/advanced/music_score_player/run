@@ -1,0 +1,26 @@
+#!/bin/sh
+set -eu
+
+if [ "${1:-}" = "help" ] || [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+  cat <<'EOT'
+Usage:
+  sh applications/advanced/music_score_player/run [-- <app-args...>]
+
+Notes:
+  - This launcher runs from repository root to keep asset paths valid.
+EOT
+  exit 0
+fi
+
+if [ -n "${DUNE_SOURCEROOT:-}" ]; then
+  cd "${DUNE_SOURCEROOT}"
+else
+  SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+  cd "${SCRIPT_DIR}/../../.."
+fi
+
+if [ "${1:-}" = "--" ]; then
+  shift
+fi
+
+exec dune exec "./applications/advanced/music_score_player/src/main.exe" -- "$@"

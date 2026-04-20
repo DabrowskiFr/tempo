@@ -26,7 +26,5 @@
   when_next_instant
   when_parallel
   when_same_instant
-  when_tick_tock
-  with_kill_abort
-  with_kill_inherit)
+  when_tick_tock)
  (libraries tempo))

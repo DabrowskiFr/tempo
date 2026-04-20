@@ -1,0 +1,19 @@
+(executable
+ (name discover)
+ (modules discover)
+ (libraries dune-configurator))
+
+(rule
+ (targets c_flags.sexp c_library_flags.sexp)
+ (deps discover.exe)
+ (action (run ./discover.exe)))
+
+(library
+ (name tempo_fluidsynth)
+ (public_name tempo-fluidsynth)
+ (modules tempo_fluidsynth)
+ (foreign_stubs
+  (language c)
+  (names tempo_fluidsynth_stubs)
+  (flags (:include c_flags.sexp)))
+ (c_library_flags (:include c_library_flags.sexp)))
