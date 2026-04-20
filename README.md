@@ -215,12 +215,6 @@ sh applications/advanced/tempo-core-studio/run
 sh applications/advanced/music_score_player/run
 ```
 
-Headless mode example (tempo-core-studio):
-
-```sh
-sh applications/advanced/tempo-core-studio/run -- --headless --instants 32
-```
-
 ---
 
 ### Advanced applications: dependencies and Tempo libraries
