@@ -70,7 +70,7 @@ let when_ (s : ('emit, 'agg, 'mode) signal_core) (body : unit -> unit) : unit =
 
 let watch (s : ('emit, 'agg, 'mode) signal_core) (body : unit -> unit) : unit =
   let kill = Low_level.new_kill () in
-  Tempo_signal.register_kill_watcher s kill;
+  perform (Register_kill_watcher (s, kill));
   Low_level.with_kill kill body;
   if !(kill.alive) then Low_level.abort_kill kill
 

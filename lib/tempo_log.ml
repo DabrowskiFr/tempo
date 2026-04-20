@@ -157,7 +157,8 @@ module Tempo_log = struct
     let blocked_msg = if t.blocked then "blocked" else "not blocked" in
     if brief then Format.fprintf fmt "#%d (%s,%s)" t.t_id queued_msg blocked_msg
     else
-      let guards = List.length t.guards and kills = List.length t.kills in
+      let guards = Tempo_task.task_guards_count t
+      and kills = Tempo_task.task_kills_count t in
       Format.fprintf fmt "[task %d | %s, %s, guards=%d, kills=%d]" t.t_id
         queued_msg blocked_msg guards kills
 
@@ -246,7 +247,7 @@ module Tempo_log = struct
   let log_pick ctx task =
     log ~task:task.t_id ctx "step.select"
       "pick task #%d (logical thread=%d guards=%d)" task.t_id task.thread
-      (List.length task.guards)
+      (Tempo_task.task_guards_count task)
 
   let log_block ctx task missing_guards =
     log ~task:task.t_id ctx "step.block" "block (guards missing %a)"

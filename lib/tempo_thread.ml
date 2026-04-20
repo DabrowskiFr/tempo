@@ -19,19 +19,27 @@
 type thread_state = Tempo_types.thread_state
 type thread_table = Tempo_types.thread_table
 
-let create () : thread_table = { states = Array.make 16 None }
+let rec kill_ctx_alive = function
+  | Tempo_types.KEmpty -> true
+  | Tempo_types.KNode node -> !(node.kill.Tempo_types.alive) && kill_ctx_alive node.parent
+
+let create () : thread_table =
+  { states = Array.make 64 None; waiters_pruned_kill_epoch = -1 }
 
 let ensure_capacity (threads : thread_table) (thread : Tempo_types.thread) =
-  if thread >= Array.length threads.states then (
-    let new_len = ref (Array.length threads.states) in
+  let len = Array.length threads.states in
+  if thread < len then ()
+  else
+    let new_len = ref len in
     while thread >= !new_len do
       new_len := !new_len * 2
     done;
-    let resized = Array.make !new_len None in
-    Array.blit threads.states 0 resized 0 (Array.length threads.states);
-    threads.states <- resized)
+    let grown = Array.make !new_len None in
+    Array.blit threads.states 0 grown 0 len;
+    threads.states <- grown
 
 let ensure (threads : thread_table) (thread : Tempo_types.thread) =
+  if thread < 0 then invalid_arg (Printf.sprintf "unknown thread %d" thread);
   ensure_capacity threads thread;
   match threads.states.(thread) with
   | Some ts -> ts
@@ -40,37 +48,68 @@ let ensure (threads : thread_table) (thread : Tempo_types.thread) =
       threads.states.(thread) <- Some ts;
       ts
 
-let find (threads : thread_table) (thread : Tempo_types.thread) =
-  if thread < 0 || thread >= Array.length threads.states then
-    invalid_arg (Printf.sprintf "unknown thread %d" thread)
-  else
-    match threads.states.(thread) with
-    | Some ts -> ts
-    | None -> invalid_arg (Printf.sprintf "unknown thread %d" thread)
+let find_opt (threads : thread_table) (thread : Tempo_types.thread) =
+  if thread < 0 || thread >= Array.length threads.states then None
+  else threads.states.(thread)
 
-let add_join_waiter (threads : thread_table) (thread : Tempo_types.thread) waiter
-    =
-  let state = find threads thread in
-  if state.completed then waiter () else state.waiters <- waiter :: state.waiters
+let find (threads : thread_table) (thread : Tempo_types.thread) =
+  match find_opt threads thread with
+  | Some ts -> ts
+  | None -> invalid_arg (Printf.sprintf "unknown thread %d" thread)
+
+let add_join_waiter (threads : thread_table) (thread : Tempo_types.thread)
+    (kill_ctx : Tempo_types.kill_context) waiter =
+  match find_opt threads thread with
+  | None ->
+      if kill_ctx_alive kill_ctx then waiter ()
+  | Some state ->
+      if state.Tempo_types.completed then (
+        if kill_ctx_alive kill_ctx then waiter ())
+      else if kill_ctx_alive kill_ctx then
+        state.Tempo_types.waiters <-
+          Tempo_types.{ resume = waiter; kill_ctx } :: state.Tempo_types.waiters
+
+let prune_dead_join_waiters (threads : thread_table) current_kill_epoch =
+  if threads.waiters_pruned_kill_epoch = current_kill_epoch then ()
+  else begin
+    threads.waiters_pruned_kill_epoch <- current_kill_epoch;
+    Array.iter
+      (fun (slot : thread_state option) ->
+        match slot with
+        | None -> ()
+        | Some state ->
+        if state.Tempo_types.waiters <> [] then
+          state.Tempo_types.waiters <-
+            List.filter
+              (fun (w : Tempo_types.join_waiter) -> kill_ctx_alive w.kill_ctx)
+              state.Tempo_types.waiters)
+      threads.states
+  end
 
 let new_thread_id (st : Tempo_types.scheduler_state) =
   let id = st.thread_counter in
   st.thread_counter <- id + 1;
-  let _ = ensure st.threads id in
   id
 
 let finish_task (threads : thread_table) (thread : Tempo_types.thread) =
-  let rec resume_waiters waiters =
+  let rec resume_waiters (waiters : Tempo_types.join_waiter list) =
     match waiters with
     | [] -> ()
-    | f :: rest ->
-        f ();
+    | (w : Tempo_types.join_waiter) :: rest ->
+        if kill_ctx_alive w.kill_ctx then w.resume ();
         resume_waiters rest
   in
   let state = find threads thread in
-  state.active <- state.active - 1;
-  if state.active = 0 then (
-    state.completed <- true;
-    let waiters = List.rev state.waiters in
-    state.waiters <- [];
-    resume_waiters waiters)
+  state.Tempo_types.active <- state.Tempo_types.active - 1;
+  if state.Tempo_types.active = 0 then (
+    state.Tempo_types.completed <- true;
+    let waiters = state.Tempo_types.waiters in
+    state.Tempo_types.waiters <- [];
+    threads.states.(thread) <- None;
+    match waiters with
+    | [] -> ()
+    | [ w ] ->
+        if kill_ctx_alive w.kill_ctx then w.resume ()
+    | _ ->
+        (* Preserve FIFO semantics only when needed. *)
+        resume_waiters (List.rev waiters))

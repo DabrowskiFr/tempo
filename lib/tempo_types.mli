@@ -17,17 +17,33 @@
  *---------------------------------------------------------------------------*)
 
 type kill = { alive : bool ref; mutable cleanup : (unit -> unit) option }
+
+type kill_context =
+  | KEmpty
+  | KNode of {
+      kill : kill
+    ; parent : kill_context
+    ; mutable checked_epoch : int
+    ; mutable alive_cached : bool
+  }
 type thread = int
 type event
 type aggregate
 
+type 'agg awaiter = { resume : 'agg -> unit; kill_ctx : kill_context }
+type join_waiter = { resume : unit -> unit; kill_ctx : kill_context }
+type kill_watcher = { kill : kill; kill_ctx : kill_context }
+
 type ('emit, 'agg, 'mode) signal_core = {
     s_id : int
+  ; mutable tracked : bool
   ; mutable present : bool
   ; mutable value : 'agg option
-  ; mutable awaiters : ('agg -> unit) list
+  ; mutable awaiters : 'agg awaiter list
+  ; mutable awaiters_kill_epoch : int
   ; mutable guard_waiters : task list
-  ; mutable kill_watchers : kill list
+  ; mutable kill_watchers : kill_watcher list
+  ; mutable kill_watchers_kill_epoch : int
   ; kind : ('emit, 'agg, 'mode) signal_kind
 }
 
@@ -39,16 +55,26 @@ and ('emit, 'agg, 'mode) signal_kind =
     }
       -> ('emit, 'agg, aggregate) signal_kind
 
-and task = {
-    t_id : int
-  ; guards : any_signal list
-  ; kills : kill list
+and registered_missing_state =
+  | Missing_none
+  | Missing_one of int
+  | Missing_many of (int, unit) Hashtbl.t
+
+and task_guard_meta = {
+    mutable guards : any_signal list
+  ; mutable pending_guards : int
+  ; mutable registered_missing : registered_missing_state
+  ; mutable guard_registration_instant : int
   ; mutable guards_checked_epoch : int
   ; mutable guards_ok_cached : bool
-  ; mutable kills_checked_epoch : int
-  ; mutable kills_alive_cached : bool
-  ; thread : thread
-  ; run : unit -> unit
+}
+
+and task = {
+    mutable t_id : int
+  ; mutable guard_meta : task_guard_meta option
+  ; mutable kill_ctx : kill_context
+  ; mutable thread : thread
+  ; mutable run : unit -> unit
   ; mutable queued : bool
   ; mutable blocked : bool
 }
@@ -61,10 +87,13 @@ type ('emit, 'agg) agg_signal = ('emit, 'agg, aggregate) signal_core
 type thread_state = {
     mutable active : int
   ; mutable completed : bool
-  ; mutable waiters : (unit -> unit) list
+  ; mutable waiters : join_waiter list
 }
 
-type thread_table = { mutable states : thread_state option array }
+type thread_table = {
+    mutable states : thread_state option array
+  ; mutable waiters_pruned_kill_epoch : int
+}
 
 type debug_info = {
     mutable sig_counter : int
@@ -77,6 +106,8 @@ type scheduler_state = {
     current : task Queue.t
   ; mutable next_instant : task list
   ; mutable blocked : task list
+  ; mutable free_tasks : task list
+  ; mutable free_task_count : int
   ; mutable signals : any_signal list
   ; mutable thread_counter : int
   ; threads : thread_table
@@ -94,6 +125,8 @@ type _ Effect.t +=
   | Pause : unit Effect.t
   | Fork : (unit -> unit) -> thread Effect.t
   | Join : thread -> unit Effect.t
+  | Register_kill_watcher :
+      ('emit, 'agg, 'mode) signal_core * kill -> unit Effect.t
   | With_guard :
       ('emit, 'agg, 'mode) signal_core * (unit -> unit)
       -> unit Effect.t

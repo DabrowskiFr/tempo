@@ -23,13 +23,18 @@ val create : unit -> thread_table
 
 val ensure : thread_table -> Tempo_types.thread -> thread_state
 
+val find_opt : thread_table -> Tempo_types.thread -> thread_state option
+
 val find : thread_table -> Tempo_types.thread -> thread_state
 
 val add_join_waiter :
      thread_table
   -> Tempo_types.thread
+  -> Tempo_types.kill_context
   -> (unit -> unit)
   -> unit
+
+val prune_dead_join_waiters : thread_table -> int -> unit
 
 val new_thread_id : Tempo_types.scheduler_state -> Tempo_types.thread
 

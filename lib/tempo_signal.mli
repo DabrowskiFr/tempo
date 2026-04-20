@@ -26,8 +26,16 @@ val fresh_aggregate_signal :
 
 val guard_ok : Tempo_types.any_signal list -> bool
 val missing_guards : Tempo_types.any_signal list -> Tempo_types.any_signal list
+val register_awaiter :
+     Tempo_types.scheduler_state
+  -> ('emit, 'agg, 'mode) Tempo_types.signal_core
+  -> 'agg Tempo_types.awaiter
+  -> unit
 val register_kill_watcher :
-  ('emit, 'agg, 'mode) Tempo_types.signal_core -> Tempo_types.kill -> unit
+     ('emit, 'agg, 'mode) Tempo_types.signal_core
+  -> Tempo_types.kill
+  -> Tempo_types.kill_context
+  -> unit
 
 val update_signal :
      Tempo_types.scheduler_state
