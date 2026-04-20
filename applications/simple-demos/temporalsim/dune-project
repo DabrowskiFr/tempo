@@ -1,3 +1,0 @@
-(lang dune 3.19)
-(name tempo_games)
-(generate_opam_files false)

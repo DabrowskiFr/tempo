@@ -1,5 +1,5 @@
 open Tempo
-open Tsdl
+open Raylib
 
 (* N-body gravitational demo.
    One Tempo behavior per body; a collector aggregates body updates into a
@@ -31,7 +31,7 @@ let tau = 6.283185307179586
 let center_x = 0.5 *. float_of_int width
 let center_y = 0.5 *. float_of_int height
 
-let clamp lo hi v = if v < lo then lo else if v > hi then hi else v
+let clampf lo hi v = if v < lo then lo else if v > hi then hi else v
 
 let hue_to_rgb h =
   let h = h -. floor h in
@@ -46,17 +46,8 @@ let hue_to_rgb h =
     else if h6 < 5.0 then x, 0.0, c
     else c, 0.0, x
   in
-  let to_i v = int_of_float (255.0 *. clamp 0.0 1.0 v) in
+  let to_i v = int_of_float (255.0 *. clampf 0.0 1.0 v) in
   to_i r, to_i g, to_i b
-
-let draw_disc renderer x y radius color =
-  let cr, cg, cb = color in
-  ignore (Sdl.set_render_draw_color renderer cr cg cb 255);
-  for dy = -radius to radius do
-    let yf = float_of_int (radius * radius - (dy * dy)) in
-    let dx = int_of_float (sqrt yf) in
-    ignore (Sdl.render_draw_line renderer (x - dx) (y + dy) (x + dx) (y + dy))
-  done
 
 let make_initial_body i =
   let r_base = min width height |> float_of_int |> ( *. ) 0.08 in
@@ -67,14 +58,14 @@ let make_initial_body i =
   let y = center_y +. (radius *. sin angle) in
   let orbital = sqrt (g_const *. float_of_int bodies_count /. (radius +. 22.0)) in
   let vx =
-    (-.sin angle *. orbital *. (0.70 +. 0.55 *. Random.float 1.0))
-    +. (Random.float 2.0 -. 1.0) *. 9.0
+    (-.sin angle *. orbital *. (0.70 +. (0.55 *. Random.float 1.0)))
+    +. ((Random.float 2.0 -. 1.0) *. 9.0)
   in
   let vy =
-    (cos angle *. orbital *. (0.70 +. 0.55 *. Random.float 1.0))
-    +. (Random.float 2.0 -. 1.0) *. 9.0
+    (cos angle *. orbital *. (0.70 +. (0.55 *. Random.float 1.0)))
+    +. ((Random.float 2.0 -. 1.0) *. 9.0)
   in
-  let m = 0.8 +. 3.5 *. Random.float 1.0 in
+  let m = 0.8 +. (3.5 *. Random.float 1.0) in
   { id = i; x; y; vx; vy; m; hue = Random.float 1.0 }
 
 let compute_forces body snapshot =
@@ -135,8 +126,8 @@ let frame_collector stop updates_sig snapshot_sig output_signal init_snapshot =
         let kinetic =
           Array.fold_left
             (fun acc b ->
-               let v2 = (b.vx *. b.vx) +. (b.vy *. b.vy) in
-               acc +. (0.5 *. b.m *. v2))
+              let v2 = (b.vx *. b.vx) +. (b.vy *. b.vy) in
+              acc +. (0.5 *. b.m *. v2))
             0.0 next
         in
         emit output_signal { bodies = next; kinetic };
@@ -154,84 +145,57 @@ let scenario input_signal output_signal =
   watch stop (fun () ->
       parallel
         ((fun () -> handle_input input_signal stop ())
-         :: (fun () ->
-              frame_collector stop updates_sig snapshot_sig output_signal init_bodies)
+         :: (fun () -> frame_collector stop updates_sig snapshot_sig output_signal init_bodies)
          :: Array.to_list
               (Array.map
                  (fun body -> fun () -> body_behavior stop snapshot_sig updates_sig body)
                  init_bodies)))
 
-let draw_frame renderer frame =
-  ignore (Sdl.set_render_draw_color renderer 8 10 20 255);
-  ignore (Sdl.render_clear renderer);
+let draw_frame frame =
+  begin_drawing ();
+  clear_background (Color.create 8 10 20 255);
   Array.iter
     (fun b ->
-       let speed = sqrt ((b.vx *. b.vx) +. (b.vy *. b.vy)) in
-       let speed_t = clamp 0.0 1.0 (speed /. 220.0) in
-       let hue = mod_float (b.hue +. (0.23 *. speed_t)) 1.0 in
-       let r, g, bl = hue_to_rgb hue in
-       let color =
-         ( min 255 (r + int_of_float (35.0 *. speed_t))
-         , min 255 (g + int_of_float (35.0 *. speed_t))
-         , min 255 (bl + int_of_float (35.0 *. speed_t)) )
-       in
-       let radius = if b.m > 3.6 then 3 else if b.m > 2.0 then 2 else 1 in
-       draw_disc renderer (int_of_float b.x) (int_of_float b.y) radius color)
+      let speed = sqrt ((b.vx *. b.vx) +. (b.vy *. b.vy)) in
+      let speed_t = clampf 0.0 1.0 (speed /. 220.0) in
+      let hue = mod_float (b.hue +. (0.23 *. speed_t)) 1.0 in
+      let r, g, bl = hue_to_rgb hue in
+      let color =
+        Color.create
+          (min 255 (r + int_of_float (35.0 *. speed_t)))
+          (min 255 (g + int_of_float (35.0 *. speed_t)))
+          (min 255 (bl + int_of_float (35.0 *. speed_t)))
+          255
+      in
+      let radius = if b.m > 3.6 then 3.0 else if b.m > 2.0 then 2.0 else 1.0 in
+      draw_circle (int_of_float b.x) (int_of_float b.y) radius color)
     frame.bodies;
-  Sdl.render_present renderer
+  draw_text "Q or ESC: quit" 12 10 20 (Color.create 220 238 255 255);
+  end_drawing ()
 
 let () =
   Random.self_init ();
-  match Sdl.init Sdl.Init.video with
-  | Error (`Msg e) ->
-      Sdl.log "SDL init error: %s" e;
-      exit 1
-  | Ok () ->
-      match
-        Sdl.create_window ~w:width ~h:height "Tempo N-body (SDL)" Sdl.Window.windowed
-      with
-      | Error (`Msg e) ->
-          Sdl.log "SDL window creation error: %s" e;
-          exit 1
-      | Ok window -> (
-          match Sdl.create_renderer window ~index:(-1) ~flags:Sdl.Renderer.accelerated with
-          | Error (`Msg e) ->
-              Sdl.log "SDL renderer creation error: %s" e;
-              Sdl.destroy_window window;
-              Sdl.quit ();
-              exit 1
-          | Ok renderer ->
-              let event = Sdl.Event.create () in
-              let frames = ref 0 in
-              let last_tick = ref (Sdl.get_ticks ()) in
-              let input () =
-                if Sdl.poll_event (Some event) then
-                  match Sdl.Event.(enum (get event typ)) with
-                  | `Quit -> Some 'q'
-                  | `Key_down ->
-                      let sc = Sdl.Event.get event Sdl.Event.keyboard_scancode in
-                      let kc = Sdl.Event.get event Sdl.Event.keyboard_keycode in
-                      if sc = Sdl.Scancode.q || kc = Sdl.K.q || kc = Sdl.K.escape
-                      then Some 'q'
-                      else None
-                  | _ -> None
-                else None
-              in
-              let output frame =
-                draw_frame renderer frame;
-                incr frames;
-                let now = Sdl.get_ticks () in
-                let elapsed_ms = Int32.sub now !last_tick in
-                if Int32.compare elapsed_ms 1000l >= 0 then (
-                  let fps = (float_of_int !frames *. 1000.0) /. Int32.to_float elapsed_ms in
-                  Sdl.set_window_title window
-                    (Printf.sprintf
-                       "Tempo N-body (SDL) - %.1f FPS - %d bodies - E=%.0f"
-                       fps (Array.length frame.bodies) frame.kinetic);
-                  frames := 0;
-                  last_tick := now)
-              in
-              execute ~input ~output scenario;
-              Sdl.destroy_renderer renderer;
-              Sdl.destroy_window window;
-              Sdl.quit ())
+  init_window width height "Tempo N-body (Raylib)";
+  set_target_fps 60;
+  let frames = ref 0 in
+  let last_tick = ref (get_time ()) in
+  let input () =
+    if window_should_close () || is_key_pressed Key.Q || is_key_pressed Key.Escape then Some 'q'
+    else None
+  in
+  let output frame =
+    draw_frame frame;
+    incr frames;
+    let now = get_time () in
+    let elapsed = now -. !last_tick in
+    if elapsed >= 1.0 then (
+      let fps = float_of_int !frames /. elapsed in
+      set_window_title
+        (Printf.sprintf
+           "Tempo N-body (Raylib) - %.1f FPS - %d bodies - E=%.0f"
+           fps (Array.length frame.bodies) frame.kinetic);
+      frames := 0;
+      last_tick := now)
+  in
+  execute ~input ~output scenario;
+  close_window ()

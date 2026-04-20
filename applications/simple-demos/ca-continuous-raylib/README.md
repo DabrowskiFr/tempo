@@ -2,48 +2,33 @@
 
 ## Overview
 
-Démo simple d’automate cellulaire continu avec rendu Raylib.
+Port Raylib de `examples/ca_continuous_tsdl.ml`.
+Automate cellulaire continu de type réaction-diffusion (Gray-Scott-like) avec:
+
+- un comportement Tempo par cellule,
+- communication via signaux,
+- rendu colorimétrique dynamique.
 
 ## Controls / Inputs
 
-- `SPACE`: pause/reprise
-- `R`: reset
-- `ESC`: quitter
+- `Q` ou `ESC`: quitter
 
 ## Launch Commands
 
-Depuis `/Users/fredericdabrowski/Repos/tempo`:
+Depuis la racine du dépôt:
 
 ```bash
-dune exec ./applications/run -- ca-continuous-raylib
+sh applications/simple-demos/ca-continuous-raylib/run
 ```
 
 Direct:
 
 ```bash
-dune exec ./applications/simple-demos/ca-continuous-raylib/run
+cd applications/simple-demos/ca-continuous-raylib
+dune exec ./src/main.exe --
 ```
-
-## CLI Options
-
-- Pas d'options CLI publiques documentées.
 
 ## Dependencies
 
-- OCaml 5.x, dune, raylib
-
-## Headless / Reproducible Mode
-
-- Pas de mode headless public standardisé.
-
-## Troubleshooting
-
-- Si performance faible: fermer autres apps GPU et relancer.
-
-## Release Status
-
-- Category: `simple-demos`
-- Quality status: `ready`
-- Last validation date: 2026-02-16
-- Validated commands:
-- `dune exec ./applications/run -- ca-continuous-raylib`
+- OCaml 5.x, dune
+- `tempo`, `tempo-raylib`, `raylib`

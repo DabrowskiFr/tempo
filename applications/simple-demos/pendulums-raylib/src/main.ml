@@ -1,5 +1,5 @@
 open Tempo
-open Tsdl
+open Raylib
 
 type pendulum_state =
   { id : int
@@ -33,7 +33,7 @@ let coupling_k = 34.0
 let drive_amp = 0.75
 let dt = 0.014
 
-let clamp lo hi v = if v < lo then lo else if v > hi then hi else v
+let clampf lo hi v = if v < lo then lo else if v > hi then hi else v
 
 let wrap_angle a = atan2 (sin a) (cos a)
 
@@ -50,16 +50,8 @@ let hue_to_rgb h =
     else if h6 < 5.0 then x, 0.0, c
     else c, 0.0, x
   in
-  let to_i v = int_of_float (255.0 *. clamp 0.0 1.0 v) in
+  let to_i v = int_of_float (255.0 *. clampf 0.0 1.0 v) in
   to_i r, to_i g, to_i b
-
-let draw_disc renderer x y radius (cr, cg, cb) =
-  ignore (Sdl.set_render_draw_color renderer cr cg cb 255);
-  for dy = -radius to radius do
-    let yf = float_of_int ((radius * radius) - (dy * dy)) in
-    let dx = int_of_float (sqrt yf) in
-    ignore (Sdl.render_draw_line renderer (x - dx) (y + dy) (x + dx) (y + dy))
-  done
 
 let bob_xy p =
   let x = p.anchor_x +. (p.length *. sin p.theta) in
@@ -93,17 +85,13 @@ let make_initial_pendulum i =
 let local_coupling p snapshot =
   let arr = snapshot.pendulums in
   let left_theta = if p.id = 0 then p.theta else arr.(p.id - 1).theta in
-  let right_theta =
-    if p.id = pendulums_count - 1 then p.theta else arr.(p.id + 1).theta
-  in
+  let right_theta = if p.id = pendulums_count - 1 then p.theta else arr.(p.id + 1).theta in
   (sin (left_theta -. p.theta)) +. (sin (right_theta -. p.theta))
 
 let step_pendulum p snapshot =
   let t = float_of_int snapshot.tick in
   let drive =
-    if p.id mod 23 = 0
-    then drive_amp *. sin ((0.011 *. t) +. (float_of_int p.id *. 0.23))
-    else 0.0
+    if p.id mod 23 = 0 then drive_amp *. sin ((0.011 *. t) +. (float_of_int p.id *. 0.23)) else 0.0
   in
   let coupling = coupling_k *. local_coupling p snapshot in
   let grav = -.((gravity /. p.length) *. sin p.theta) in
@@ -142,9 +130,9 @@ let frame_collector stop updates_sig snapshot_sig output_signal init_snapshot =
         let energy =
           Array.fold_left
             (fun acc p ->
-               let kinetic = 0.5 *. p.mass *. (p.length *. p.omega) *. (p.length *. p.omega) in
-               let potential = p.mass *. gravity *. p.length *. (1.0 -. cos p.theta) in
-               acc +. kinetic +. potential)
+              let kinetic = 0.5 *. p.mass *. (p.length *. p.omega) *. (p.length *. p.omega) in
+              let potential = p.mass *. gravity *. p.length *. (1.0 -. cos p.theta) in
+              acc +. kinetic +. potential)
             0.0 next_arr
         in
         let next_snapshot = { pendulums = next_arr; tick = snap.tick + 1 } in
@@ -154,40 +142,6 @@ let frame_collector stop updates_sig snapshot_sig output_signal init_snapshot =
         loop next_snapshot
       in
       loop init_snapshot)
-
-let draw_frame renderer frame =
-  ignore (Sdl.set_render_draw_color renderer 7 10 22 255);
-  ignore (Sdl.render_clear renderer);
-  let arr = frame.snapshot.pendulums in
-  (* coupling links between adjacent bobs *)
-  for i = 0 to Array.length arr - 2 do
-    let p1 = arr.(i) in
-    let p2 = arr.(i + 1) in
-    let x1, y1 = bob_xy p1 in
-    let x2, y2 = bob_xy p2 in
-    let phase = abs_float (p2.theta -. p1.theta) in
-    let t = clamp 0.0 1.0 (phase /. 1.4) in
-    let r = 35 + int_of_float (180.0 *. t) in
-    let g = 95 - int_of_float (45.0 *. t) in
-    let b = 170 + int_of_float (60.0 *. (1.0 -. t)) in
-    ignore (Sdl.set_render_draw_color renderer r g b 110);
-    ignore
-      (Sdl.render_draw_line renderer (int_of_float x1) (int_of_float y1) (int_of_float x2)
-         (int_of_float y2))
-  done;
-  Array.iter
-    (fun p ->
-       let bx, by = bob_xy p in
-       ignore (Sdl.set_render_draw_color renderer 145 150 170 255);
-       ignore
-         (Sdl.render_draw_line renderer (int_of_float p.anchor_x) (int_of_float p.anchor_y)
-            (int_of_float bx) (int_of_float by));
-       let speed_t = clamp 0.0 1.0 (abs_float p.omega /. 5.0) in
-       let hue = mod_float (p.hue +. (0.30 *. speed_t) +. (0.0007 *. by)) 1.0 in
-       let br, bg, bb = hue_to_rgb hue in
-       draw_disc renderer (int_of_float bx) (int_of_float by) 4 (br, bg, bb))
-    arr;
-  Sdl.render_present renderer
 
 let scenario input_signal output_signal =
   let stop = new_signal () in
@@ -204,59 +158,60 @@ let scenario input_signal output_signal =
                  (fun p -> fun () -> pendulum_behavior stop snapshot_sig updates_sig p)
                  init_arr)))
 
+let draw_frame frame =
+  begin_drawing ();
+  clear_background (Color.create 7 10 22 255);
+  let arr = frame.snapshot.pendulums in
+  (* Coupling links between adjacent bobs. *)
+  for i = 0 to Array.length arr - 2 do
+    let p1 = arr.(i) in
+    let p2 = arr.(i + 1) in
+    let x1, y1 = bob_xy p1 in
+    let x2, y2 = bob_xy p2 in
+    let phase = abs_float (p2.theta -. p1.theta) in
+    let t = clampf 0.0 1.0 (phase /. 1.4) in
+    let r = 35 + int_of_float (180.0 *. t) in
+    let g = 95 - int_of_float (45.0 *. t) in
+    let b = 170 + int_of_float (60.0 *. (1.0 -. t)) in
+    draw_line (int_of_float x1) (int_of_float y1) (int_of_float x2) (int_of_float y2)
+      (Color.create r g b 110)
+  done;
+  Array.iter
+    (fun p ->
+      let bx, by = bob_xy p in
+      draw_line (int_of_float p.anchor_x) (int_of_float p.anchor_y) (int_of_float bx)
+        (int_of_float by) (Color.create 145 150 170 255);
+      let speed_t = clampf 0.0 1.0 (abs_float p.omega /. 5.0) in
+      let hue = mod_float (p.hue +. (0.30 *. speed_t) +. (0.0007 *. by)) 1.0 in
+      let br, bg, bb = hue_to_rgb hue in
+      draw_circle (int_of_float bx) (int_of_float by) 4.0 (Color.create br bg bb 255))
+    arr;
+  draw_text "Q or ESC: quit" 12 10 20 (Color.create 220 238 255 255);
+  end_drawing ()
+
 let () =
   Random.self_init ();
-  match Sdl.init Sdl.Init.video with
-  | Error (`Msg e) ->
-      Sdl.log "SDL init error: %s" e;
-      exit 1
-  | Ok () ->
-      match
-        Sdl.create_window ~w:width ~h:height "Tempo coupled pendulums (SDL)"
-          Sdl.Window.windowed
-      with
-      | Error (`Msg e) ->
-          Sdl.log "SDL window creation error: %s" e;
-          exit 1
-      | Ok window -> (
-          match Sdl.create_renderer window ~index:(-1) ~flags:Sdl.Renderer.accelerated with
-          | Error (`Msg e) ->
-              Sdl.log "SDL renderer creation error: %s" e;
-              Sdl.destroy_window window;
-              Sdl.quit ();
-              exit 1
-          | Ok renderer ->
-              let event = Sdl.Event.create () in
-              let frames = ref 0 in
-              let last_tick = ref (Sdl.get_ticks ()) in
-              let input () =
-                if Sdl.poll_event (Some event) then
-                  match Sdl.Event.(enum (get event typ)) with
-                  | `Quit -> Some 'q'
-                  | `Key_down ->
-                      let sc = Sdl.Event.get event Sdl.Event.keyboard_scancode in
-                      let kc = Sdl.Event.get event Sdl.Event.keyboard_keycode in
-                      if sc = Sdl.Scancode.q || kc = Sdl.K.q || kc = Sdl.K.escape
-                      then Some 'q'
-                      else None
-                  | _ -> None
-                else None
-              in
-              let output frame =
-                draw_frame renderer frame;
-                incr frames;
-                let now = Sdl.get_ticks () in
-                let elapsed = Int32.sub now !last_tick in
-                if Int32.compare elapsed 1000l >= 0 then (
-                  let fps = (float_of_int !frames *. 1000.0) /. Int32.to_float elapsed in
-                  Sdl.set_window_title window
-                    (Printf.sprintf
-                       "Tempo coupled pendulums (SDL) - %.1f FPS - %d pendulums - E=%.0f"
-                       fps pendulums_count frame.energy);
-                  frames := 0;
-                  last_tick := now)
-              in
-              execute ~input ~output scenario;
-              Sdl.destroy_renderer renderer;
-              Sdl.destroy_window window;
-              Sdl.quit ())
+  init_window width height "Tempo coupled pendulums (Raylib)";
+  set_target_fps 60;
+  let frames = ref 0 in
+  let last_tick = ref (get_time ()) in
+  let input () =
+    if window_should_close () || is_key_pressed Key.Q || is_key_pressed Key.Escape then Some 'q'
+    else None
+  in
+  let output frame =
+    draw_frame frame;
+    incr frames;
+    let now = get_time () in
+    let elapsed = now -. !last_tick in
+    if elapsed >= 1.0 then (
+      let fps = float_of_int !frames /. elapsed in
+      set_window_title
+        (Printf.sprintf
+           "Tempo coupled pendulums (Raylib) - %.1f FPS - %d pendulums - E=%.0f"
+           fps pendulums_count frame.energy);
+      frames := 0;
+      last_tick := now)
+  in
+  execute ~input ~output scenario;
+  close_window ()

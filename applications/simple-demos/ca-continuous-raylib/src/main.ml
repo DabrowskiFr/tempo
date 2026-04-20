@@ -1,444 +1,283 @@
 open Tempo
 open Raylib
+open Bigarray
+open Ctypes
 
-type input_state = {
-  toggle_down : bool;
-  reset : bool;
-  next_preset : bool;
-  prev_preset : bool;
-}
+(* Continuous cellular automaton (Gray-Scott-like) rendered with Raylib.
+   One behavior per cell; communication only via signals. *)
 
-type grid = {
-  a : float array array;
-  b : float array array;
-}
+type cell_state = { x : int; y : int; a : float; b : float; phase : float }
+type frame = { a_grid : float array array; b_grid : float array array }
 
-type frame = {
-  grid : grid;
-  paused : bool;
-  preset_idx : int;
-  activity : float;
-  calibrated_ms : float;
-  calibrated_grid : int * int;
-}
+let width = 960
+let height = 640
+let cells_x = 160
+let cells_y = 106
+let cells_count = cells_x * cells_y
+let density_scale = float_of_int cells_x /. 96.
 
-type preset = {
-  name : string;
-  feed : float;
-  kill : float;
-  dt : float;
-  inject_every : int;
-  palette : (int * int * int) array;
-}
-
-type grid_cfg = {
-  mutable cells_x : int;
-  mutable cells_y : int;
-  mutable cell_w : int;
-  mutable cell_h : int;
-}
-
-let width = 900
-let height = 600
-let target_fps = 30
-
-let cfg = { cells_x = 90; cells_y = 60; cell_w = 10; cell_h = 10 }
-let calibration_ms = ref 0.0
-let calibration_grid = ref (cfg.cells_x, cfg.cells_y)
-
-let set_grid_dims cx cy =
-  cfg.cells_x <- cx;
-  cfg.cells_y <- cy;
-  cfg.cell_w <- max 1 (width / cx);
-  cfg.cell_h <- max 1 (height / cy)
-
-let clamp01 v = if v < 0.0 then 0.0 else if v > 1.0 then 1.0 else v
-let clamp v a b = if v < a then a else if v > b then b else v
-let lerp a b t = a +. ((b -. a) *. t)
-
+(* Parameter set aimed at sustained, rich dynamics. *)
 let a_diff = 1.0
-let b_diff = 0.5
+let b_diff = 0.48
+let base_feed = 0.029
+let base_kill = 0.055
+let dt = 0.85
+let tau = 6.283185307179586
 
-let presets =
-  [|
-    {
-      name = "Coral Bloom";
-      feed = 0.0367;
-      kill = 0.0649;
-      dt = 1.2;
-      inject_every = 150;
-      palette =
-        [|
-          (6, 10, 20);
-          (42, 64, 128);
-          (66, 148, 186);
-          (242, 158, 87);
-          (249, 236, 186);
-        |];
-    };
-    {
-      name = "Neon Night";
-      feed = 0.022;
-      kill = 0.051;
-      dt = 1.0;
-      inject_every = 130;
-      palette =
-        [|
-          (4, 5, 14);
-          (39, 11, 74);
-          (62, 33, 142);
-          (56, 193, 255);
-          (178, 255, 232);
-        |];
-    };
-    {
-      name = "Toxic Ink";
-      feed = 0.03;
-      kill = 0.059;
-      dt = 1.15;
-      inject_every = 170;
-      palette =
-        [|
-          (8, 12, 6);
-          (26, 55, 28);
-          (83, 118, 33);
-          (174, 203, 60);
-          (252, 240, 148);
-        |];
-    };
-  |]
+let clamp01 v = if v < 0. then 0. else if v > 1. then 1. else v
+let clamp lo hi v = if v < lo then lo else if v > hi then hi else v
 
-let palette_color palette t =
-  let n = Array.length palette in
-  if n = 0 then (255, 255, 255)
-  else if n = 1 then palette.(0)
-  else
-    let tf = clamp01 t *. float_of_int (n - 1) in
-    let i = int_of_float tf in
-    let j = min (n - 1) (i + 1) in
-    let local_t = tf -. float_of_int i in
-    let r0, g0, b0 = palette.(i) in
-    let r1, g1, b1 = palette.(j) in
-    ( int_of_float (lerp (float_of_int r0) (float_of_int r1) local_t),
-      int_of_float (lerp (float_of_int g0) (float_of_int g1) local_t),
-      int_of_float (lerp (float_of_int b0) (float_of_int b1) local_t) )
+let sample frame x y = frame.a_grid.(y).(x), frame.b_grid.(y).(x)
 
-let shade_color (r, g, b) shade =
-  let s = int_of_float shade in
-  (clamp (r + s) 0 255, clamp (g + s) 0 255, clamp (b + s) 0 255)
-
-let color_of_rgb ?(a = 255) (r, g, b) = Color.create r g b a
-
-let grid_dims g = (Array.length g.a.(0), Array.length g.a)
-
-let make_grid () =
-  let cx = cfg.cells_x in
-  let cy = cfg.cells_y in
-  let a = Array.make_matrix cy cx 1.0 in
-  let b = Array.make_matrix cy cx 0.0 in
-  for y = 0 to cy - 1 do
-    for x = 0 to cx - 1 do
-      let central = abs (x - (cx / 2)) < 8 && abs (y - (cy / 2)) < 8 in
-      if central then b.(y).(x) <- 1.0
-      else if Random.float 1.0 < 0.08 then b.(y).(x) <- 0.8
-    done
-  done;
-  { a; b }
-
-let copy_grid g =
-  let _, cy = grid_dims g in
-  {
-    a = Array.init cy (fun y -> Array.copy g.a.(y));
-    b = Array.init cy (fun y -> Array.copy g.b.(y));
-  }
-
-let sample arr x y =
-  let cy = Array.length arr in
-  let cx = Array.length arr.(0) in
-  let nx = (x + cx) mod cx in
-  let ny = (y + cy) mod cy in
-  arr.(ny).(nx)
-
-let laplacian arr x y =
-  let w =
-    [
-      (0, 0, -1.0);
-      (1, 0, 0.2);
-      (-1, 0, 0.2);
-      (0, 1, 0.2);
-      (0, -1, 0.2);
-      (1, 1, 0.05);
-      (1, -1, 0.05);
-      (-1, 1, 0.05);
-      (-1, -1, 0.05);
+let laplacian frame x y =
+  let weights =
+    [ (0, 0, -1.0)
+    ; (1, 0, 0.2)
+    ; (-1, 0, 0.2)
+    ; (0, 1, 0.2)
+    ; (0, -1, 0.2)
+    ; (1, 1, 0.05)
+    ; (1, -1, 0.05)
+    ; (-1, 1, 0.05)
+    ; (-1, -1, 0.05)
     ]
   in
-  List.fold_left (fun acc (dx, dy, ww) -> acc +. (ww *. sample arr (x + dx) (y + dy))) 0.0 w
+  List.fold_left
+    (fun (la, lb) (dx, dy, w) ->
+      let nx = (x + dx + cells_x) mod cells_x in
+      let ny = (y + dy + cells_y) mod cells_y in
+      let a, b = sample frame nx ny in
+      (la +. (w *. a), lb +. (w *. b)))
+    (0., 0.) weights
 
-let step_grid p g =
-  let cx, cy = grid_dims g in
-  let next = copy_grid g in
-  for y = 0 to cy - 1 do
-    for x = 0 to cx - 1 do
-      let a = g.a.(y).(x) in
-      let b = g.b.(y).(x) in
-      let la = laplacian g.a x y in
-      let lb = laplacian g.b x y in
-      let reaction = a *. b *. b in
-      let a' = clamp01 (a +. ((a_diff *. la) -. reaction +. (p.feed *. (1.0 -. a))) *. p.dt) in
-      let b' = clamp01 (b +. ((b_diff *. lb) +. reaction -. ((p.kill +. p.feed) *. b)) *. p.dt) in
-      next.a.(y).(x) <- a';
-      next.b.(y).(x) <- b'
-    done
-  done;
-  next
+let feed_kill x y phase =
+  let xf = float_of_int x /. float_of_int cells_x in
+  let yf = float_of_int y /. float_of_int cells_y in
+  let swirl = sin (tau *. (xf +. (0.11 *. sin (0.008 *. phase)))) in
+  let bands = cos (tau *. (yf -. (0.09 *. cos (0.007 *. phase)))) in
+  let feed = base_feed +. (0.0040 *. swirl) +. (0.0030 *. bands) in
+  let kill = base_kill +. (0.0035 *. bands) -. (0.0020 *. swirl) in
+  (clamp 0.016 0.070 feed, clamp 0.038 0.078 kill)
 
-let inject_spot g =
-  let cx, cy = grid_dims g in
-  let x0 = Random.int cx in
-  let y0 = Random.int cy in
-  for dy = -2 to 2 do
-    for dx = -2 to 2 do
-      let x = (x0 + dx + cx) mod cx in
-      let y = (y0 + dy + cy) mod cy in
-      g.b.(y).(x) <- 1.0
-    done
-  done
-
-let activity_score g =
-  let cx, cy = grid_dims g in
-  let sum = ref 0.0 in
-  for y = 0 to cy - 1 do
-    for x = 0 to cx - 1 do
-      let b = g.b.(y).(x) in
-      let left = sample g.b (x - 1) y in
-      let right = sample g.b (x + 1) y in
-      let up = sample g.b x (y - 1) in
-      let down = sample g.b x (y + 1) in
-      let gx = abs_float (right -. left) in
-      let gy = abs_float (down -. up) in
-      sum := !sum +. (0.65 *. b) +. (0.35 *. (gx +. gy))
-    done
-  done;
-  !sum /. float_of_int (cx * cy)
-
-let render (f : frame) =
-  let preset = presets.(f.preset_idx) in
-  let cx, cy = grid_dims f.grid in
-  begin_drawing ();
-  clear_background (Color.create 7 10 16 255);
-  for y = 0 to (height / 4) do
-    let t = float_of_int y /. float_of_int (height / 4) in
-    let c = palette_color preset.palette (0.1 +. (0.8 *. t)) |> color_of_rgb ~a:30 in
-    draw_rectangle 0 (y * 4) width 4 c
-  done;
-  for y = 0 to cy - 1 do
-    for x = 0 to cx - 1 do
-      let b = f.grid.b.(y).(x) in
-      let left = sample f.grid.b (x - 1) y in
-      let right = sample f.grid.b (x + 1) y in
-      let up = sample f.grid.b x (y - 1) in
-      let down = sample f.grid.b x (y + 1) in
-      let b_blur = ((4.0 *. b) +. left +. right +. up +. down) /. 8.0 in
-      let gx = right -. left in
-      let gy = down -. up in
-      let edge = sqrt ((gx *. gx) +. (gy *. gy)) in
-      let lum = clamp01 ((0.75 *. b_blur) +. (0.25 *. edge)) in
-      (* Stable shading: edge magnitude only, avoids checkerboard flicker from signed gradients. *)
-      let shade = ((edge -. 0.2) *. 18.0) in
-      let col =
-        palette_color preset.palette (0.06 +. (0.9 *. lum))
-        |> fun c -> shade_color c shade
-        |> color_of_rgb
-      in
-      let px = x * cfg.cell_w in
-      let py = y * cfg.cell_h in
-      draw_rectangle px py cfg.cell_w cfg.cell_h col;
-      if b_blur > 0.76 then (
-        let glow_alpha = int_of_float (clamp ((b_blur -. 0.76) *. 220.0) 0.0 70.0) in
-        let glow = palette_color preset.palette (0.78 +. (0.22 *. b)) |> color_of_rgb ~a:glow_alpha in
-        draw_rectangle px py cfg.cell_w cfg.cell_h glow)
-    done
-  done;
-  draw_rectangle 10 10 690 86 (Color.create 6 16 24 175);
-  draw_rectangle_lines 10 10 690 86 (Color.create 121 174 216 170);
-  draw_text "Continuous Cellular Automata v2" 20 18 28 (Color.create 233 245 255 255);
-  draw_text "SPACE pause | R reset | Q/E preset | ESC quit" 20 50 18 (Color.create 177 210 238 255);
-  draw_text
-    (Printf.sprintf "Grid: %dx%d (cell %dx%d)  |  Preset: %s  |  Activity: %.4f  |  State: %s"
-       cx cy cfg.cell_w cfg.cell_h preset.name f.activity (if f.paused then "PAUSED" else "RUNNING"))
-    20 72 18
-    (if f.paused then Color.orange else Color.lime);
-  let cgx, cgy = f.calibrated_grid in
-  draw_text
-    (Printf.sprintf "Calibrated for %d FPS | Mean frame %.2f ms | Chosen grid %dx%d"
-       target_fps f.calibrated_ms cgx cgy)
-    20 94 16 (Color.create 166 201 228 255);
-  let cell_count = cx * cy in
-  let fps = get_fps () in
-  let bottom = Printf.sprintf "Cells: %d x %d = %d  |  FPS: %d" cx cy cell_count fps in
-  let tw = measure_text bottom 18 in
-  let tx = width - tw - 14 in
-  let ty = height - 30 in
-  draw_rectangle (tx - 10) (ty - 6) (tw + 20) 28 (Color.create 3 10 18 210);
-  draw_rectangle_lines (tx - 10) (ty - 6) (tw + 20) 28 (Color.create 100 150 190 170);
-  draw_text bottom tx ty 18 (Color.create 222 238 252 255);
-  end_drawing ()
-
-let bench_candidate ~frames cx cy =
-  set_grid_dims cx cy;
-  let g = ref (make_grid ()) in
-  let p = presets.(0) in
-  let t0 = Unix.gettimeofday () in
-  for _ = 1 to frames do
-    g := step_grid p !g;
-    render
-      {
-        grid = !g;
-        paused = false;
-        preset_idx = 0;
-        activity = activity_score !g;
-        calibrated_ms = 0.0;
-        calibrated_grid = (cx, cy);
-      }
-  done;
-  (Unix.gettimeofday () -. t0) /. float_of_int frames
-
-let calibrate_grid_for_fps target =
-  let budget = 1.0 /. float_of_int target in
-  let candidates = [ (90, 60); (105, 70); (120, 80); (135, 90); (150, 100); (165, 110); (180, 120) ] in
-  let best = ref (90, 60) in
-  let best_ms = ref max_float in
-  let best_area = ref (90 * 60) in
-  List.iter
-    (fun (cx, cy) ->
-      if width mod cx = 0 && height mod cy = 0 then (
-        let avg = bench_candidate ~frames:12 cx cy in
-        let area = cx * cy in
-        if avg <= budget *. 0.96 && area >= !best_area then (
-          best := (cx, cy);
-          best_area := area;
-          best_ms := avg)))
-    candidates;
-  let bx, by = !best in
-  set_grid_dims bx by;
-  if !best_ms = max_float then best_ms := bench_candidate ~frames:8 bx by;
-  calibration_ms := !best_ms *. 1000.0;
-  calibration_grid := (bx, by);
-  bx, by
-
-let poll_input () =
-  if window_should_close () || is_key_pressed Key.Escape then raise Exit;
-  Some
-    {
-      toggle_down = is_key_down Key.Space;
-      reset = is_key_pressed Key.R;
-      next_preset = is_key_pressed Key.E;
-      prev_preset = is_key_pressed Key.Q;
-    }
-
-let main input output =
-  let stop = new_signal () in
-  let toggle_edge = new_signal () in
-  let paused = State.create false in
-  let grid_state = State.create (make_grid ()) in
-  let preset_idx = State.create 0 in
-  let stale_frames = State.create 0 in
-  let feed_bias = State.create 0.0 in
-  let kill_bias = State.create 0.0 in
-  let phase = State.create 0.0 in
-  let inject_counter = State.create 0 in
-
-  let edge_proc () = Reactive.rising_edge (fun i -> i.toggle_down) input toggle_edge in
-
-  let input_proc () =
-    let rec loop () =
-      let i = await input in
-      if i.reset then State.set grid_state (make_grid ());
-      if i.next_preset then State.modify preset_idx (fun idx -> (idx + 1) mod Array.length presets);
-      if i.prev_preset then
-        State.modify preset_idx (fun idx -> (idx + Array.length presets - 1) mod Array.length presets);
-      loop ()
-    in
-    loop ()
+let pulse_force x y phase =
+  let xf = float_of_int x in
+  let yf = float_of_int y in
+  let source amp radius cx cy =
+    let dx = xf -. cx in
+    let dy = yf -. cy in
+    let d2 = (dx *. dx) +. (dy *. dy) in
+    let r2 = radius *. radius in
+    if d2 >= r2 then 0.
+    else
+      let w = 1. -. (d2 /. r2) in
+      amp *. w
   in
+  let cx1 = float_of_int cells_x *. (0.50 +. (0.28 *. sin (0.011 *. phase))) in
+  let cy1 = float_of_int cells_y *. (0.52 +. (0.24 *. cos (0.013 *. phase))) in
+  let cx2 = float_of_int cells_x *. (0.46 +. (0.33 *. cos ((0.009 *. phase) +. 1.7))) in
+  let cy2 = float_of_int cells_y *. (0.47 +. (0.30 *. sin ((0.010 *. phase) +. 0.9))) in
+  (source 0.0065 (8.0 *. density_scale) cx1 cy1)
+  +. (source 0.0050 (7.0 *. density_scale) cx2 cy2)
 
-  let toggle_proc () =
-    let rec loop () =
-      let _ = await toggle_edge in
-      State.modify paused not;
-      loop ()
-    in
-    loop ()
-  in
+(* Color palette driven by chemistry and local phase. *)
+let color_of_ab a b phase =
+  let a = clamp01 a in
+  let b = clamp01 b in
+  let glow = clamp01 ((0.68 *. b) +. (0.32 *. (1. -. a))) in
+  let wave1 = 0.5 +. (0.5 *. sin (tau *. (b +. (0.012 *. phase)))) in
+  let wave2 = 0.5 +. (0.5 *. sin (tau *. ((0.5 *. a) +. (0.008 *. phase) +. 0.2))) in
+  let wave3 = 0.5 +. (0.5 *. sin (tau *. (((1. -. a) *. b) +. (0.006 *. phase) +. 0.47))) in
+  let r = int_of_float (clamp 0. 255. (35. +. (220. *. glow *. wave1))) in
+  let g = int_of_float (clamp 0. 255. (20. +. (210. *. glow *. wave2))) in
+  let bl = int_of_float (clamp 0. 255. (30. +. (230. *. glow *. wave3))) in
+  (r, g, bl)
 
-  let sim_proc () =
-    let rec loop () =
-      let activity = ref (activity_score (State.get grid_state)) in
-      if not (State.get paused) then (
-        let p0 = presets.(State.get preset_idx) in
-        let a0 = !activity in
-        let lo = 0.03 in
-        let hi = 0.09 in
-        let fb, kb =
-          if a0 < lo then (State.get feed_bias +. 0.00008, State.get kill_bias -. 0.00005)
-          else if a0 > hi then (State.get feed_bias -. 0.00006, State.get kill_bias +. 0.00004)
-          else (State.get feed_bias *. 0.985, State.get kill_bias *. 0.985)
-        in
-        State.set feed_bias (clamp fb (-0.008) 0.012);
-        State.set kill_bias (clamp kb (-0.01) 0.01);
-        let ph = State.get phase +. 0.015 in
-        State.set phase ph;
-        let wave = sin ph *. 0.0015 in
-        let p =
-          {
-            p0 with
-            feed = clamp (p0.feed +. State.get feed_bias +. wave) 0.005 0.09;
-            kill = clamp (p0.kill +. State.get kill_bias -. (0.5 *. wave)) 0.02 0.09;
-          }
-        in
-        let g = step_grid p (State.get grid_state) |> copy_grid in
-        activity := activity_score g;
-        let ic = State.get inject_counter + 1 in
-        State.set inject_counter ic;
-        let timed_reseed = ic >= p0.inject_every in
-        let stale =
-          if !activity < 0.018 then State.get stale_frames + 1
-          else max 0 (State.get stale_frames - 4)
-        in
-        if stale > 60 || timed_reseed then (
-          let bursts =
-            if stale > 100 then 4 else if stale > 70 then 3 else if timed_reseed then 2 else 1
-          in
-          for _ = 1 to bursts do
-            inject_spot g
-          done;
-          State.set stale_frames 18;
-          State.set inject_counter 0;
-          activity := activity_score g)
-        else State.set stale_frames stale;
-        State.set grid_state g);
-      emit output
-        {
-          grid = State.get grid_state;
-          paused = State.get paused;
-          preset_idx = State.get preset_idx;
-          activity = !activity;
-          calibrated_ms = !calibration_ms;
-          calibrated_grid = !calibration_grid;
-        };
+let rec handle_input input_signal stop () =
+  match await input_signal with
+  | 'q' -> emit stop ()
+  | _ ->
       pause ();
-      loop ()
-    in
-    loop ()
-  in
+      handle_input input_signal stop ()
 
-  Reactive.supervise_until stop [ input_proc; edge_proc; toggle_proc; sim_proc ]
+(* Collect aggregated cell states into a frame signal (one emission per instant). *)
+let frame_collector stop state_sig frame_sig init_frame =
+  watch stop (fun () ->
+      emit frame_sig init_frame;
+      let rec loop () =
+        let cells = await state_sig in
+        let a_grid = Array.make_matrix cells_y cells_x 1. in
+        let b_grid = Array.make_matrix cells_y cells_x 0. in
+        List.iter
+          (fun c ->
+            a_grid.(c.y).(c.x) <- c.a;
+            b_grid.(c.y).(c.x) <- c.b)
+          cells;
+        emit frame_sig { a_grid; b_grid };
+        pause ();
+        loop ()
+      in
+      loop ())
+
+(* One cell behavior: reads last frame, computes next concentrations, emits current state. *)
+let cell_behavior stop frame_sig state_sig init_state =
+  watch stop (fun () ->
+      let rec loop state =
+        let frame = await frame_sig in
+        let la, lb = laplacian frame state.x state.y in
+        let a = state.a in
+        let b = state.b in
+        let feed, kill = feed_kill state.x state.y state.phase in
+        let forcing = pulse_force state.x state.y state.phase in
+        let reaction = a *. b *. b in
+        let a' =
+          clamp01
+            (a +. ((a_diff *. la) -. reaction +. (feed *. (1. -. a)) -. (0.35 *. forcing)) *. dt)
+        in
+        let b' =
+          clamp01
+            (b +. ((b_diff *. lb) +. reaction -. ((kill +. feed) *. b) +. forcing) *. dt)
+        in
+        let next_state = { state with a = a'; b = b'; phase = state.phase +. 1. } in
+        emit state_sig next_state;
+        pause ();
+        loop next_state
+      in
+      loop init_state)
+
+let render_loop stop frame_sig () =
+  watch stop (fun () ->
+      let image = gen_image_color cells_x cells_y (Color.create 0 0 0 255) in
+      let texture = load_texture_from_image image in
+      unload_image image;
+      set_texture_filter texture TextureFilter.Point;
+      let pixels = Array1.create int8_unsigned c_layout (cells_x * cells_y * 4) in
+      let pixels_ptr = to_voidp (bigarray_start array1 pixels) in
+      let cell_w = max 1 (width / cells_x) in
+      let cell_h = max 1 (height / cells_y) in
+      let draw_w = cells_x * cell_w in
+      let draw_h = cells_y * cell_h in
+      let off_x = (width - draw_w) / 2 in
+      let off_y = (height - draw_h) / 2 in
+      let src = Rectangle.create 0.0 0.0 (float_of_int cells_x) (float_of_int cells_y) in
+      let dst =
+        Rectangle.create
+          (float_of_int off_x)
+          (float_of_int off_y)
+          (float_of_int draw_w)
+          (float_of_int draw_h)
+      in
+      let origin = Vector2.create 0.0 0.0 in
+      let frames = ref 0 in
+      let last_fps_tick = ref (get_time ()) in
+      let rec loop () =
+        let frame = await frame_sig in
+        for y = 0 to cells_y - 1 do
+          for x = 0 to cells_x - 1 do
+            let a = frame.a_grid.(y).(x) in
+            let b = frame.b_grid.(y).(x) in
+            let phase = (float_of_int x *. 0.17) +. (float_of_int y *. 0.11) in
+            let r, g, bl = color_of_ab a b phase in
+            let off = ((y * cells_x) + x) * 4 in
+            Array1.unsafe_set pixels off r;
+            Array1.unsafe_set pixels (off + 1) g;
+            Array1.unsafe_set pixels (off + 2) bl;
+            Array1.unsafe_set pixels (off + 3) 255
+          done
+        done;
+        update_texture texture pixels_ptr;
+        begin_drawing ();
+        clear_background (Color.create 5 8 14 255);
+        draw_texture_pro texture src dst origin 0.0 (Color.create 255 255 255 255);
+        draw_text "Q or ESC: quit" 16 12 18 (Color.create 230 242 255 255);
+        draw_text
+          (Printf.sprintf "Cells: %d (%dx%d)" cells_count cells_x cells_y)
+          16 34 18 (Color.create 180 210 238 255);
+        end_drawing ();
+        incr frames;
+        let now = get_time () in
+        let elapsed_s = now -. !last_fps_tick in
+        if elapsed_s >= 1.0 then (
+          let fps = float_of_int !frames /. elapsed_s in
+          set_window_title
+            (Printf.sprintf
+               "Tempo reaction-diffusion showcase (Raylib) - %.1f FPS - %d cells (%dx%d)"
+               fps cells_count cells_x cells_y);
+          frames := 0;
+          last_fps_tick := now);
+        loop ()
+      in
+      Fun.protect
+        ~finally:(fun () -> unload_texture texture)
+        (fun () -> loop ()))
+
+let scenario input_signal _output_signal =
+  let stop = new_signal () in
+  let state_sig = new_signal_agg ~initial:[] ~combine:(fun acc c -> c :: acc) in
+  let frame_sig = new_signal () in
+  (* Initialize with several seeds and sparse random activations. *)
+  let init_grid =
+    let min_dim = min cells_x cells_y in
+    let r_center1 = int_of_float (0.11 *. float_of_int min_dim) in
+    let r_center2 = int_of_float (0.08 *. float_of_int min_dim) in
+    let r_center3 = int_of_float (0.0625 *. float_of_int min_dim) in
+    let ring_inner = int_of_float (0.14 *. float_of_int min_dim) in
+    let ring_outer = int_of_float (0.178 *. float_of_int min_dim) in
+    List.init cells_y (fun y ->
+        List.init cells_x (fun x ->
+            let center1 =
+              abs (x - (cells_x / 2)) < r_center1 && abs (y - (cells_y / 2)) < r_center1
+            in
+            let center2 =
+              abs (x - (cells_x / 3)) < r_center2 && abs (y - ((2 * cells_y) / 3)) < r_center2
+            in
+            let center3 =
+              abs (x - ((3 * cells_x) / 4)) < r_center3 && abs (y - (cells_y / 3)) < r_center3
+            in
+            let ring =
+              let dx = x - (cells_x / 2) in
+              let dy = y - (cells_y / 2) in
+              let d2 = (dx * dx) + (dy * dy) in
+              d2 > (ring_inner * ring_inner) && d2 < (ring_outer * ring_outer)
+            in
+            let noise = Random.float 1. < 0.012 in
+            let b =
+              if center1 || center2 || center3 then 1.
+              else if ring then 0.65
+              else if noise then 0.55
+              else 0.
+            in
+            let a = clamp01 (1. -. (0.30 *. b)) in
+            let phase = Random.float tau in
+            { x; y; a; b; phase }))
+    |> List.flatten
+  in
+  let init_frame =
+    let a_grid = Array.make_matrix cells_y cells_x 1. in
+    let b_grid = Array.make_matrix cells_y cells_x 0. in
+    List.iter
+      (fun c ->
+        a_grid.(c.y).(c.x) <- c.a;
+        b_grid.(c.y).(c.x) <- c.b)
+      init_grid;
+    { a_grid; b_grid }
+  in
+  watch stop (fun () ->
+      parallel
+        ((fun () -> handle_input input_signal stop ())
+         :: (fun () -> frame_collector stop state_sig frame_sig init_frame)
+         :: (fun () -> render_loop stop frame_sig ())
+         :: List.map (fun c -> fun () -> cell_behavior stop frame_sig state_sig c) init_grid))
+
+let input () =
+  if window_should_close () || is_key_pressed Key.Escape || is_key_pressed Key.Q then Some 'q' else None
 
 let () =
   Random.self_init ();
-  init_window width height "Tempo Continuous CA Raylib";
-  set_target_fps target_fps;
-  ignore (calibrate_grid_for_fps target_fps);
-  (try execute ~input:poll_input ~output:render main with Exit -> ());
+  init_window width height "Tempo reaction-diffusion showcase (Raylib)";
+  set_target_fps 60;
+  set_window_title
+    (Printf.sprintf
+       "Tempo reaction-diffusion showcase (Raylib) - %d cells (%dx%d)"
+       cells_count cells_x cells_y);
+  (try execute ~input scenario with Exit -> ());
   close_window ()

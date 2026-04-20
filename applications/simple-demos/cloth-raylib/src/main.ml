@@ -1,5 +1,5 @@
 open Tempo
-open Tsdl
+open Raylib
 
 (* Cloth / jelly simulation with Tempo.
    - one behavior per node
@@ -45,22 +45,12 @@ let dt = 0.013
 let damping = 0.992
 let gravity = 330.0
 
-let clamp lo hi v = if v < lo then lo else if v > hi then hi else v
+let clampf lo hi v = if v < lo then lo else if v > hi then hi else v
 let idx x y = (y * grid_w) + x
 let min_x = 24.0
 let max_x = float_of_int width -. 24.0
 let min_y = 24.0
 let max_y = float_of_int height -. 24.0
-
-let make_anchors () =
-  let cloth_w = (float_of_int (grid_w - 1)) *. spacing in
-  let cloth_h = (float_of_int (grid_h - 1)) *. spacing in
-  let ox = (float_of_int width -. cloth_w) *. 0.5 in
-  let oy = (float_of_int height -. cloth_h) *. 0.08 in
-  Array.init nodes_count (fun i ->
-      let x = i mod grid_w in
-      let y = i / grid_w in
-      (ox +. (float_of_int x *. spacing), oy +. (float_of_int y *. spacing)))
 
 let hue_to_rgb h =
   let h = h -. floor h in
@@ -75,8 +65,18 @@ let hue_to_rgb h =
     else if h6 < 5.0 then x, 0.0, c
     else c, 0.0, x
   in
-  let to_i v = int_of_float (255.0 *. clamp 0.0 1.0 v) in
+  let to_i v = int_of_float (255.0 *. clampf 0.0 1.0 v) in
   to_i r, to_i g, to_i b
+
+let make_anchors () =
+  let cloth_w = float_of_int (grid_w - 1) *. spacing in
+  let cloth_h = float_of_int (grid_h - 1) *. spacing in
+  let ox = (float_of_int width -. cloth_w) *. 0.5 in
+  let oy = (float_of_int height -. cloth_h) *. 0.08 in
+  Array.init nodes_count (fun i ->
+      let x = i mod grid_w in
+      let y = i / grid_w in
+      (ox +. (float_of_int x *. spacing), oy +. (float_of_int y *. spacing)))
 
 let build_topology anchors =
   let neighbors = Array.make nodes_count [] in
@@ -126,23 +126,22 @@ let make_initial_nodes anchors =
       })
 
 let step_node neighbors state snapshot =
-  if state.pinned then
-    { state with x = state.anchor_x; y = state.anchor_y; vx = 0.0; vy = 0.0 }
+  if state.pinned then { state with x = state.anchor_x; y = state.anchor_y; vx = 0.0; vy = 0.0 }
   else
     let nodes = snapshot.nodes in
     let fx = ref 0.0 in
     let fy = ref 0.0 in
     List.iter
       (fun (j, rest, k) ->
-         let other = nodes.(j) in
-         let dx = other.x -. state.x in
-         let dy = other.y -. state.y in
-         let dist2 = (dx *. dx) +. (dy *. dy) +. 1e-9 in
-         let dist = sqrt dist2 in
-         let stretch = dist -. rest in
-         let f = k *. stretch in
-         fx := !fx +. ((dx /. dist) *. f);
-         fy := !fy +. ((dy /. dist) *. f))
+        let other = nodes.(j) in
+        let dx = other.x -. state.x in
+        let dy = other.y -. state.y in
+        let dist2 = (dx *. dx) +. (dy *. dy) +. 1e-9 in
+        let dist = sqrt dist2 in
+        let stretch = dist -. rest in
+        let f = k *. stretch in
+        fx := !fx +. ((dx /. dist) *. f);
+        fy := !fy +. ((dy /. dist) *. f))
       neighbors;
     let t = float_of_int snapshot.tick in
     let wind_x =
@@ -199,8 +198,8 @@ let frame_collector stop updates_sig snapshot_sig output_signal init_snapshot =
         let kinetic =
           Array.fold_left
             (fun acc n ->
-               let v2 = (n.vx *. n.vx) +. (n.vy *. n.vy) in
-               acc +. (0.5 *. n.mass *. v2))
+              let v2 = (n.vx *. n.vx) +. (n.vy *. n.vy) in
+              acc +. (0.5 *. n.mass *. v2))
             0.0 next_nodes
         in
         let next_snap = { nodes = next_nodes; tick = snap.tick + 1 } in
@@ -211,47 +210,6 @@ let frame_collector stop updates_sig snapshot_sig output_signal init_snapshot =
       in
       loop init_snapshot)
 
-let draw_frame renderer springs frame =
-  ignore (Sdl.set_render_draw_color renderer 10 12 22 255);
-  ignore (Sdl.render_clear renderer);
-  let nodes = frame.snapshot.nodes in
-  Array.iter
-    (fun s ->
-       let a = nodes.(s.a) in
-       let b = nodes.(s.b) in
-       let dx = b.x -. a.x in
-       let dy = b.y -. a.y in
-       let dist = sqrt ((dx *. dx) +. (dy *. dy)) in
-       let strain = abs_float ((dist -. s.rest) /. s.rest) in
-       let t = clamp 0.0 1.0 (strain *. 3.0) in
-       let stiff_t = clamp 0.0 1.0 ((s.k -. 85.0) /. (210.0 -. 85.0)) in
-       let base = 55 + int_of_float (120.0 *. (1.0 -. t)) in
-       let hot = int_of_float (220.0 *. t) in
-       let blue = 160 + int_of_float (70.0 *. stiff_t) in
-       ignore
-         (Sdl.set_render_draw_color renderer (base + (hot / 2)) (base - (hot / 4)) blue
-            160);
-       ignore
-         (Sdl.render_draw_line renderer (int_of_float a.x) (int_of_float a.y)
-            (int_of_float b.x) (int_of_float b.y)))
-    springs;
-  Array.iter
-    (fun n ->
-       if n.pinned then (
-         ignore (Sdl.set_render_draw_color renderer 255 215 90 255);
-         let rect =
-           Sdl.Rect.create ~x:(int_of_float n.x - 2) ~y:(int_of_float n.y - 2) ~w:5 ~h:5
-         in
-         ignore (Sdl.render_fill_rect renderer (Some rect)))
-       else (
-         let speed = sqrt ((n.vx *. n.vx) +. (n.vy *. n.vy)) in
-         let hue = mod_float (0.58 +. (0.0035 *. speed) +. (0.00015 *. n.y)) 1.0 in
-         let r, g, b = hue_to_rgb hue in
-         ignore (Sdl.set_render_draw_color renderer r g b 255);
-         ignore (Sdl.render_draw_point renderer (int_of_float n.x) (int_of_float n.y))))
-    nodes;
-  Sdl.render_present renderer
-
 let scenario neighbors init_nodes input_signal output_signal =
   let stop = new_signal () in
   let snapshot_sig = new_signal () in
@@ -260,70 +218,73 @@ let scenario neighbors init_nodes input_signal output_signal =
   watch stop (fun () ->
       parallel
         ((fun () -> handle_input input_signal stop ())
-         :: (fun () ->
-              frame_collector stop updates_sig snapshot_sig output_signal init_snapshot)
+         :: (fun () -> frame_collector stop updates_sig snapshot_sig output_signal init_snapshot)
          :: Array.to_list
               (Array.mapi
                  (fun i node ->
-                    let local_neighbors = neighbors.(i) in
-                    fun () -> node_behavior stop snapshot_sig updates_sig local_neighbors node)
+                   let local_neighbors = neighbors.(i) in
+                   fun () -> node_behavior stop snapshot_sig updates_sig local_neighbors node)
                  init_nodes)))
+
+let draw_frame springs frame =
+  begin_drawing ();
+  clear_background (Color.create 10 12 22 255);
+  let nodes = frame.snapshot.nodes in
+  Array.iter
+    (fun s ->
+      let a = nodes.(s.a) in
+      let b = nodes.(s.b) in
+      let dx = b.x -. a.x in
+      let dy = b.y -. a.y in
+      let dist = sqrt ((dx *. dx) +. (dy *. dy)) in
+      let strain = abs_float ((dist -. s.rest) /. s.rest) in
+      let t = clampf 0.0 1.0 (strain *. 3.0) in
+      let stiff_t = clampf 0.0 1.0 ((s.k -. 85.0) /. (210.0 -. 85.0)) in
+      let base = 55 + int_of_float (120.0 *. (1.0 -. t)) in
+      let hot = int_of_float (220.0 *. t) in
+      let blue = 160 + int_of_float (70.0 *. stiff_t) in
+      draw_line (int_of_float a.x) (int_of_float a.y) (int_of_float b.x) (int_of_float b.y)
+        (Color.create (base + (hot / 2)) (base - (hot / 4)) blue 160))
+    springs;
+  Array.iter
+    (fun n ->
+      if n.pinned then
+        draw_rectangle (int_of_float n.x - 2) (int_of_float n.y - 2) 5 5 (Color.create 255 215 90 255)
+      else
+        let speed = sqrt ((n.vx *. n.vx) +. (n.vy *. n.vy)) in
+        let hue = mod_float (0.58 +. (0.0035 *. speed) +. (0.00015 *. n.y)) 1.0 in
+        let r, g, b = hue_to_rgb hue in
+        draw_pixel (int_of_float n.x) (int_of_float n.y) (Color.create r g b 255))
+    nodes;
+  draw_text "Q or ESC: quit" 12 10 20 (Color.create 220 238 255 255);
+  end_drawing ()
 
 let () =
   Random.self_init ();
   let anchors = make_anchors () in
   let neighbors, springs = build_topology anchors in
   let init_nodes = make_initial_nodes anchors in
-  match Sdl.init Sdl.Init.video with
-  | Error (`Msg e) ->
-      Sdl.log "SDL init error: %s" e;
-      exit 1
-  | Ok () ->
-      match
-        Sdl.create_window ~w:width ~h:height "Tempo cloth/jelly (SDL)" Sdl.Window.windowed
-      with
-      | Error (`Msg e) ->
-          Sdl.log "SDL window creation error: %s" e;
-          exit 1
-      | Ok window -> (
-          match Sdl.create_renderer window ~index:(-1) ~flags:Sdl.Renderer.accelerated with
-          | Error (`Msg e) ->
-              Sdl.log "SDL renderer creation error: %s" e;
-              Sdl.destroy_window window;
-              Sdl.quit ();
-              exit 1
-          | Ok renderer ->
-              let event = Sdl.Event.create () in
-              let frames = ref 0 in
-              let last_tick = ref (Sdl.get_ticks ()) in
-              let input () =
-                if Sdl.poll_event (Some event) then
-                  match Sdl.Event.(enum (get event typ)) with
-                  | `Quit -> Some 'q'
-                  | `Key_down ->
-                      let sc = Sdl.Event.get event Sdl.Event.keyboard_scancode in
-                      let kc = Sdl.Event.get event Sdl.Event.keyboard_keycode in
-                      if sc = Sdl.Scancode.q || kc = Sdl.K.q || kc = Sdl.K.escape
-                      then Some 'q'
-                      else None
-                  | _ -> None
-                else None
-              in
-              let output frame =
-                draw_frame renderer springs frame;
-                incr frames;
-                let now = Sdl.get_ticks () in
-                let elapsed = Int32.sub now !last_tick in
-                if Int32.compare elapsed 1000l >= 0 then (
-                  let fps = (float_of_int !frames *. 1000.0) /. Int32.to_float elapsed in
-                  Sdl.set_window_title window
-                    (Printf.sprintf
-                       "Tempo cloth/jelly (SDL) - %.1f FPS - %d nodes - %d springs - E=%.0f"
-                       fps nodes_count (Array.length springs) frame.kinetic);
-                  frames := 0;
-                  last_tick := now)
-              in
-              execute ~input ~output (scenario neighbors init_nodes);
-              Sdl.destroy_renderer renderer;
-              Sdl.destroy_window window;
-              Sdl.quit ())
+  init_window width height "Tempo cloth/jelly (Raylib)";
+  set_target_fps 60;
+  let frames = ref 0 in
+  let last_tick = ref (get_time ()) in
+  let input () =
+    if window_should_close () || is_key_pressed Key.Q || is_key_pressed Key.Escape then Some 'q'
+    else None
+  in
+  let output frame =
+    draw_frame springs frame;
+    incr frames;
+    let now = get_time () in
+    let elapsed = now -. !last_tick in
+    if elapsed >= 1.0 then (
+      let fps = float_of_int !frames /. elapsed in
+      set_window_title
+        (Printf.sprintf
+           "Tempo cloth/jelly (Raylib) - %.1f FPS - %d nodes - %d springs - E=%.0f"
+           fps nodes_count (Array.length springs) frame.kinetic);
+      frames := 0;
+      last_tick := now)
+  in
+  execute ~input ~output (scenario neighbors init_nodes);
+  close_window ()

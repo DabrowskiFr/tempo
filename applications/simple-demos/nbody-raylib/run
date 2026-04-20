@@ -1,0 +1,18 @@
+#!/bin/sh
+set -eu
+
+if [ "${1:-}" = "help" ] || [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+  cat <<'EOT'
+Usage:
+  sh applications/simple-demos/nbody-raylib/run
+EOT
+  exit 0
+fi
+
+if [ -n "${DUNE_SOURCEROOT:-}" ]; then
+  cd "${DUNE_SOURCEROOT}/applications/simple-demos/nbody-raylib"
+else
+  cd "$(dirname "$0")"
+fi
+
+exec dune exec "./src/main.exe" -- "$@"

@@ -1,6 +1,26 @@
 open Tempo
 open Raylib
 
+module State = struct
+  let create x = ref x
+  let get r = !r
+  let modify r f = r := f !r
+end
+
+module Reactive = struct
+  let rising_edge project input_sig output_sig () =
+    let rec loop prev =
+      let input = await input_sig in
+      let cur = project input in
+      if (not prev) && cur then emit output_sig ();
+      pause ();
+      loop cur
+    in
+    loop false
+
+  let supervise_until stop procs = watch stop (fun () -> parallel procs)
+end
+
 type input_state = {
   toggle_down : bool;
 }
@@ -52,7 +72,7 @@ let main input output =
   let planet_angle = State.create 0.0 in
   let moon_angle = State.create 0.0 in
 
-  let input_proc () = Reactive.rising_edge (fun i -> i.toggle_down) input toggle_edge in
+  let input_proc () = Reactive.rising_edge (fun i -> i.toggle_down) input toggle_edge () in
 
   let toggle_proc () =
     let rec loop () =
