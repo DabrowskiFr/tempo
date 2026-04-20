@@ -37,15 +37,24 @@ jobs:
       - name: Build API docs
         run: opam exec -- dune build -p tempo @doc
 
+      - name: Upload docs artifact (CI)
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-html
+          path: _build/default/_doc/_html
+
       - name: Configure GitHub Pages
+        if: github.ref == 'refs/heads/main'
         uses: actions/configure-pages@v5
 
       - name: Upload Pages artifact
+        if: github.ref == 'refs/heads/main'
         uses: actions/upload-pages-artifact@v3
         with:
           path: _build/default/_doc/_html
 
   deploy:
+    if: github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
     environment:

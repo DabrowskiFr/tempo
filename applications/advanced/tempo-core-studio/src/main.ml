@@ -477,45 +477,33 @@ module Sync = struct
 
   let simulate ~(blocks : block list) ~(inputs : ext_input option list) ~(instants : int) : timeline_row list =
     let run input output =
-      let sa = new_signal () in
-      let sb = new_signal () in
-      let sc = new_signal () in
-      let sd = new_signal () in
+      (* Studio semantics: multiple emits of the same color in one instant are
+         merged instead of crashing the simulation. *)
+      let mk_color_signal () = new_signal_agg ~initial:() ~combine:(fun _ _ -> ()) in
+      let sa = mk_color_signal () in
+      let sb = mk_color_signal () in
+      let sc = mk_color_signal () in
+      let sd = mk_color_signal () in
       let trace = new_signal_agg ~initial:[] ~combine:(fun acc msg -> msg :: acc) in
       let emit_once sigv name =
-        try
-          emit sigv ();
-          emit trace (Printf.sprintf "emit %s" name)
-        with Invalid_argument _ ->
-          emit trace (Printf.sprintf "emit %s skipped (already present this instant)" name)
+        emit sigv ();
+        emit trace (Printf.sprintf "emit %s" name)
       in
       let rec input_pump () =
         when_ input (fun () ->
             let frame = await_immediate input in
             if frame.red then (
-              try
-                emit sa ();
-                emit trace "input red"
-              with Invalid_argument _ ->
-                emit trace "input red skipped (already present this instant)");
+              emit sa ();
+              emit trace "input red");
             if frame.blue then (
-              try
-                emit sb ();
-                emit trace "input blue"
-              with Invalid_argument _ ->
-                emit trace "input blue skipped (already present this instant)");
+              emit sb ();
+              emit trace "input blue");
             if frame.green then (
-              try
-                emit sc ();
-                emit trace "input green"
-              with Invalid_argument _ ->
-                emit trace "input green skipped (already present this instant)");
+              emit sc ();
+              emit trace "input green");
             if frame.yellow then (
-              try
-                emit sd ();
-                emit trace "input yellow"
-              with Invalid_argument _ ->
-                emit trace "input yellow skipped (already present this instant)"));
+              emit sd ();
+              emit trace "input yellow"));
         pause ();
         input_pump ()
       and eval_block (b : block) =
@@ -529,8 +517,8 @@ module Sync = struct
             emit trace (Printf.sprintf "await %s satisfied" (signal_name_to_string b.s1))
         | K_await_imm ->
             let sigv = signal_of_name sa sb sc sd b.s1 in
-            let () = await_immediate sigv in
-            emit trace (Printf.sprintf "await_immediate %s satisfied" (signal_name_to_string b.s1))
+            when_ sigv (fun () ->
+                emit trace (Printf.sprintf "await_immediate %s satisfied" (signal_name_to_string b.s1)))
         | K_pause ->
             emit trace "pause";
             pause ()

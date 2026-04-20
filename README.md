@@ -14,6 +14,7 @@ All three are grounded in the idea that deterministic concurrency can be made tr
 - [Build](#build)
 - [Run tests](#run-tests)
 - [Run applications](#run-applications)
+- [Application screenshots](#application-screenshots)
 - [Advanced applications: dependencies and Tempo libraries](#advanced-applications-dependencies-and-tempo-libraries)
 - [Run sample applications](#run-sample-applications)
 - [Create and run your own Tempo application](#create-and-run-your-own-tempo-application)
@@ -194,6 +195,38 @@ Headless mode example (tempo-core-studio):
 ```sh
 sh applications/advanced/tempo-core-studio/run -- --headless --instants 32
 ```
+
+---
+
+## Application screenshots
+
+### Simple demos
+
+`solar-system-raylib`  
+![solar-system-raylib](docs/screenshots/solar-system-raylib.png)
+
+`ca-continuous-raylib`  
+![ca-continuous-raylib](docs/screenshots/ca-continuous-raylib.png)
+
+`nbody-raylib`  
+![nbody-raylib](docs/screenshots/nbody-raylib.png)
+
+`pendulums-raylib`  
+![pendulums-raylib](docs/screenshots/pendulums-raylib.png)
+
+`cloth-raylib`  
+![cloth-raylib](docs/screenshots/cloth-raylib.png)
+
+### Advanced applications
+
+`tempo-core-studio`  
+![tempo-core-studio](docs/screenshots/tempo-core-studio.png)
+
+`game-univ`  
+![game-univ](docs/screenshots/game-univ.png)
+
+`music-score-player`  
+![music-score-player](docs/screenshots/music-score-player.png)
 
 ---
 
