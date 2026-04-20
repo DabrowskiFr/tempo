@@ -56,10 +56,7 @@ Reactive programs are built from seven primitive operations:
 --- 
 ### Construct primitives
 
-High-level reactive operators are available both:
-
-- at top-level (`Tempo.after_n`, `Tempo.timeout`, ...),
-- and under `Tempo.Constructs` (`Tempo.Constructs.after_n`, ...).
+High-level reactive operators are available under `Tempo.Constructs`.
 
 These constructs are built on top of the seven fundamental primitives.
 

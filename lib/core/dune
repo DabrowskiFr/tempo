@@ -4,9 +4,13 @@
  (modules
   tempo_types
   tempo_log
-  tempo_thread
-  tempo_signal
-  tempo_task
+ tempo_thread
+ tempo_signal
+ tempo_task
+ tempo_low_level
+ tempo_core
+ tempo_constructs
   tempo_engine
   tempo)
+ (private_modules tempo_low_level tempo_core tempo_constructs)
  (libraries logs mtime mtime.clock))
