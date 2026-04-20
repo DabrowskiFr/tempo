@@ -7,11 +7,13 @@ All three are grounded in the idea that deterministic concurrency can be made tr
 
 - [Instants and execution model](#instants-and-execution-model)
 - [Fundamental primitives](#fundamental-primitives)
-- [Derived functions](#derived-functions)
+- [Construct primitives](#construct-primitives)
+- [Control helpers](#control-helpers)
 - [Guards and preemption](#guards-and-preemption)
 - [Installation](#installation)
 - [Build](#build)
 - [Run tests](#run-tests)
+- [Run applications (Raylib)](#run-applications-raylib)
 - [Run sample applications](#run-sample-applications)
 - [Run graphical demos](#run-graphical-demos)
 - [Create and run your own Tempo application](#create-and-run-your-own-tempo-application)
@@ -52,11 +54,37 @@ Reactive programs are built from seven primitive operations:
 - **`watch signal body`** executes body until signal is emitted. Such an emission causes body to be terminated at the end of the current instant, implementing weak preemption.
 
 --- 
-## Derived functions
+## Construct primitives
+
+High-level reactive operators are available both:
+
+- at top-level (`Tempo.after_n`, `Tempo.timeout`, ...),
+- and under `Tempo.Constructs` (`Tempo.Constructs.after_n`, ...).
+
+These constructs are built on top of the seven fundamental primitives.
+
+- `present_then_else s then_ else_` — run `then_` if `s` is present in the current instant, otherwise run `else_` in the next instant.
+- `after_n n body` — wait `n` logical instants, then run `body`.
+- `every_n n body` — run `body` every `n` logical instants forever.
+- `timeout n ~on_timeout body` — run `body` under weak preemption, cancel it after `n` instants, then run `on_timeout`.
+- `cooldown n s body` — run `body` when `s` is observed, then ignore subsequent occurrences for `n` instants.
+- `supervise_until stop body` — alias for a weak preemption scope (`watch stop body`).
+- `pulse_n n` — create a unit signal that is emitted periodically every `n` instants.
+
+Example:
+
+```ocaml
+open Tempo
+
+let heartbeat = Constructs.pulse_n 10
+```
+
+---
+
+## Control helpers
 
 A few helpers are built on top of the primitives and exported by `Tempo`:
 
-- `present_then_else s then_ else_` — run `then_` if `s` is present in the current instant, otherwise run `else_` in the next instant.
 - `loop f` — repeat `f` forever with a `pause` between iterations.
 - `idle` — a `pause`-forever process.
 - `control toggle proc` — start/stop `proc` each time `toggle` is emitted (starts stopped).
@@ -83,6 +111,13 @@ If you want to pin this local checkout:
 ```sh
 opam pin add tempo . --no-action
 opam install . --deps-only --with-test --with-doc
+```
+
+Optional packages used by applications/examples:
+
+```sh
+opam install raylib tsdl tsdl-ttf ctypes ctypes-foreign dune-configurator
+brew install fluid-synth   # macOS (for tempo-fluidsynth / music_score_player)
 ```
 
 ---
@@ -125,6 +160,43 @@ dune exec tests/ok/emit_once_await_one.exe
 
 ---
 
+## Run applications (Raylib)
+
+From repository root, use the project switch first:
+
+```sh
+eval $(opam env --switch 5.4.1+options --set-switch)
+```
+
+Then launch applications:
+
+```sh
+sh applications/simple-demos/boids-raylib/run
+sh applications/simple-demos/snake-raylib/run
+sh applications/simple-demos/ca-continuous-raylib/run
+sh applications/simple-demos/lenia-raylib/run
+sh applications/simple-demos/logicgroove/run
+sh applications/simple-demos/solar-system-raylib/run
+sh applications/simple-demos/temporalsim/run
+sh applications/advanced/game-univ/run
+sh applications/advanced/tempo-core-studio/run
+```
+
+`music_score_player` currently has no `run` script:
+
+```sh
+cd applications/advanced/music_score_player
+dune exec ./src/main.exe --
+```
+
+Headless mode example (tempo-core-studio):
+
+```sh
+sh applications/advanced/tempo-core-studio/run -- --headless --instants 32
+```
+
+---
+
 ## Run sample applications
 
 The `samples/` directory contains small CLI-oriented programs:
@@ -150,19 +222,21 @@ dune exec tests/ok/watch_nested.exe -- --log-level info
 
 ## Run graphical demos
 
-The `examples/` directory contains graphical demos (Graphics and TSDL backends).
+The `examples/` directory contains TSDL-based demos.
 
 Available executables include:
 
-- `balls_control_graphics`
-- `balls_alternate_graphics`
-- `boids_graphics`
 - `boids_tsdl`
 - `snake_tsdl`
-- `solar_system_graphics`
 - `solar_system_tsdl`
-- `ca_continuous_graphics`
 - `ca_continuous_tsdl`
+- `nbody_tsdl`
+- `cloth_tsdl`
+- `pendulums_tsdl`
+- `traffic_tsdl`
+- `fire_smoke_tsdl`
+- `chamber_orbs_tsdl`
+- `mage_arena_tsdl`
 
 Run one demo:
 
@@ -170,7 +244,7 @@ Run one demo:
 dune exec examples/boids_tsdl.exe
 ```
 
-Note: these demos require additional libraries (`graphics`, `tsdl`, `tsdl-ttf`) and a working graphical environment.
+Note: these demos require `tsdl`, `tsdl-ttf`, and a working graphical environment.
 
 ---
 
@@ -189,14 +263,16 @@ In your OCaml file:
 ```ocaml
 open Tempo
 
-let () =
+let program _input _output =
   let s = new_signal () in
-  run (parallel [
+  parallel [
     (fun () ->
        let v = await s in
        Format.printf "received %d@." v);
     (fun () -> emit s 42)
-  ])
+  ]
+
+let () = execute program
 ```
 
 Run it:
@@ -225,4 +301,26 @@ Example:
 
 ```sh
 RML_LOG_LEVEL=debug RML_TRACE_GUARDS=1 dune exec samples/awaiters_log.exe
+```
+
+---
+
+## Other useful commands
+
+Format project:
+
+```sh
+dune fmt
+```
+
+Clean build artifacts:
+
+```sh
+dune clean
+```
+
+Build and run docs:
+
+```sh
+dune build @doc
 ```
