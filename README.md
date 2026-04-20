@@ -5,40 +5,38 @@ All three are grounded in the idea that deterministic concurrency can be made tr
 
 ## Table of contents
 
-- [Instants and execution model](#instants-and-execution-model)
-- [Fundamental primitives](#fundamental-primitives)
-- [Construct primitives](#construct-primitives)
-- [Control helpers](#control-helpers)
-- [Guards and preemption](#guards-and-preemption)
-- [Installation](#installation)
-- [Build](#build)
-- [Run tests](#run-tests)
-- [Run applications](#run-applications)
+- [Programmation model](#programming-model)
+  - [Instants and execution model](#instants-and-execution-model)
+  - [Fundamental primitives](#fundamental-primitives)
+  - [Construct primitives](#construct-primitives)
+  - [Control helpers](#control-helpers)
+- [Install, build and test](#installation-and-build)
+  - [Installation](#installation)
+  - [Build](#build)
+  - [Run tests](#run-tests)
+  - [Documentation](#documentation)
+- [Demos](#demos)
+  - [Run applications](#run-applications)
+  - [Advanced applications: dependencies and Tempo libraries](#advanced-applications-dependencies-and-tempo-libraries)
+  - [Run sample applications](#run-sample-applications)
+- [Quick start]
+  - [Create and run your own Tempo application](#create-and-run-your-own-tempo-application)
+  - [Logging and runtime flags](#logging-and-runtime-flags)
 - [Application screenshots](#application-screenshots)
-- [Advanced applications: dependencies and Tempo libraries](#advanced-applications-dependencies-and-tempo-libraries)
-- [Run sample applications](#run-sample-applications)
-- [Create and run your own Tempo application](#create-and-run-your-own-tempo-application)
-- [Documentation](#documentation)
-- [Logging and runtime flags](#logging-and-runtime-flags)
-- [Other useful commands](#other-useful-commands)
 
 ---
 
-## Instants and execution model
+## Programming model
+
+### Instants and execution model
 
 A Tempo program executes over a sequence of logical instants. It supports synchronous parallel composition of behaviors that communicate through valued signals. At each instant, a signal is either present or absent. A signal is present if and only if a value is provided by the environment or emitted by the program during that instant.
-
 The absence of a signal can be observed only once the instant has completed. Observers may then react in the following instant. This delayed observation of absence is the key mechanism that preserves determinism.
-
----
-
-## Guards and preemption
-
 Tempo supports guarded execution and weak preemption, allowing behaviors to be conditionally activated and preempted without violating the synchronous execution model.
 
 ---
 
-## Fundamental primitives
+### Fundamental primitives
 
 Tempo manipulates signals that carry values during a logical instant. Two kinds of signals are supported:
 
@@ -56,7 +54,7 @@ Reactive programs are built from seven primitive operations:
 - **`watch signal body`** executes body until signal is emitted. Such an emission causes body to be terminated at the end of the current instant, implementing weak preemption.
 
 --- 
-## Construct primitives
+### Construct primitives
 
 High-level reactive operators are available both:
 
@@ -83,7 +81,7 @@ let heartbeat = Constructs.pulse_n 10
 
 ---
 
-## Control helpers
+### Control helpers
 
 A few helpers are built on top of the primitives and available under `Tempo.Constructs`:
 
@@ -94,7 +92,9 @@ A few helpers are built on top of the primitives and available under `Tempo.Cons
 
 ---
 
-## Installation
+## Installation and build
+
+### Installation
 
 Requirements:
 
@@ -126,7 +126,7 @@ brew install fluid-synth   # macOS (needed for tempo-fluidsynth / music_score_pl
 
 ---
 
-## Build
+### Build
 
 Build everything:
 
@@ -142,7 +142,7 @@ dune build @install
 
 ---
 
-## Run tests
+### Run tests
 
 Run the full test suite:
 
@@ -164,7 +164,32 @@ dune exec tests/ok/emit_once_await_one.exe
 
 ---
 
-## Run applications
+## Documentation
+
+Generate API documentation:
+
+```sh
+dune build @doc
+```
+
+Open the generated documentation index:
+
+```sh
+open _build/default/_doc/_html/index.html      # macOS
+xdg-open _build/default/_doc/_html/index.html  # Linux
+```
+
+The Tempo library entry page is:
+
+```text
+_build/default/_doc/_html/tempo/index.html
+```
+
+---
+
+## Demos
+
+### Run applications
 
 From repository root, use the project switch first:
 
@@ -198,41 +223,7 @@ sh applications/advanced/tempo-core-studio/run -- --headless --instants 32
 
 ---
 
-## Application screenshots
-
-### Simple demos
-
-`solar-system-raylib`  
-![solar-system-raylib](docs/screenshots/solar-system-raylib.png)
-
-`ca-continuous-raylib`  
-![ca-continuous-raylib](docs/screenshots/ca-continuous-raylib.png)
-
-`nbody-raylib`  
-![nbody-raylib](docs/screenshots/nbody-raylib.png)
-
-`pendulums-raylib`  
-![pendulums-raylib](docs/screenshots/pendulums-raylib.png)
-
-`cloth-raylib`  
-![cloth-raylib](docs/screenshots/cloth-raylib.png)
-
-### Advanced applications
-
-`tempo-core-studio`  
-![tempo-core-studio](docs/screenshots/tempo-core-studio.png)
-
-`game-univ`  
-![game-univ](docs/screenshots/game-univ.png)
-
-`music-score-player`  
-![music-score-player](docs/screenshots/music-score-player.png)
-
----
-
-## Advanced applications: dependencies and Tempo libraries
-
-`examples/` has been removed. Interactive/graphical apps now live in `applications/simple-demos/` and `applications/advanced/`.
+### Advanced applications: dependencies and Tempo libraries
 
 For advanced apps, install the runtime stack once:
 
@@ -253,40 +244,11 @@ opam pin add tempo-score . --no-action
 opam install tempo tempo-raylib tempo-fluidsynth tempo-score
 ```
 
-Application dependency map:
-
-| Application | Required Tempo libraries | Other OCaml deps | System deps |
-| --- | --- | --- | --- |
-| `applications/advanced/tempo-core-studio` | `tempo`, `tempo-raylib` | `raylib` | none beyond Raylib runtime |
-| `applications/advanced/game-univ` | `tempo`, `tempo-raylib` | `raylib`, `unix` | none beyond Raylib runtime |
-| `applications/advanced/music_score_player` | `tempo`, `tempo-score`, `tempo-fluidsynth` | `raylib`, `unix`, `ctypes`, `ctypes-foreign`, `dune-configurator` | FluidSynth (`fluid-synth` on macOS), SoundFont (`.sf2`/`.sf3`) |
-
 ---
 
-## Run sample applications
+## Quick start
 
-The `samples/` directory contains small CLI-oriented programs:
-
-- `emit_twice`
-- `when_emit_parallel`
-- `awaiters_log`
-- `all_effects_log`
-
-Run one sample:
-
-```sh
-dune exec samples/all_effects_log.exe -- --log-level info
-```
-
-You can also run tests as small scenario applications from `tests/ok/`:
-
-```sh
-dune exec tests/ok/watch_nested.exe -- --log-level info
-```
-
----
-
-## Create and run your own Tempo application
+### Create and run your own Tempo application
 
 In your dune file:
 
@@ -321,30 +283,7 @@ dune exec path/to/my_app.exe
 
 ---
 
-## Documentation
-
-Generate API documentation:
-
-```sh
-dune build @doc
-```
-
-Open the generated documentation index:
-
-```sh
-open _build/default/_doc/_html/index.html      # macOS
-xdg-open _build/default/_doc/_html/index.html  # Linux
-```
-
-The Tempo library entry page is:
-
-```text
-_build/default/_doc/_html/tempo/index.html
-```
-
----
-
-## Logging and runtime flags
+### Logging and runtime flags
 
 Tempo supports runtime logging with CLI flags and environment variables.
 
@@ -366,22 +305,32 @@ RML_LOG_LEVEL=debug RML_TRACE_GUARDS=1 dune exec samples/awaiters_log.exe
 
 ---
 
-## Other useful commands
+## Application screenshots
 
-Format project:
+### Simple demos
 
-```sh
-dune fmt
-```
+`solar-system-raylib`  
+![solar-system-raylib](docs/screenshots/solar-system-raylib.png)
 
-Clean build artifacts:
+`ca-continuous-raylib`  
+![ca-continuous-raylib](docs/screenshots/ca-continuous-raylib.png)
 
-```sh
-dune clean
-```
+`nbody-raylib`  
+![nbody-raylib](docs/screenshots/nbody-raylib.png)
 
-Build and run docs:
+`pendulums-raylib`  
+![pendulums-raylib](docs/screenshots/pendulums-raylib.png)
 
-```sh
-dune build @doc
-```
+`cloth-raylib`  
+![cloth-raylib](docs/screenshots/cloth-raylib.png)
+
+### Advanced applications
+
+`tempo-core-studio`  
+![tempo-core-studio](docs/screenshots/tempo-core-studio.png)
+
+`game-univ`  
+![game-univ](docs/screenshots/game-univ.png)
+
+`music-score-player`  
+![music-score-player](docs/screenshots/music-score-player.png)
