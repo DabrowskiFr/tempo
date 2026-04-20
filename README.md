@@ -9,8 +9,14 @@ All three are grounded in the idea that deterministic concurrency can be made tr
 - [Fundamental primitives](#fundamental-primitives)
 - [Derived functions](#derived-functions)
 - [Guards and preemption](#guards-and-preemption)
-- [Installation & usage](#installation--usage)
-- [Examples](#examples)
+- [Installation](#installation)
+- [Build](#build)
+- [Run tests](#run-tests)
+- [Run sample applications](#run-sample-applications)
+- [Run graphical demos](#run-graphical-demos)
+- [Create and run your own Tempo application](#create-and-run-your-own-tempo-application)
+- [Logging and runtime flags](#logging-and-runtime-flags)
+- [Other useful commands](#other-useful-commands)
 
 ---
 
@@ -58,46 +64,165 @@ A few helpers are built on top of the primitives and exported by `Tempo`:
 
 ---
 
-> **Warning**  
-> Tempo also exposes a low-level module, Tempo.Low_level, intended for advanced use cases. This module provides direct access to primitive operations such as task termination (kill), explicit fork/join, and manual guard management. Unless you are implementing custom control structures, the high-level primitives should be preferred.
+## Installation
+
+Requirements:
+
+- OCaml >= 5.3
+- dune >= 3
+- opam (recommended)
+
+From the repository root:
+
+```sh
+opam install . --deps-only --with-test --with-doc
+```
+
+If you want to pin this local checkout:
+
+```sh
+opam pin add tempo . --no-action
+opam install . --deps-only --with-test --with-doc
+```
 
 ---
 
+## Build
 
-## Installation & usage
-
-Dependencies: OCaml 5.3 or later and dune.
-
-### Build the library
+Build everything:
 
 ```sh
 dune build
 ```
 
-### Execute the test suite
+Build only the public library/installable targets:
+
+```sh
+dune build @install
+```
+
+---
+
+## Run tests
+
+Run the full test suite:
+
+```sh
+dune runtest
+```
+
+Equivalent shorthand:
 
 ```sh
 dune test
 ```
 
-### Run an example
+Run a single test executable:
 
 ```sh
-dune exec tests/ok/emit_once_await_one.exe -- --log-level info
+dune exec tests/ok/emit_once_await_one.exe
 ```
-
-Passing --log-level enables logging of logical instants, making it possible to trace the progression of instants during execution.
-
-### Generate the documentation 
-
-```sh 
-dune ocaml doc
-```
-
-To use Tempo in your own project, add `tempo` to your dune file and `open Tempo` to your source file. 
 
 ---
 
-## Examples 
+## Run sample applications
 
-See examples in `tests/ok`
+The `samples/` directory contains small CLI-oriented programs:
+
+- `emit_twice`
+- `when_emit_parallel`
+- `awaiters_log`
+- `all_effects_log`
+
+Run one sample:
+
+```sh
+dune exec samples/all_effects_log.exe -- --log-level info
+```
+
+You can also run tests as small scenario applications from `tests/ok/`:
+
+```sh
+dune exec tests/ok/watch_nested.exe -- --log-level info
+```
+
+---
+
+## Run graphical demos
+
+The `examples/` directory contains graphical demos (Graphics and TSDL backends).
+
+Available executables include:
+
+- `balls_control_graphics`
+- `balls_alternate_graphics`
+- `boids_graphics`
+- `boids_tsdl`
+- `snake_tsdl`
+- `solar_system_graphics`
+- `solar_system_tsdl`
+- `ca_continuous_graphics`
+- `ca_continuous_tsdl`
+
+Run one demo:
+
+```sh
+dune exec examples/boids_tsdl.exe
+```
+
+Note: these demos require additional libraries (`graphics`, `tsdl`, `tsdl-ttf`) and a working graphical environment.
+
+---
+
+## Create and run your own Tempo application
+
+In your dune file:
+
+```lisp
+(executable
+ (name my_app)
+ (libraries tempo))
+```
+
+In your OCaml file:
+
+```ocaml
+open Tempo
+
+let () =
+  let s = new_signal () in
+  run (parallel [
+    (fun () ->
+       let v = await s in
+       Format.printf "received %d@." v);
+    (fun () -> emit s 42)
+  ])
+```
+
+Run it:
+
+```sh
+dune exec path/to/my_app.exe
+```
+
+---
+
+## Logging and runtime flags
+
+Tempo supports runtime logging with CLI flags and environment variables.
+
+CLI:
+
+- `--log-level debug|info|warning|error|quiet`
+
+Environment variables:
+
+- `RML_LOG_LEVEL=debug|info|warning|error|off`
+- `RML_LOG_COLOR=0|1` (disable/enable ANSI colors)
+- `RML_TRACE_GUARDS=0|1` (extra guard tracing)
+
+Example:
+
+```sh
+RML_LOG_LEVEL=debug RML_TRACE_GUARDS=1 dune exec samples/awaiters_log.exe
+```

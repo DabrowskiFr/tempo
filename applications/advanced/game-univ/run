@@ -1,0 +1,27 @@
+#!/bin/sh
+set -eu
+
+APP_SLUG="game-univ"
+APP_DIR="applications/advanced/game-univ"
+TARGET="cheat_detector_game"
+
+if [ "${1:-}" = "help" ] || [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+  cat <<'EOT'
+Usage:
+  dune exec ./applications/run -- game-univ [-- <app-args...>]
+  dune exec ./applications/advanced/game-univ/run -- [<app-args...>]
+
+Notes:
+  - Additional arguments are forwarded to the app executable.
+  - Advanced options like --headless/--seed depend on each app.
+EOT
+  exit 0
+fi
+
+if [ -n "${DUNE_SOURCEROOT:-}" ]; then
+  cd "${DUNE_SOURCEROOT}/applications/advanced/game-univ"
+else
+  cd "$(dirname "$0")"
+fi
+
+exec dune exec "cheat_detector_game" -- "$@"

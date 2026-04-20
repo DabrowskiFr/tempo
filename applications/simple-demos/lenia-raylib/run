@@ -1,0 +1,27 @@
+#!/bin/sh
+set -eu
+
+APP_SLUG="lenia-raylib"
+APP_DIR="applications/simple-demos/lenia-raylib"
+TARGET="./src/main.exe"
+
+if [ "${1:-}" = "help" ] || [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+  cat <<'EOT'
+Usage:
+  dune exec ./applications/run -- lenia-raylib [-- <app-args...>]
+  dune exec ./applications/simple-demos/lenia-raylib/run -- [<app-args...>]
+
+Notes:
+  - Additional arguments are forwarded to the app executable.
+  - Advanced options like --headless/--seed depend on each app.
+EOT
+  exit 0
+fi
+
+if [ -n "${DUNE_SOURCEROOT:-}" ]; then
+  cd "${DUNE_SOURCEROOT}/applications/simple-demos/lenia-raylib"
+else
+  cd "$(dirname "$0")"
+fi
+
+exec dune exec "./src/main.exe" -- "$@"

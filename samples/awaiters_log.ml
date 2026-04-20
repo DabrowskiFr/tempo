@@ -2,12 +2,14 @@ open Tempo
 
 let program _ _ =
   let s = new_signal () in
-  let _ =
-    Low_level.fork (fun () ->
-        pause ();
-        emit s ())
+  let producer () =
+    pause ();
+    emit s ()
   in
-  let () = await s in
-  Format.printf "signal received@."
+  let consumer () =
+    let () = await s in
+    Format.printf "signal received@."
+  in
+  parallel [ producer; consumer ]
 
 let _ = execute program

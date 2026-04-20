@@ -1,0 +1,27 @@
+#!/bin/sh
+set -eu
+
+APP_SLUG="logicgroove"
+APP_DIR="applications/simple-demos/logicgroove"
+TARGET="./src/main.exe"
+
+if [ "${1:-}" = "help" ] || [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+  cat <<'EOT'
+Usage:
+  dune exec ./applications/run -- logicgroove [-- <app-args...>]
+  dune exec ./applications/simple-demos/logicgroove/run -- [<app-args...>]
+
+Notes:
+  - Additional arguments are forwarded to the app executable.
+  - Advanced options like --headless/--seed depend on each app.
+EOT
+  exit 0
+fi
+
+if [ -n "${DUNE_SOURCEROOT:-}" ]; then
+  cd "${DUNE_SOURCEROOT}/applications/simple-demos/logicgroove"
+else
+  cd "$(dirname "$0")"
+fi
+
+exec dune exec "./src/main.exe" -- "$@"
