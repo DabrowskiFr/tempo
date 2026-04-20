@@ -193,21 +193,8 @@ val watch : ('emit, 'agg, 'mode) signal_core -> (unit -> unit) -> unit
     to finish. *)
 val parallel : (unit -> unit) list -> unit
 
-(** [present_then s then_branch else_branch] implements the classic Boussinot
-    [present] statement. If [s] is present in the current instant,
-    [then_branch] runs immediately within the same instant; otherwise,
-    [else_branch] is scheduled in the next instant. *)
-val present_then_else :
-  ('emit, 'agg, 'mode) signal_core -> (unit -> unit) -> (unit -> unit) -> unit
-
-val after_n : int -> (unit -> unit) -> unit
-val every_n : int -> (unit -> unit) -> unit
-val timeout : int -> on_timeout:(unit -> unit) -> (unit -> unit) -> unit
-val cooldown : int -> ('emit, 'agg, 'mode) signal_core -> (unit -> unit) -> unit
-val supervise_until :
-  ('emit, 'agg, 'mode) signal_core -> (unit -> unit) -> unit
-val pulse_n : int -> unit signal
-
+(** High-level combinators built on top of the core primitives.
+    They are exposed under [Tempo.Constructs]. *)
 module Constructs : sig
   val present_then_else :
     ('emit, 'agg, 'mode) signal_core -> (unit -> unit) -> (unit -> unit) -> unit
