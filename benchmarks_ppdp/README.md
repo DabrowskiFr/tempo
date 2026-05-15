@@ -6,12 +6,14 @@ It contains:
 - benchmark programs for Tempo and ReactiveML
 - a frozen reference pair of raw CSV logs (`data/raw/*reference-good.csv`)
 - deterministic summarization/plot scripts pinned to that reference pair
+- native-binary benchmark runners for both implementations
 
 ## Layout
 
 - `programs/tempo/`: Tempo benchmark executable source (`tempo_bench.ml` + dune files)
 - `programs/reactiveml/`: ReactiveML benchmark source (`rml_bench.rml` + Makefile)
 - `scripts/`: deterministic summarize + plot scripts
+- `scripts/run_tempo.sh`, `scripts/run_rml.sh`, `scripts/run_all.sh`: run fresh campaigns
 - `data/raw/`: raw benchmark rows
 - `data/processed/`: generated CSV summaries
 - `figures/`: generated plots
@@ -30,6 +32,19 @@ The current frozen pair includes sizes \(n \in \{10, 100, 1000, 5000, 50000\}\).
 ```sh
 ./scripts/rebuild_reference_outputs.sh
 ```
+
+## Run A Fresh Campaign (Native Binaries)
+
+```sh
+cp config.env.example config.env
+./scripts/run_tempo.sh
+./scripts/run_rml.sh
+```
+
+Notes:
+- Tempo is built with `dune build` and executed via `./_build/default/.../tempo_bench.exe`.
+- ReactiveML is compiled with `ocamlopt` (native) and executed via `./rml_bench`.
+- This avoids mixing native execution on one side with bytecode execution on the other.
 
 This writes:
 - `data/processed/reference-median-time.csv`

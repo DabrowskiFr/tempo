@@ -1,5 +1,6 @@
 RMLC=rmlc
-OCAMLC=ocamlc
+OCAMLOPT=ocamlopt
+RML_WHERE=$(shell $(RMLC) -where)
 
 FILE=rml_bench
 
@@ -8,11 +9,11 @@ all: $(FILE)
 $(FILE).ml: $(FILE).rml
 	$(RMLC) -n -1 -sampling -1.0 $<
 
-$(FILE).cmo: $(FILE).ml
-	$(OCAMLC) -c -I `$(RMLC) -where` $(FILE).ml
+$(FILE).cmx: $(FILE).ml
+	$(OCAMLOPT) -c -I "$(RML_WHERE)" $(FILE).ml
 
-$(FILE): $(FILE).cmo
-	$(OCAMLC) -o $(FILE) unix.cma -I `$(RMLC) -where` rmllib.cma $(FILE).cmo
+$(FILE): $(FILE).cmx
+	$(OCAMLOPT) -o $(FILE) unix.cmxa -I "$(RML_WHERE)" rmllib.cmxa $(FILE).cmx
 
 clean:
 	rm -f $(FILE) *.cm* *.o *.annot *.rzi $(FILE).ml
