@@ -299,57 +299,57 @@ let rec step : scheduler_state -> unit =
 let rec run_instant : (unit -> unit) -> (unit -> unit) -> 
     scheduler_state -> int option -> unit =
   fun before_step after_step  st remaining ->
-    (match remaining with
-    | Some n when n <= 0 -> Stdlib.exit 0
-    | _ -> ());
-    let ctx = log_ctx st in
-    let debug_enabled = Tempo_log.should_log ~level:Logs.Debug () in
-    if debug_enabled then begin
-      Tempo_log.log_banner_instant ctx st.debug.instant_counter;
-      Tempo_log.log_snapshot ctx
-        ~current:(Tempo_log.snapshot_queue st.current)
-        ~blocked:st.blocked ~next:st.next_instant ~signals:st.signals
-    end;
-    let counter = if debug_enabled then Some (Mtime_clock.counter ()) else None in
-    st.blocked <- [];
-    before_step ();
-    step st;
-    after_step ();
-    (match counter with
-    | Some c ->
-        let span = Mtime_clock.count c in
-        Tempo_log.log ctx "instant" "instant=%a" Tempo_log.pp_span span;
-        Tempo_log.record_duration "instant" span
-    | None -> ());
-    finalize_signals st;
-    prune_dead_join_waiters st.threads (current_kill_epoch ());
-    List.iter
-      ( fun (t : task) ->
-        if t.blocked then begin
-          t.blocked <- false;
-          if task_kills_alive t then enqueue_next st t
-        end )
-      st.blocked;
-      st.debug.instant_counter <- st.debug.instant_counter + 1;
-      st.debug.step_counter <- 0;
-      match st.next_instant with
-        | [] ->
-            Tempo_log.log ~level:Logs.Debug ctx "tasks" "no more tasks | for next instant -> stop"
-        | ts ->
-          let survivors =
-            List.filter
-              (fun t ->
-                 if task_kills_alive t then true
-                else (
-                  dispose_task st t;
-                  false))
-              ts
-          in
-          Tempo_log.log ctx "instant" "rollover tasks | moving %d tasks to next instant"
-            (List.length survivors);
-          st.next_instant <- [];
-          List.iter (enqueue_now st) survivors;
-          run_instant before_step after_step st (Option.map pred remaining)
+    match remaining with
+    | Some n when n <= 0 -> ()
+    | _ ->
+        let ctx = log_ctx st in
+        let debug_enabled = Tempo_log.should_log ~level:Logs.Debug () in
+        if debug_enabled then begin
+          Tempo_log.log_banner_instant ctx st.debug.instant_counter;
+          Tempo_log.log_snapshot ctx
+            ~current:(Tempo_log.snapshot_queue st.current)
+            ~blocked:st.blocked ~next:st.next_instant ~signals:st.signals
+        end;
+        let counter = if debug_enabled then Some (Mtime_clock.counter ()) else None in
+        st.blocked <- [];
+        before_step ();
+        step st;
+        after_step ();
+        (match counter with
+        | Some c ->
+            let span = Mtime_clock.count c in
+            Tempo_log.log ctx "instant" "instant=%a" Tempo_log.pp_span span;
+            Tempo_log.record_duration "instant" span
+        | None -> ());
+        finalize_signals st;
+        prune_dead_join_waiters st.threads (current_kill_epoch ());
+        List.iter
+          ( fun (t : task) ->
+            if t.blocked then begin
+              t.blocked <- false;
+              if task_kills_alive t then enqueue_next st t
+            end )
+          st.blocked;
+          st.debug.instant_counter <- st.debug.instant_counter + 1;
+          st.debug.step_counter <- 0;
+          match st.next_instant with
+            | [] ->
+                Tempo_log.log ~level:Logs.Debug ctx "tasks" "no more tasks | for next instant -> stop"
+            | ts ->
+              let survivors =
+                List.filter
+                  (fun t ->
+                     if task_kills_alive t then true
+                    else (
+                      dispose_task st t;
+                      false))
+                  ts
+              in
+              Tempo_log.log ctx "instant" "rollover tasks | moving %d tasks to next instant"
+                (List.length survivors);
+              st.next_instant <- [];
+              List.iter (enqueue_now st) survivors;
+              run_instant before_step after_step st (Option.map pred remaining)
 
 let create_scheduler_state () = 
   { current         = Queue.create ()
