@@ -1,0 +1,6 @@
+benchmark,tempo_iqr_ms,rml_iqr_ms,ratio_rml_over_tempo,ratio_ci95_low,ratio_ci95_high
+propagation_chains,0.134000,0.245392,1.315925,1.235657,1.414686
+broadcast_expansion,0.044250,0.147164,0.992765,0.957993,1.085033
+fork_explosion,0.054000,0.154793,0.721188,0.683107,0.757630
+guarded_cascades,0.259000,0.259459,0.842595,0.747045,0.890381
+nested_preemption,0.098000,0.111580,0.725196,0.694369,0.770679

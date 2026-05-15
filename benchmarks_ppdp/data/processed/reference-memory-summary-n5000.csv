@@ -1,0 +1,6 @@
+benchmark,tempo_median_peak_mb,rml_median_peak_mb,tempo_over_rml_peak_mb,ratio_rml_over_tempo_peak_mb
+propagation_chains,7.359000,6.812000,1.080299,0.925669
+broadcast_expansion,6.766000,5.172000,1.308198,0.764410
+fork_explosion,8.953000,5.672000,1.578456,0.633531
+guarded_cascades,11.172000,5.781000,1.932538,0.517454
+nested_preemption,11.625000,7.000000,1.660714,0.602151

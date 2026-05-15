@@ -417,8 +417,8 @@ let init () =
             | Some lvl -> lvl
             | None ->
                 Format.eprintf
-                  "Unknown value for RML_LOG_LEVEL (%s), defaulting to debug.@."
+                  "Unknown value for RML_LOG_LEVEL (%s), defaulting to quiet.@."
                   raw;
-                Debug))
+                Quiet))
   in
   set_log_level level

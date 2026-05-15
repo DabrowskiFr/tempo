@@ -1,0 +1,171 @@
+let benchmark = ref "propagation_chains"
+let size = ref 10
+let run_id = ref 1
+
+let effective_propagation n = max 1 n
+let effective_broadcast n = max 1 n
+let effective_fork_depth n =
+  let n = max 2 n in
+  max 1 (int_of_float (log (float_of_int n) /. log 2.))
+let effective_guard_depth n = max 1 n
+let effective_preemption_depth n = max 1 n
+
+let instants_for bench n =
+  match bench with
+  | "broadcast_expansion" -> 2
+  | "fork_explosion" -> effective_fork_depth n
+  | "nested_preemption" -> 2
+  | _ -> 1
+
+let parse_args () =
+  let specs = [
+    ("--benchmark", Arg.Set_string benchmark, "Benchmark name");
+    ("--size", Arg.Set_int size, "Benchmark size parameter");
+    ("--run", Arg.Set_int run_id, "Run index");
+  ] in
+  Arg.parse specs (fun _ -> ()) "rml_bench --benchmark <name> --size <n> --run <k>"
+
+let process link s_in s_out =
+  await immediate s_in;
+  emit s_out
+
+let rec process chain n s_in s_out =
+  if n <= 0 then
+    emit s_out
+  else
+    signal mid in
+    run (link s_in mid)
+    ||
+    run (chain (n - 1) mid s_out)
+
+let process bench_propagation n =
+  let n = effective_propagation n in
+  signal start_sig, end_sig in
+  run (chain n start_sig end_sig)
+  ||
+  await immediate end_sig
+  ||
+  emit start_sig
+
+let process observer trigger =
+  await immediate trigger
+
+let rec process observers n trigger =
+  if n <= 0 then ()
+  else
+    (run (observer trigger)
+     ||
+     run (observers (n - 1) trigger))
+
+let process bench_broadcast n =
+  let n = effective_broadcast n in
+  signal trigger in
+  run (observers n trigger)
+  ||
+  emit trigger
+
+let rec process fork_tree depth =
+  if depth <= 0 then ()
+  else (
+    pause;
+    (run (fork_tree (depth - 1))
+     ||
+     run (fork_tree (depth - 1))))
+
+let process bench_fork n =
+  run (fork_tree (effective_fork_depth n))
+
+let rec process guarded depth guard done_sig =
+  if depth <= 0 then
+    emit done_sig
+  else
+    do
+      run (guarded (depth - 1) guard done_sig)
+    when guard
+    done
+
+let process bench_guarded n =
+  let depth = effective_guard_depth n in
+  signal guard, done_sig in
+  run (guarded depth guard done_sig)
+  ||
+  await immediate done_sig
+  ||
+  let rec process emit_many d =
+    if d <= 0 then ()
+    else (
+      emit guard;
+      run (emit_many (d - 1)))
+  in
+  run (emit_many depth)
+
+let rec process spin_forever =
+  pause;
+  run spin_forever
+
+let rec process spinner steps =
+  if steps <= 0 then ()
+  else
+    (pause;
+     run (spinner (steps - 1)))
+
+let rec process nested_watch i depth cancel_even cancel_odd =
+  if i >= depth then
+    run (spinner (depth + 3))
+  else
+    let cancel = if i mod 2 = 0 then cancel_even else cancel_odd in
+    do
+      run (nested_watch (i + 1) depth cancel_even cancel_odd)
+    until cancel
+    done
+
+let process killer cancel_even =
+  pause;
+  emit cancel_even
+
+let process bench_preemption n =
+  let depth = effective_preemption_depth n in
+  signal cancel_even, cancel_odd in
+  run (nested_watch 0 depth cancel_even cancel_odd)
+  ||
+  run (killer cancel_even)
+
+let process selected =
+  match !benchmark with
+  | "propagation_chains" -> run (bench_propagation !size)
+  | "broadcast_expansion" -> run (bench_broadcast !size)
+  | "fork_explosion" -> run (bench_fork !size)
+  | "guarded_cascades" -> run (bench_guarded !size)
+  | "nested_preemption" -> run (bench_preemption !size)
+  | x -> invalid_arg ("unknown benchmark: " ^ x)
+
+let peak_mb () =
+  let st = Gc.stat () in
+  (float_of_int st.Gc.heap_words *. float_of_int Sys.word_size /. 8.0)
+  /. (1024.0 *. 1024.0)
+
+let () =
+  parse_args ();
+  Gc.full_major ();
+  let t0 = Unix.gettimeofday () in
+  run selected;
+  let t1 = Unix.gettimeofday () in
+  Gc.full_major ();
+  let time_ms = (t1 -. t0) *. 1000.0 in
+  let instants = instants_for !benchmark !size in
+  let line =
+    "rml,"
+    ^ !benchmark
+    ^ ","
+    ^ string_of_int !size
+    ^ ","
+    ^ string_of_int !run_id
+    ^ ","
+    ^ string_of_float time_ms
+    ^ ","
+    ^ string_of_int instants
+    ^ ","
+    ^ string_of_float (peak_mb ())
+  in
+  print_endline line;
+  flush stdout
