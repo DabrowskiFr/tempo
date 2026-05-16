@@ -140,47 +140,56 @@ let handle_task : scheduler_state -> task -> unit =
             "with_guard enter | task=#%d signal=#%d -> schedule task=#%d"
             t.t_id s.s_id guard_task.t_id;
       | effect (With_kill (kk, body)), k ->
-          let resume_mode : [ `None | `Later | `Now ] ref = ref `None in
-          let resumed = ref false in
-          let resume_if mode () =
-            if (not !resumed) && !resume_mode = mode then begin
-              resumed := true;
-              continue k ()
-            end
+          let continue_state : [ `None | `Later | `Now | `Done ] ref =
+            ref `None
+          in
+          let schedule_continue mode =
+            let schedule_now () =
+              let expected = `Now in
+              let t' =
+                spawn_now ~parent:t st t.thread (task_guards t) (task_kill_ctx t)
+                  (fun () ->
+                    if !continue_state = expected then begin
+                      continue_state := `Done;
+                      continue k ()
+                    end)
+              in
+              dlog ~task:t.t_id "step"
+                "with_kill exit | normal termination : task=#%d -> task=#%d"
+                t.t_id t'.t_id
+            and schedule_later () =
+              let expected = `Later in
+              let t' =
+                spawn_next ~parent:t st t.thread (task_guards t) (task_kill_ctx t)
+                  (fun () ->
+                    if !continue_state = expected then begin
+                      continue_state := `Done;
+                      continue k ()
+                    end)
+              in
+              dlog ~task:t.t_id "step"
+                "with_kill | cancelation : task=#%d -> task #%d" t.t_id t'.t_id
+            in
+            if task_kills_alive t then
+              match (mode, !continue_state) with
+              | `Later, `None ->
+                  continue_state := `Later;
+                  schedule_later ()
+              | `Now, (`None | `Later) ->
+                  continue_state := `Now;
+                  schedule_now ()
+              | _ -> ()
+            else
+              dlog ~task:t.t_id "step"
+                "with_kill continuation dropped (parent kill dead) task=#%d"
+                t.t_id
           in
           let continue_now () =
             kk.cleanup <- None;
-            if task_kills_alive t then begin
-              if !resume_mode <> `Now then begin
-                resume_mode := `Now;
-                let t' =
-                  spawn_now ~parent:t st t.thread (task_guards t) (task_kill_ctx t)
-                    (resume_if `Now)
-                in
-                dlog ~task:t.t_id "step"
-                  "with_kill exit | normal termination : task=#%d -> task=#%d"
-                  t.t_id t'.t_id;
-              end
-            end else
-              dlog ~task:t.t_id "step"
-                "with_kill exit | drop continuation (parent kill dead) task=#%d"
-                t.t_id;
+            schedule_continue `Now
           and continue_later () =
             kk.cleanup <- None;
-            if task_kills_alive t then begin
-              if !resume_mode = `None then begin
-                resume_mode := `Later;
-                let t' =
-                  spawn_next ~parent:t st t.thread (task_guards t) (task_kill_ctx t)
-                    (resume_if `Later)
-                in
-                dlog ~task:t.t_id "step"
-                  "with_kill | cancelation : task=#%d -> task #%d" t.t_id t'.t_id;
-              end
-            end else
-              dlog ~task:t.t_id "step"
-                "with_kill | cancelation drop (parent kill dead) task=#%d"
-                t.t_id;
+            schedule_continue `Later
           in
           if not !(kk.alive) then begin
             continue_later ()
