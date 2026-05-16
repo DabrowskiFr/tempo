@@ -23,9 +23,6 @@ let fresh_signal_id (st : Tempo_types.scheduler_state) =
   st.debug.sig_counter <- id + 1;
   id
 
-let abort_kill (k : Tempo_types.kill) =
-  Tempo_low_level.abort_kill k
-
 let fresh_event_signal (st : Tempo_types.scheduler_state) :
     'a Tempo_types.signal =
   let s =
@@ -225,7 +222,7 @@ let finalize_signals (st : Tempo_types.scheduler_state) =
         (* Abort outer contexts first so nested cancellations can be dropped
            once parent kill contexts become dead. *)
         List.iter
-          (fun (w : Tempo_types.kill_watcher) -> abort_kill w.kill)
+          (fun (w : Tempo_types.kill_watcher) -> Tempo_low_level.abort_kill_batched w.kill)
           (List.rev alive_watchers)
       end else
         prune_dead_kill_watchers s;
