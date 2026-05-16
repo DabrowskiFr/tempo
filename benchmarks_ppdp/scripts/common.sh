@@ -5,14 +5,24 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BENCH_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 TEMPO_ROOT="$(cd "$BENCH_ROOT/.." && pwd)"
 CONFIG_FILE="$BENCH_ROOT/config.env"
+POLICY_FILE="$BENCH_ROOT/policy.env"
 
 if [[ ! -f "$CONFIG_FILE" ]]; then
   echo "Missing $CONFIG_FILE (copy config.env.example first)." >&2
   exit 1
 fi
 
+# Policy first (defaults), then local config (explicit overrides).
+if [[ -f "$POLICY_FILE" ]]; then
+  # shellcheck disable=SC1090
+  source "$POLICY_FILE"
+fi
+
 # shellcheck disable=SC1090
 source "$CONFIG_FILE"
+
+MAX_REASONABLE_SIZE="${MAX_REASONABLE_SIZE:-5000}"
+ALLOW_LARGE_N="${ALLOW_LARGE_N:-0}"
 
 RAW_DIR="$BENCH_ROOT/data/raw"
 PROC_DIR="$BENCH_ROOT/data/processed"
@@ -92,6 +102,15 @@ set_csv_peak_mb() {
   awk -F, -v OFS=, -v peak="$peak_mb" 'NF >= 7 { $7 = peak; print }' <<<"$csv_line"
 }
 
+validate_positive_integer() {
+  local name="$1"
+  local value="$2"
+  if [[ ! "$value" =~ ^[0-9]+$ ]] || (( value <= 0 )); then
+    echo "Invalid $name='$value'. Expected a strictly positive integer." >&2
+    exit 1
+  fi
+}
+
 sizes_for_benchmark() {
   local bench="$1"
   local var_name=""
@@ -119,3 +138,74 @@ sizes_for_benchmark() {
 
   printf '%s\n' "$sizes"
 }
+
+validate_campaign_policy() {
+  validate_positive_integer "RUNS" "${RUNS:-}"
+
+  for bench in $BENCHMARKS; do
+    case "$bench" in
+      propagation_chains|broadcast_expansion|fork_explosion|guarded_cascades|nested_preemption) ;;
+      *)
+        echo "Unknown benchmark '$bench' in BENCHMARKS." >&2
+        exit 1
+        ;;
+    esac
+
+    local bench_sizes
+    bench_sizes="$(sizes_for_benchmark "$bench")"
+    for n in $bench_sizes; do
+      validate_positive_integer "size($bench)" "$n"
+      if (( n > MAX_REASONABLE_SIZE )) && [[ "$ALLOW_LARGE_N" != "1" ]]; then
+        cat >&2 <<EOF
+Refusing size $n for benchmark '$bench': MAX_REASONABLE_SIZE=$MAX_REASONABLE_SIZE.
+Set ALLOW_LARGE_N=1 in config.env (or policy.env) only for explicit stress runs.
+EOF
+        exit 1
+      fi
+    done
+  done
+}
+
+git_head_or_unknown() {
+  local repo="$1"
+  if git -C "$repo" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    git -C "$repo" rev-parse HEAD
+  else
+    echo "unknown"
+  fi
+}
+
+write_run_metadata() {
+  local impl="$1"
+  local out_csv="$2"
+  local repo_root="$3"
+  local switch_name="$4"
+
+  local meta_file="${out_csv%.csv}.meta"
+  local git_head git_describe
+  git_head="$(git_head_or_unknown "$repo_root")"
+  git_describe="$(git -C "$repo_root" describe --tags --always --dirty 2>/dev/null || echo unknown)"
+
+  {
+    printf 'impl=%s\n' "$impl"
+    printf 'timestamp_utc=%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    printf 'repo_root=%s\n' "$repo_root"
+    printf 'git_head=%s\n' "$git_head"
+    printf 'git_describe=%s\n' "$git_describe"
+    printf 'opam_switch=%s\n' "$switch_name"
+    printf 'runs=%s\n' "$RUNS"
+    printf 'benchmarks=%s\n' "$BENCHMARKS"
+    printf 'sizes_global=%s\n' "${SIZES:-}"
+    printf 'sizes_propagation_chains=%s\n' "${SIZES_PROPAGATION_CHAINS:-}"
+    printf 'sizes_broadcast_expansion=%s\n' "${SIZES_BROADCAST_EXPANSION:-}"
+    printf 'sizes_fork_explosion=%s\n' "${SIZES_FORK_EXPLOSION:-}"
+    printf 'sizes_guarded_cascades=%s\n' "${SIZES_GUARDED_CASCADES:-}"
+    printf 'sizes_nested_preemption=%s\n' "${SIZES_NESTED_PREEMPTION:-}"
+    printf 'max_reasonable_size=%s\n' "$MAX_REASONABLE_SIZE"
+    printf 'allow_large_n=%s\n' "$ALLOW_LARGE_N"
+  } > "$meta_file"
+
+  echo "Metadata: $meta_file"
+}
+
+validate_campaign_policy

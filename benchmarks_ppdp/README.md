@@ -7,6 +7,7 @@ It contains:
 - a frozen reference pair of raw CSV logs (`data/raw/*reference-good.csv`)
 - deterministic summarization/plot scripts pinned to that reference pair
 - native-binary benchmark runners for both implementations
+- a policy file (`policy.env`) that locks canonical baselines and safe size defaults
 
 ## Layout
 
@@ -14,6 +15,7 @@ It contains:
 - `programs/reactiveml/`: ReactiveML benchmark source (`rml_bench.rml` + Makefile)
 - `scripts/`: deterministic summarize + plot scripts
 - `scripts/run_tempo.sh`, `scripts/run_rml.sh`, `scripts/run_all.sh`: run fresh campaigns
+- `scripts/run_locked_comparison.sh`: run current vs locked baseline with guardrails
 - `data/raw/`: raw benchmark rows
 - `data/processed/`: generated CSV summaries
 - `figures/`: generated plots
@@ -45,6 +47,26 @@ Notes:
 - Tempo is built with `dune build` and executed via `./_build/default/.../tempo_bench.exe`.
 - ReactiveML is compiled with `ocamlopt` (native) and executed via `./rml_bench`.
 - This avoids mixing native execution on one side with bytecode execution on the other.
+- Each run now writes a metadata sidecar (`*.meta`) with commit/switch/grid details.
+- By default, size values above `MAX_REASONABLE_SIZE` (policy default: 5000) are refused.
+
+## Locked Current-vs-Baseline Comparison (Recommended)
+
+Use this instead of ad-hoc commit choices:
+
+```sh
+cp config.env.example config.env
+./scripts/run_locked_comparison.sh
+```
+
+This workflow enforces:
+- baseline selected by policy id (default: `v0.2.0`)
+- baseline commit pinned in `policy.env`
+- same benchmark harness copied into the baseline worktree
+- comparison outputs with explicit baseline id/commit in CSV rows
+
+To run archaeology against the very old baseline, you must explicitly opt in by
+editing `policy.env` (`ALLOW_LEGACY_BASELINE=1`).
 
 This writes:
 - `data/processed/reference-median-time.csv`

@@ -9,6 +9,7 @@ OUT_FILE="$RAW_DIR/tempo-$(timestamp).csv"
 echo "impl,benchmark,size,run,time_ms,instants,peak_mb" > "$OUT_FILE"
 
 echo "Running Tempo benchmarks (native binary) -> $OUT_FILE"
+echo "[tempo] repo=$TEMPO_ROOT commit=$(git_head_or_unknown "$TEMPO_ROOT")"
 
 if ! opam exec --switch="$TEMPO_SWITCH" -- ocamlfind query tempo >/dev/null 2>&1; then
   if [[ -n "${TEMPO_REPO:-}" && -d "${TEMPO_REPO:-}" ]]; then
@@ -67,4 +68,5 @@ for bench in $BENCHMARKS; do
   done
 done
 
+write_run_metadata "tempo" "$OUT_FILE" "$TEMPO_ROOT" "$TEMPO_SWITCH"
 echo "Done: $OUT_FILE"

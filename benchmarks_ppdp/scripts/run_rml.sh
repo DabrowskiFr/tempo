@@ -9,6 +9,7 @@ OUT_FILE="$RAW_DIR/rml-$(timestamp).csv"
 echo "impl,benchmark,size,run,time_ms,instants,peak_mb" > "$OUT_FILE"
 
 echo "Running ReactiveML benchmarks (native binary) -> $OUT_FILE"
+echo "[rml] repo=$RML_BENCH_DIR commit=$(git_head_or_unknown "$RML_BENCH_DIR")"
 
 echo "[rml] building native benchmark executable with switch=$RML_SWITCH"
 (
@@ -56,4 +57,5 @@ for bench in $BENCHMARKS; do
   done
 done
 
+write_run_metadata "rml" "$OUT_FILE" "$RML_BENCH_DIR" "$RML_SWITCH"
 echo "Done: $OUT_FILE"
