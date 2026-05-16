@@ -23,6 +23,12 @@ source "$CONFIG_FILE"
 
 MAX_REASONABLE_SIZE="${MAX_REASONABLE_SIZE:-5000}"
 ALLOW_LARGE_N="${ALLOW_LARGE_N:-0}"
+RML_OCAML5_ENABLED="${RML_OCAML5_ENABLED:-0}"
+RML_OCAML5_SWITCH="${RML_OCAML5_SWITCH:-$TEMPO_SWITCH}"
+RML_OCAML5_IMPL="${RML_OCAML5_IMPL:-rml_ocaml5}"
+RML_OCAML5_RUN_NAME="${RML_OCAML5_RUN_NAME:-rml_ocaml5}"
+RML_OCAML5_RMLC="${RML_OCAML5_RMLC:-}"
+RML_OCAML5_RMLLIB="${RML_OCAML5_RMLLIB:-}"
 
 RAW_DIR="$BENCH_ROOT/data/raw"
 PROC_DIR="$BENCH_ROOT/data/processed"
@@ -30,6 +36,7 @@ LOG_DIR="$BENCH_ROOT/logs"
 
 TEMPO_BENCH_DIR="$BENCH_ROOT/programs/tempo"
 RML_BENCH_DIR="$BENCH_ROOT/programs/reactiveml"
+RML_OCAML5_BENCH_DIR="${RML_OCAML5_BENCH_DIR:-$RML_BENCH_DIR}"
 
 mkdir -p "$RAW_DIR" "$PROC_DIR" "$LOG_DIR"
 
@@ -47,6 +54,11 @@ ensure_required_switches() {
     echo "Expected RML_SWITCH='$REQUIRED_RML_SWITCH'." >&2
     exit 1
   fi
+  if [[ "$RML_OCAML5_ENABLED" != "0" && "$RML_OCAML5_ENABLED" != "1" ]]; then
+    echo "Invalid RML_OCAML5_ENABLED='$RML_OCAML5_ENABLED' in $CONFIG_FILE." >&2
+    echo "Expected RML_OCAML5_ENABLED='0' or '1'." >&2
+    exit 1
+  fi
 }
 
 ensure_switch_exists() {
@@ -61,6 +73,9 @@ ensure_switch_exists() {
 ensure_required_switches
 ensure_switch_exists "$TEMPO_SWITCH"
 ensure_switch_exists "$RML_SWITCH"
+if [[ "$RML_OCAML5_ENABLED" == "1" ]]; then
+  ensure_switch_exists "$RML_OCAML5_SWITCH"
+fi
 
 if /usr/bin/time -l true >/dev/null 2>&1; then
   TIME_CMD=(/usr/bin/time -l)
@@ -96,10 +111,31 @@ extract_peak_rss_mb() {
   return 1
 }
 
+require_peak_rss_mb() {
+  local stderr_file="$1"
+  local context="${2:-benchmark run}"
+  local peak_mb=""
+  if ! peak_mb="$(extract_peak_rss_mb "$stderr_file")"; then
+    cat >&2 <<EOF
+Failed to extract OS peak RSS for $context.
+Benchmark campaigns are configured to use OS RSS only (system time output).
+Check availability/format of '/usr/bin/time' and stderr capture.
+EOF
+    return 1
+  fi
+  printf '%s\n' "$peak_mb"
+}
+
 set_csv_peak_mb() {
   local csv_line="$1"
   local peak_mb="$2"
   awk -F, -v OFS=, -v peak="$peak_mb" 'NF >= 7 { $7 = peak; print }' <<<"$csv_line"
+}
+
+set_csv_impl() {
+  local csv_line="$1"
+  local impl="$2"
+  awk -F, -v OFS=, -v impl="$impl" 'NF >= 7 { $1 = impl; print }' <<<"$csv_line"
 }
 
 validate_positive_integer() {
@@ -203,6 +239,7 @@ write_run_metadata() {
     printf 'sizes_nested_preemption=%s\n' "${SIZES_NESTED_PREEMPTION:-}"
     printf 'max_reasonable_size=%s\n' "$MAX_REASONABLE_SIZE"
     printf 'allow_large_n=%s\n' "$ALLOW_LARGE_N"
+    printf 'peak_mb_source=%s\n' "os_rss_time"
   } > "$meta_file"
 
   echo "Metadata: $meta_file"

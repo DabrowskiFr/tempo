@@ -29,10 +29,7 @@ let when_ (s : ('emit, 'agg, 'mode) signal_core) (body : unit -> unit) : unit =
   perform (With_guard (s, body))
 
 let watch (s : ('emit, 'agg, 'mode) signal_core) (body : unit -> unit) : unit =
-  let kill = Tempo_low_level.new_kill () in
-  perform (Register_kill_watcher (s, kill));
-  Tempo_low_level.with_kill kill body;
-  Tempo_low_level.abort_kill kill
+  perform (Watch (s, body))
 
 let fork_join2 a b =
   let t = fork b in

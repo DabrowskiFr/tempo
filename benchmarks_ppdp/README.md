@@ -14,7 +14,9 @@ It contains:
 - `programs/tempo/`: Tempo benchmark executable source (`tempo_bench.ml` + dune files)
 - `programs/reactiveml/`: ReactiveML benchmark source (`rml_bench.rml` + Makefile)
 - `scripts/`: deterministic summarize + plot scripts
-- `scripts/run_tempo.sh`, `scripts/run_rml.sh`, `scripts/run_all.sh`: run fresh campaigns
+- `scripts/run_tempo.sh`, `scripts/run_rml.sh`, `scripts/run_rml_ocaml5.sh`, `scripts/run_all.sh`: run fresh campaigns
+- `scripts/run_tempo_diag.sh`, `scripts/analyze_tempo_diag.py`: targeted Tempo memory diagnostics (per-snapshot counters + RSS)
+- `scripts/compare_rml_toolchains.py`: compare legacy ReactiveML vs OCaml-5 ReactiveML campaigns
 - `scripts/run_locked_comparison.sh`: run current vs locked baseline with guardrails
 - `data/raw/`: raw benchmark rows
 - `data/processed/`: generated CSV summaries
@@ -41,14 +43,47 @@ The current frozen pair includes sizes \(n \in \{10, 100, 1000, 5000, 50000\}\).
 cp config.env.example config.env
 ./scripts/run_tempo.sh
 ./scripts/run_rml.sh
+./scripts/run_rml_ocaml5.sh   # optional second RML run on OCaml 5 toolchain
 ```
 
 Notes:
 - Tempo is built with `dune build` and executed via `./_build/default/.../tempo_bench.exe`.
 - ReactiveML is compiled with `ocamlopt` (native) and executed via `./rml_bench`.
+- The optional OCaml-5 ReactiveML run writes its own CSV (`rml_ocaml5-*.csv`) and does not interfere with `rml-*.csv`.
 - This avoids mixing native execution on one side with bytecode execution on the other.
+- `peak_mb` is always overwritten from OS-level peak RSS (`/usr/bin/time`) for every run.
+- Campaign scripts now fail fast if peak RSS cannot be extracted (no fallback to runtime-internal counters).
 - Each run now writes a metadata sidecar (`*.meta`) with commit/switch/grid details.
 - By default, size values above `MAX_REASONABLE_SIZE` (policy default: 5000) are refused.
+
+To enable the OCaml-5 ReactiveML target in `run_all.sh`, set in `config.env`:
+- `RML_OCAML5_ENABLED=1`
+- `RML_OCAML5_SWITCH=$TEMPO_SWITCH` (or another OCaml-5 switch)
+- `RML_OCAML5_RMLC=/abs/path/to/patched/rmlc` when `rmlc` is not installed in that switch
+- `RML_OCAML5_RMLLIB=/abs/path/to/rml/lib/lco` only if auto-detection fails
+
+To compare both ReactiveML toolchains after runs:
+```sh
+python3 ./scripts/compare_rml_toolchains.py \
+  --rml-legacy ./data/raw/rml-<timestamp>.csv \
+  --rml-ocaml5 ./data/raw/rml_ocaml5-<timestamp>.csv
+```
+
+## Targeted Tempo Memory Diagnostics
+
+To inspect runtime pressure per instant and correlate with RSS:
+
+```sh
+./scripts/run_tempo_diag.sh
+python3 ./scripts/analyze_tempo_diag.py \
+  --summary ./data/processed/tempo-diag-<timestamp>/summary.csv \
+  --out-dir ./data/processed/tempo-diag-analysis-<timestamp>
+```
+
+The diagnostic traces contain:
+- per-snapshot scheduler/signal/task counters
+- `live_tasks` and `kill_context_*` pressure indicators
+- sampled process RSS (`rss_mb`) per snapshot phase
 
 ## Locked Current-vs-Baseline Comparison (Recommended)
 

@@ -57,11 +57,8 @@ for bench in $BENCHMARKS; do
         rm -f "$tmp_stdout" "$tmp_stderr"
         exit 1
       fi
-      if peak_mb="$(extract_peak_rss_mb "$tmp_stderr")"; then
-        row="$(set_csv_peak_mb "$row" "$peak_mb")"
-      else
-        echo "[tempo] warning: could not extract peak RSS, keeping executable-reported peak_mb" >> "$LOG_DIR/tempo.log"
-      fi
+      peak_mb="$(require_peak_rss_mb "$tmp_stderr" "tempo bench=$bench size=$size run=$run")"
+      row="$(set_csv_peak_mb "$row" "$peak_mb")"
       echo "$row" >> "$OUT_FILE"
       rm -f "$tmp_stdout" "$tmp_stderr"
     done

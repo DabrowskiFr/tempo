@@ -140,9 +140,9 @@ def main() -> None:
     median_csv = args.out_dir / "reference-median-time.csv"
     memory_csv = args.out_dir / "reference-median-memory.csv"
     full_csv = args.out_dir / "reference-median-full.csv"
-    summary_csv = args.out_dir / "reference-summary-n5000.csv"
-    memory_summary_csv = args.out_dir / "reference-memory-summary-n5000.csv"
-    disp_csv = args.out_dir / "reference-dispersion-n5000.csv"
+    summary_csv = args.out_dir / f"reference-summary-n{args.size}.csv"
+    memory_summary_csv = args.out_dir / f"reference-memory-summary-n{args.size}.csv"
+    disp_csv = args.out_dir / f"reference-dispersion-n{args.size}.csv"
 
     with median_csv.open("w", newline="") as fh:
         w = csv.writer(fh)

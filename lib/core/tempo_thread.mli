@@ -30,9 +30,14 @@ val find : thread_table -> Tempo_types.thread -> thread_state
 val add_join_waiter :
      thread_table
   -> Tempo_types.thread
+  -> Tempo_types.thread
   -> Tempo_types.kill_context
   -> (unit -> unit)
   -> unit
+
+val mark_suspended : thread_table -> Tempo_types.thread -> unit
+
+val mark_resumed : thread_table -> Tempo_types.thread -> unit
 
 val prune_dead_join_waiters : thread_table -> int -> unit
 

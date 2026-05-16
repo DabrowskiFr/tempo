@@ -1,5 +1,5 @@
 (* THIS FILE IS GENERATED. *)
-(* rmlc -n -1 -sampling -1.0 rml_bench.rml  *)
+(* /Users/fdabrowski/Documents/Research/Papers/ppdp2026/rml-1.09.07-2021-07-26-ocaml-5/compiler/rmlc -n -1 -sampling -1.0 rml_bench.rml  *)
 
 open Implem_lco_ctrl_tree_record;;
 let benchmark = Stdlib.ref "propagation_chains" 
@@ -278,36 +278,41 @@ let rec guarded =
           (function
             | depth__val_rml_47  ->
                 (function
-                  | guard__val_rml_48  ->
-                      (function
-                        | done_sig__val_rml_49  ->
-                            ((function
-                               | ()  ->
-                                   Lco_ctrl_tree_record.rml_if
-                                     (function
-                                       | ()  ->
-                                           Stdlib.(<=) depth__val_rml_47 (0)
-                                       )
-                                     (Lco_ctrl_tree_record.rml_compute
-                                       (function
-                                         | ()  ->
-                                             Lco_ctrl_tree_record.rml_expr_emit
-                                               done_sig__val_rml_49
-                                         ))
-                                     (Lco_ctrl_tree_record.rml_when'
-                                       guard__val_rml_48
-                                       (Lco_ctrl_tree_record.rml_run
-                                         (function
-                                           | ()  ->
-                                               guarded
-                                                 (Stdlib.(-)
-                                                   depth__val_rml_47 1)
-                                                 guard__val_rml_48
-                                                 done_sig__val_rml_49
-                                           )))
-                               ):
-                              (_) Lco_ctrl_tree_record.process)
-                        )
+                  | done_sig__val_rml_48  ->
+                      ((function
+                         | ()  ->
+                             Lco_ctrl_tree_record.rml_if
+                               (function
+                                 | ()  -> Stdlib.(<=) depth__val_rml_47 (0) )
+                               (Lco_ctrl_tree_record.rml_compute
+                                 (function
+                                   | ()  ->
+                                       Lco_ctrl_tree_record.rml_expr_emit
+                                         done_sig__val_rml_48
+                                   ))
+                               (Lco_ctrl_tree_record.rml_signal
+                                 (function
+                                   | guard__sig_49  ->
+                                       Lco_ctrl_tree_record.rml_par
+                                         (Lco_ctrl_tree_record.rml_when'
+                                           guard__sig_49
+                                           (Lco_ctrl_tree_record.rml_run
+                                             (function
+                                               | ()  ->
+                                                   guarded
+                                                     (Stdlib.(-)
+                                                       depth__val_rml_47 1)
+                                                     done_sig__val_rml_48
+                                               )))
+                                         (Lco_ctrl_tree_record.rml_compute
+                                           (function
+                                             | ()  ->
+                                                 Lco_ctrl_tree_record.rml_expr_emit
+                                                   guard__sig_49
+                                             ))
+                                   ))
+                         ):
+                        (_) Lco_ctrl_tree_record.process)
                   )
             ) 
 ;;
@@ -322,70 +327,17 @@ let bench_guarded =
                        | depth__val_rml_52  ->
                            Lco_ctrl_tree_record.rml_signal
                              (function
-                               | guard__sig_53  ->
-                                   Lco_ctrl_tree_record.rml_signal
-                                     (function
-                                       | done_sig__sig_54  ->
-                                           Lco_ctrl_tree_record.rml_par_n
-                                             ((Lco_ctrl_tree_record.rml_seq
-                                                (Lco_ctrl_tree_record.rml_run
-                                                  (function
-                                                    | ()  ->
-                                                        guarded
-                                                          depth__val_rml_52
-                                                          guard__sig_53
-                                                          done_sig__sig_54
-                                                    ))
-                                                Lco_ctrl_tree_record.rml_nothing)
-                                               ::
-                                               ((Lco_ctrl_tree_record.rml_await_immediate'
-                                                  done_sig__sig_54)
-                                                 ::
-                                                 ((Lco_ctrl_tree_record.rml_seq
-                                                    (let (emit_many__val_rml_55)
-                                                           =
-                                                           (let rec emit_many__val_rml_55
-                                                                    =
-                                                                    (function
-                                                                    | d__val_rml_56
-                                                                     ->
-                                                                    ((function
-                                                                    | ()  ->
-                                                                    Lco_ctrl_tree_record.rml_if
-                                                                    (function
-                                                                    | ()  ->
-                                                                    Stdlib.(<=)
-                                                                    d__val_rml_56
-                                                                    (0) )
-                                                                    (Lco_ctrl_tree_record.rml_compute
-                                                                    (function
-                                                                    | ()  ->
-                                                                    () ))
-                                                                    (Lco_ctrl_tree_record.rml_seq
-                                                                    (Lco_ctrl_tree_record.rml_emit'
-                                                                    guard__sig_53)
-                                                                    (Lco_ctrl_tree_record.rml_run
-                                                                    (function
-                                                                    | ()  ->
-                                                                    emit_many__val_rml_55
-                                                                    (Stdlib.(-)
-                                                                    d__val_rml_56
-                                                                    1) ))) ):
-                                                                    (_)
-                                                                    Lco_ctrl_tree_record.process)
-                                                                    )
-                                                              in
-                                                             (emit_many__val_rml_55))
-                                                       in
-                                                      Lco_ctrl_tree_record.rml_run
-                                                        (function
-                                                          | ()  ->
-                                                              emit_many__val_rml_55
-                                                                depth__val_rml_52
-                                                          ))
-                                                    Lco_ctrl_tree_record.rml_nothing)
-                                                   :: ([]))))
-                                       )
+                               | done_sig__sig_53  ->
+                                   Lco_ctrl_tree_record.rml_par
+                                     (Lco_ctrl_tree_record.rml_run
+                                       (function
+                                         | ()  ->
+                                             guarded
+                                               depth__val_rml_52
+                                               done_sig__sig_53
+                                         ))
+                                     (Lco_ctrl_tree_record.rml_await_immediate'
+                                       done_sig__sig_53)
                                )
                        )
                ):
@@ -404,11 +356,11 @@ let rec spin_forever =
 ;;
 let rec spinner =
           (function
-            | steps__val_rml_59  ->
+            | steps__val_rml_56  ->
                 ((function
                    | ()  ->
                        Lco_ctrl_tree_record.rml_if
-                         (function | ()  -> Stdlib.(<=) steps__val_rml_59 (0)
+                         (function | ()  -> Stdlib.(<=) steps__val_rml_56 (0)
                            )
                          (Lco_ctrl_tree_record.rml_compute
                            (function | ()  -> () ))
@@ -417,7 +369,7 @@ let rec spinner =
                            (Lco_ctrl_tree_record.rml_run
                              (function
                                | ()  ->
-                                   spinner (Stdlib.(-) steps__val_rml_59 1)
+                                   spinner (Stdlib.(-) steps__val_rml_56 1)
                                )))
                    ):
                   (_) Lco_ctrl_tree_record.process)
@@ -425,28 +377,28 @@ let rec spinner =
 ;;
 let rec nested_watch =
           (function
-            | i__val_rml_61  ->
+            | i__val_rml_58  ->
                 (function
-                  | depth__val_rml_62  ->
+                  | depth__val_rml_59  ->
                       (function
-                        | cancel_even__val_rml_63  ->
+                        | cancel_even__val_rml_60  ->
                             (function
-                              | cancel_odd__val_rml_64  ->
+                              | cancel_odd__val_rml_61  ->
                                   ((function
                                      | ()  ->
                                          Lco_ctrl_tree_record.rml_if
                                            (function
                                              | ()  ->
                                                  Stdlib.(>=)
-                                                   i__val_rml_61
-                                                   depth__val_rml_62
+                                                   i__val_rml_58
+                                                   depth__val_rml_59
                                              )
                                            (Lco_ctrl_tree_record.rml_run
                                              (function
                                                | ()  ->
                                                    spinner
                                                      (Stdlib.(+)
-                                                       depth__val_rml_62 3)
+                                                       depth__val_rml_59 3)
                                                ))
                                            (Lco_ctrl_tree_record.rml_def
                                              (function
@@ -454,27 +406,27 @@ let rec nested_watch =
                                                    if
                                                      Stdlib.(=)
                                                        (Stdlib.(mod)
-                                                         i__val_rml_61 2)
+                                                         i__val_rml_58 2)
                                                        (0)
                                                      then
-                                                     cancel_even__val_rml_63
+                                                     cancel_even__val_rml_60
                                                      else
-                                                     cancel_odd__val_rml_64
+                                                     cancel_odd__val_rml_61
                                                )
                                              (function
-                                               | cancel__val_rml_65  ->
+                                               | cancel__val_rml_62  ->
                                                    Lco_ctrl_tree_record.rml_until'
-                                                     cancel__val_rml_65
+                                                     cancel__val_rml_62
                                                      (Lco_ctrl_tree_record.rml_run
                                                        (function
                                                          | ()  ->
                                                              nested_watch
                                                                (Stdlib.(+)
-                                                                 i__val_rml_61
+                                                                 i__val_rml_58
                                                                  1)
-                                                               depth__val_rml_62
-                                                               cancel_even__val_rml_63
-                                                               cancel_odd__val_rml_64
+                                                               depth__val_rml_59
+                                                               cancel_even__val_rml_60
+                                                               cancel_odd__val_rml_61
                                                          ))
                                                ))
                                      ):
@@ -486,47 +438,47 @@ let rec nested_watch =
 ;;
 let killer =
       (function
-        | cancel_even__val_rml_67  ->
+        | cancel_even__val_rml_64  ->
             ((function
                | ()  ->
                    Lco_ctrl_tree_record.rml_seq
                      Lco_ctrl_tree_record.rml_pause
-                     (Lco_ctrl_tree_record.rml_emit' cancel_even__val_rml_67)
+                     (Lco_ctrl_tree_record.rml_emit' cancel_even__val_rml_64)
                ):
               (_) Lco_ctrl_tree_record.process)
         ) 
 ;;
 let bench_preemption =
       (function
-        | n__val_rml_69  ->
+        | n__val_rml_66  ->
             ((function
                | ()  ->
                    Lco_ctrl_tree_record.rml_def
                      (function
-                       | ()  -> effective_preemption_depth n__val_rml_69 )
+                       | ()  -> effective_preemption_depth n__val_rml_66 )
                      (function
-                       | depth__val_rml_70  ->
+                       | depth__val_rml_67  ->
                            Lco_ctrl_tree_record.rml_signal
                              (function
-                               | cancel_even__sig_71  ->
+                               | cancel_even__sig_68  ->
                                    Lco_ctrl_tree_record.rml_signal
                                      (function
-                                       | cancel_odd__sig_72  ->
+                                       | cancel_odd__sig_69  ->
                                            Lco_ctrl_tree_record.rml_par
                                              (Lco_ctrl_tree_record.rml_run
                                                (function
                                                  | ()  ->
                                                      nested_watch
                                                        (0)
-                                                       depth__val_rml_70
-                                                       cancel_even__sig_71
-                                                       cancel_odd__sig_72
+                                                       depth__val_rml_67
+                                                       cancel_even__sig_68
+                                                       cancel_odd__sig_69
                                                  ))
                                              (Lco_ctrl_tree_record.rml_run
                                                (function
                                                  | ()  ->
                                                      killer
-                                                       cancel_even__sig_71
+                                                       cancel_even__sig_68
                                                  ))
                                        )
                                )
@@ -558,13 +510,13 @@ let selected =
                      Lco_ctrl_tree_record.rml_run
                        (function | ()  -> bench_preemption (Stdlib.(!) size)
                          )
-                 | x__val_rml_74  ->
+                 | x__val_rml_71  ->
                      Lco_ctrl_tree_record.rml_compute
                        (function
                          | ()  ->
                              Stdlib.invalid_arg
                                (Stdlib.(^)
-                                 "unknown benchmark: " x__val_rml_74)
+                                 "unknown benchmark: " x__val_rml_71)
                          )
                  )
          ):
@@ -573,11 +525,11 @@ let selected =
 let peak_mb =
       (function
         | ()  ->
-            (let st__val_rml_76 = Gc.stat ()  in
+            (let st__val_rml_73 = Gc.stat ()  in
               Stdlib.(/.)
                 (Stdlib.(/.)
                   (Stdlib.( *. )
-                    (Stdlib.float_of_int (st__val_rml_76).Gc.heap_words)
+                    (Stdlib.float_of_int (st__val_rml_73).Gc.heap_words)
                     (Stdlib.float_of_int Sys.word_size))
                   8.)
                 (Stdlib.( *. ) 1024. 1024.))
@@ -594,29 +546,29 @@ let () =
                  (Lco_ctrl_tree_record.rml_def
                    (function | ()  -> Unix.gettimeofday () )
                    (function
-                     | t0__val_rml_77  ->
+                     | t0__val_rml_74  ->
                          Lco_ctrl_tree_record.rml_seq
                            (Lco_ctrl_tree_record.rml_run
                              (function | ()  -> selected ))
                            (Lco_ctrl_tree_record.rml_compute
                              (function
                                | ()  ->
-                                   (let t1__val_rml_78 = Unix.gettimeofday ()
+                                   (let t1__val_rml_75 = Unix.gettimeofday ()
                                       in
                                      Gc.full_major ();
-                                       (let time_ms__val_rml_79 =
+                                       (let time_ms__val_rml_76 =
                                               Stdlib.( *. )
                                                 (Stdlib.(-.)
-                                                  t1__val_rml_78
-                                                  t0__val_rml_77)
+                                                  t1__val_rml_75
+                                                  t0__val_rml_74)
                                                 1000.
                                           in
-                                         let instants__val_rml_80 =
+                                         let instants__val_rml_77 =
                                                instants_for
                                                  (Stdlib.(!) benchmark)
                                                  (Stdlib.(!) size)
                                             in
-                                           let line__val_rml_81 =
+                                           let line__val_rml_78 =
                                                  Stdlib.(^)
                                                    "rml,"
                                                    (Stdlib.(^)
@@ -636,12 +588,12 @@ let () =
                                                                ","
                                                                (Stdlib.(^)
                                                                  (Stdlib.string_of_float
-                                                                   time_ms__val_rml_79)
+                                                                   time_ms__val_rml_76)
                                                                  (Stdlib.(^)
                                                                    ","
                                                                    (Stdlib.(^)
                                                                     (Stdlib.string_of_int
-                                                                    instants__val_rml_80)
+                                                                    instants__val_rml_77)
                                                                     (Stdlib.(^)
                                                                     ","
                                                                     (Stdlib.string_of_float
@@ -649,7 +601,7 @@ let () =
                                                                     ()))))))))))))
                                               in
                                              Stdlib.print_endline
-                                               line__val_rml_81;
+                                               line__val_rml_78;
                                                Stdlib.flush Stdlib.stdout))
                                ))
                      ))

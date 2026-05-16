@@ -30,8 +30,16 @@ type thread = int
 type event
 type aggregate
 
-type 'agg awaiter = { resume : 'agg -> unit; kill_ctx : kill_context }
-type join_waiter = { resume : unit -> unit; kill_ctx : kill_context }
+type 'agg awaiter = {
+    resume : 'agg -> unit
+  ; kill_ctx : kill_context
+  ; thread : thread
+}
+type join_waiter = {
+    resume : unit -> unit
+  ; kill_ctx : kill_context
+  ; thread : thread
+}
 type kill_watcher = { kill : kill; kill_ctx : kill_context }
 
 type ('emit, 'agg, 'mode) signal_core = {
@@ -86,6 +94,7 @@ type ('emit, 'agg) agg_signal = ('emit, 'agg, aggregate) signal_core
 
 type thread_state = {
     mutable active : int
+  ; mutable suspended : int
   ; mutable completed : bool
   ; mutable waiters : join_waiter list
 }
@@ -102,6 +111,25 @@ type debug_info = {
   ; mutable instant_counter : int
 }
 
+type runtime_metrics = {
+    mutable tasks_created : int
+  ; mutable tasks_disposed : int
+  ; mutable tasks_enqueued_now : int
+  ; mutable tasks_enqueued_next : int
+  ; mutable tasks_blocked : int
+  ; mutable signals_created : int
+  ; mutable signals_tracked : int
+  ; mutable signals_untracked : int
+  ; mutable awaiters_registered : int
+  ; mutable awaiters_resumed : int
+  ; mutable awaiters_pruned : int
+  ; mutable guard_waiter_registrations : int
+  ; mutable guard_waiter_wakeups : int
+  ; mutable kill_watchers_registered : int
+  ; mutable kill_watchers_fired : int
+  ; mutable kill_watchers_pruned : int
+}
+
 type scheduler_state = {
     current : task Queue.t
   ; mutable next_instant : task list
@@ -112,6 +140,7 @@ type scheduler_state = {
   ; mutable thread_counter : int
   ; threads : thread_table
   ; debug : debug_info
+  ; metrics : runtime_metrics
 }
 
 type _ Effect.t +=
@@ -128,6 +157,9 @@ type _ Effect.t +=
   | Register_kill_watcher :
       ('emit, 'agg, 'mode) signal_core * kill -> unit Effect.t
   | With_guard :
+      ('emit, 'agg, 'mode) signal_core * (unit -> unit)
+      -> unit Effect.t
+  | Watch :
       ('emit, 'agg, 'mode) signal_core * (unit -> unit)
       -> unit Effect.t
   | With_kill : kill * (unit -> unit) -> unit Effect.t

@@ -75,29 +75,26 @@ let rec process fork_tree depth =
 let process bench_fork n =
   run (fork_tree (effective_fork_depth n))
 
-let rec process guarded depth guard done_sig =
+let rec process guarded depth done_sig =
   if depth <= 0 then
     emit done_sig
   else
-    do
-      run (guarded (depth - 1) guard done_sig)
-    when guard
-    done
+    signal guard in
+    (
+      do
+        run (guarded (depth - 1) done_sig)
+      when guard
+      done
+      ||
+      emit guard
+    )
 
 let process bench_guarded n =
   let depth = effective_guard_depth n in
-  signal guard, done_sig in
-  run (guarded depth guard done_sig)
+  signal done_sig in
+  run (guarded depth done_sig)
   ||
   await immediate done_sig
-  ||
-  let rec process emit_many d =
-    if d <= 0 then ()
-    else (
-      emit guard;
-      run (emit_many (d - 1)))
-  in
-  run (emit_many depth)
 
 let rec process spin_forever =
   pause;
