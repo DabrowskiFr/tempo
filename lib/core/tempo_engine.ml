@@ -123,7 +123,6 @@ let fold_kill_context_stats (st : scheduler_state) =
   Queue.iter walk_task st.current;
   List.iter walk_task st.next_instant;
   List.iter walk_task st.blocked;
-  List.iter walk_task st.free_tasks;
   List.iter walk_signal st.signals;
   Array.iter
     (function
@@ -165,7 +164,7 @@ let make_snapshot (st : scheduler_state) (phase : snapshot_phase) =
   ; task_counter = st.debug.task_counter
   ; thread_counter = st.thread_counter
   ; signal_counter = st.debug.sig_counter
-  ; free_task_count = st.free_task_count
+  ; free_task_count = 0
   ; gc_minor_words = gc.Gc.minor_words
   ; gc_promoted_words = gc.Gc.promoted_words
   ; gc_major_words = gc.Gc.major_words
@@ -219,7 +218,9 @@ let handle_task : scheduler_state -> task -> unit =
     in
     let run_task () =
       match t.run () with
+      (* Task termination *)
       | () -> dlog ~task:t.t_id "step" "task done | task=#%d thread=#%d" t.t_id t.thread
+      (* Signal allocation and emission *)
       | effect (New_signal ()), k ->
           let s = fresh_event_signal st in
           dlog ~task:t.t_id ~signal:s.s_id "step"
@@ -235,6 +236,7 @@ let handle_task : scheduler_state -> task -> unit =
             "emit | task=#%d signal=#%d" t.t_id s.s_id;
           update_signal st s v;
           continue k ()
+      (* Suspension / resumption on signals *)
       | effect (Await s), k ->
           let resume v =
             let new_task =
@@ -288,10 +290,12 @@ let handle_task : scheduler_state -> task -> unit =
             mark_suspended st.threads parent_thread;
             register_awaiter st s
               { resume; kill_ctx = parent_kill_ctx; thread = parent_thread };
+      (* Cancellation wiring *)
       | effect (Register_kill_watcher (s, kill)), k ->
           ensure_signal_tracked st s;
           register_kill_watcher st s kill parent_kill_ctx;
           continue k ();
+      (* Scheduling and thread control *)
       | effect Pause, k ->
           let new_task =
             spawn_next ~parent:t st parent_thread parent_guards parent_kill_ctx
@@ -308,6 +312,7 @@ let handle_task : scheduler_state -> task -> unit =
           dlog ~task:t.t_id "step"
             "spawn logical thread=#%d as task=#%d" child_thread t'.t_id;
           continue k child_thread;
+      (* Guarded and preemptive control operators *)
       | effect (With_guard (s, body)), k ->
           let guard_task =
             spawn_now ~parent:t st parent_thread (Any s :: parent_guards) parent_kill_ctx
@@ -317,7 +322,8 @@ let handle_task : scheduler_state -> task -> unit =
                   let t' =
                     spawn_now ~parent:t st parent_thread parent_guards parent_kill_ctx
                       (fun () -> continue k ())
-                  in  dlog ~task:t.t_id "step"
+                  in
+                  dlog ~task:t.t_id "step"
                     "with_guard exit | tasks=#%d -> task=#%d" t.t_id t'.t_id;
                 end)
           in
@@ -385,6 +391,27 @@ let handle_task : scheduler_state -> task -> unit =
       | effect (Watch (s, body)), k ->
           if s.present then
             continue k ()
+          else if kill_context_has_watch_signal parent_kill_ctx s.s_id then begin
+            let elided_body () =
+              body ();
+              if parent_alive () then begin
+                let t' =
+                  spawn_now ~parent:t st parent_thread parent_guards parent_kill_ctx
+                    (fun () -> continue k ())
+                in
+                dlog ~task:t.t_id "step"
+                  "watch elided exit (normal) | task=#%d -> task=#%d"
+                  t.t_id t'.t_id
+              end
+            in
+            let t' =
+              spawn_now ~parent:t st parent_thread parent_guards parent_kill_ctx
+                elided_body
+            in
+            dlog ~task:t.t_id ~signal:s.s_id "step"
+              "watch elided (ancestor already watches signal) | task=#%d signal=#%d -> task=#%d"
+              t.t_id s.s_id t'.t_id
+          end
           else
             let kk = Tempo_low_level.new_kill () in
             let resumed = ref false in
@@ -422,7 +449,8 @@ let handle_task : scheduler_state -> task -> unit =
             in
             let t' =
               spawn_now ~parent:t st parent_thread parent_guards
-                (push_kill_context kk parent_kill_ctx) guarded_body
+                (push_kill_context ~watch_signal_id:s.s_id kk parent_kill_ctx)
+                guarded_body
             in
             dlog ~task:t.t_id ~signal:s.s_id "step"
               "watch enter | task=#%d signal=#%d -> task=#%d"
@@ -625,8 +653,6 @@ let create_scheduler_state () =
       ; step_counter    = 0
       ; instant_counter = 0 }
     ;threads         = Tempo_thread.create ()
-    ;free_tasks      = []
-    ;free_task_count = 0
     ;metrics         = metrics
   }
 

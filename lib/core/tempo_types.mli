@@ -23,6 +23,7 @@ type kill_context =
   | KNode of {
       kill : kill
     ; parent : kill_context
+    ; watched_signals : int list
     ; mutable checked_epoch : int
     ; mutable alive_cached : bool
   }
@@ -134,8 +135,6 @@ type scheduler_state = {
     current : task Queue.t
   ; mutable next_instant : task list
   ; mutable blocked : task list
-  ; mutable free_tasks : task list
-  ; mutable free_task_count : int
   ; mutable signals : any_signal list
   ; mutable thread_counter : int
   ; threads : thread_table

@@ -1,5 +1,5 @@
 (* THIS FILE IS GENERATED. *)
-(* /Users/fdabrowski/Documents/Research/Papers/ppdp2026/rml-1.09.07-2021-07-26-ocaml-5/compiler/rmlc -n -1 -sampling -1.0 rml_bench.rml  *)
+(* rmlc -n -1 -sampling -1.0 rml_bench.rml  *)
 
 open Implem_lco_ctrl_tree_record;;
 let benchmark = Stdlib.ref "propagation_chains" 

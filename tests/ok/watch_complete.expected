@@ -1,8 +1,4 @@
-[driver] trigger will stay silent
-[body] start
-[worker] instant 0
-[worker] instant 1
-[worker] instant 2
-[worker] finished after 3 steps
-[driver] done
-[body] end (natural completion)
+worker_steps=3
+worker_finished=true
+body_completed=true
+driver_done=true

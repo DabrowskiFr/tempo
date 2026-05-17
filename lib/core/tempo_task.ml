@@ -37,8 +37,25 @@ let kills_alive kills =
 
 let empty_kill_context = KEmpty
 
-let push_kill_context (k : kill) (parent : kill_context) =
-  KNode { kill = k; parent; checked_epoch = -1; alive_cached = true }
+let watched_signals_of_ctx = function
+  | KEmpty -> []
+  | KNode node -> node.watched_signals
+
+let push_kill_context ?watch_signal_id (k : kill) (parent : kill_context) =
+  let parent_signals = watched_signals_of_ctx parent in
+  let watched_signals =
+    match watch_signal_id with
+    | None -> parent_signals
+    | Some sid ->
+        if List.mem sid parent_signals then parent_signals else sid :: parent_signals
+  in
+  KNode
+    { kill = k; parent; watched_signals; checked_epoch = -1; alive_cached = true }
+
+let kill_context_has_watch_signal (ctx : kill_context) sid =
+  match ctx with
+  | KEmpty -> false
+  | KNode node -> List.mem sid node.watched_signals
 
 let rec kill_context_alive (ctx : kill_context) =
   match ctx with
@@ -213,32 +230,6 @@ let infer_guard_cache parent guards =
               | _ -> default ())
         | _ -> default ()
 
-(* Guard-heavy workloads (notably B4) create many short-lived guarded tasks.
-   Recycling only guarded tasks lowers allocator pressure without penalizing
-   non-guarded paths (e.g. B5) as much as a global pool. *)
-let guarded_task_pool_limit = 0
-
-let noop_run () = ()
-
-let fresh_task () =
-  {
-    t_id = -1
-  ; guard_meta = None
-  ; kill_ctx = empty_kill_context
-  ; thread = -1
-  ; run = noop_run
-  ; queued = false
-  ; blocked = false
-  }
-
-let acquire_task_slot (st : scheduler_state) =
-  match st.free_tasks with
-  | t :: rest ->
-      st.free_tasks <- rest;
-      st.free_task_count <- st.free_task_count - 1;
-      t
-  | [] -> fresh_task ()
-
 let make_guard_meta ?parent guards =
   if guards = [] then None
   else
@@ -263,30 +254,15 @@ let create_task ?parent st thread guards kill_ctx run =
   let t_id = st.debug.task_counter in
   st.debug.task_counter <- st.debug.task_counter + 1;
   let guard_meta = make_guard_meta ?parent guards in
-  let use_pool =
-    guarded_task_pool_limit > 0 && Option.is_some guard_meta
-  in
-  if not use_pool then
-    {
-      t_id
-    ; guard_meta
-    ; kill_ctx
-    ; thread
-    ; run
-    ; queued = false
-    ; blocked = false
-    }
-  else
-    let t = acquire_task_slot st in
-    clear_registered_missing t;
-    t.t_id <- t_id;
-    t.guard_meta <- guard_meta;
-    t.kill_ctx <- kill_ctx;
-    t.thread <- thread;
-    t.run <- run;
-    t.queued <- false;
-    t.blocked <- false;
-    t
+  {
+    t_id
+  ; guard_meta
+  ; kill_ctx
+  ; thread
+  ; run
+  ; queued = false
+  ; blocked = false
+  }
 
 let spawn_now ?parent st thread guards kill_ctx run =
   let t = create_task ?parent st thread guards kill_ctx run in
@@ -298,19 +274,7 @@ let spawn_next ?parent st thread guards kill_ctx run =
   enqueue_next st t;
   t
 
-let recycle_task (st : scheduler_state) (t : task) =
-  let is_guarded_task = Option.is_some t.guard_meta in
-  if is_guarded_task && st.free_task_count < guarded_task_pool_limit then begin
-    clear_registered_missing t;
-    t.guard_meta <- None;
-    t.kill_ctx <- empty_kill_context;
-    t.thread <- -1;
-    t.run <- noop_run;
-    t.queued <- false;
-    t.blocked <- false;
-    st.free_tasks <- t :: st.free_tasks;
-    st.free_task_count <- st.free_task_count + 1
-  end
+let recycle_task (_st : scheduler_state) (_t : task) = ()
 
 let block_on_guards (st : scheduler_state) (t : task) =
   if not t.blocked then (
