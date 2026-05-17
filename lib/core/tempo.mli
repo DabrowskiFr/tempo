@@ -214,7 +214,14 @@ module Constructs : sig
   val alternate : unit signal -> (unit -> unit) -> (unit -> unit) -> 'a
 end
 
-(** [execute ?instants ?input ?output main] starts the synchronous execution of a
+(** Runtime snapshot phase reported by {!val:execute} when [on_snapshot] is provided. *)
+type snapshot_phase = Tempo_engine.snapshot_phase
+
+(** Snapshot of scheduler and GC counters for one instant phase. *)
+type runtime_snapshot = Tempo_engine.runtime_snapshot
+
+(** [execute ?instants ?input ?output ?on_snapshot main] starts the synchronous
+    execution of a
     top-level process. The callback [main input_signal output_signal] receives:
 
     - [input_signal] : a regular event signal that the runtime marks present at
@@ -223,10 +230,15 @@ end
       once per instant if user code emits it.
 
     [input] defaults to a function that never produces values, [output] defaults
-    to a no-op. *)
+    to a no-op.
+
+    When [on_snapshot] is provided, the runtime emits a snapshot at key points
+    of each instant (before stepping, after stepping, after signal finalization,
+    and after rollover), enabling fine-grained memory/scheduler diagnostics. *)
 val execute :
      ?instants:int
   -> ?input:(unit -> 'input option)
   -> ?output:('output -> unit)
+  -> ?on_snapshot:(runtime_snapshot -> unit)
   -> ('input signal -> 'output signal -> unit)
   -> unit

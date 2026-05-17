@@ -1,31 +1,38 @@
 open Tempo
 
-let log tag message = Format.printf "[%s] %s@.%!" tag message
-
 let scenario () =
   let guard = new_signal () in
   let cancel = new_signal () in
+  let worker_started = ref false in
+  let worker_continued = ref false in
+  let worker_finished = ref false in
+  let driver_done = ref false in
   let worker () =
     watch cancel (fun () ->
         when_ guard (fun () ->
-            log "worker" "guard satisfied, running";
+            worker_started := true;
             pause ();
-            log "worker" "no cancel yet, continue";
+            worker_continued := true;
             pause ();
-            log "worker" "finished without preemption"))
+            worker_finished := true))
   in
   let driver () =
-    log "driver" "emit guard to start worker";
     emit guard ();
     pause ();
-    log "driver" "emit guard again to keep worker running";
     emit guard ();
     pause ();
-    log "driver" "emit guard one last time, no cancel";
     emit guard ();
     pause ();
-    log "driver" "worker finished normally"
+    driver_done := true
   in
-  parallel [ driver; worker ]
+  parallel [ driver; worker ];
+  if not !worker_started then failwith "worker did not start under guard";
+  if not !worker_continued then failwith "worker did not continue after first pause";
+  if not !worker_finished then failwith "worker did not finish without preemption";
+  if not !driver_done then failwith "driver did not complete";
+  Format.printf "worker_started=%b@.%!" !worker_started;
+  Format.printf "worker_continued=%b@.%!" !worker_continued;
+  Format.printf "worker_finished=%b@.%!" !worker_finished;
+  Format.printf "driver_done=%b@.%!" !driver_done
 
 let () = execute ~instants:7 (fun _ _ -> scenario ())

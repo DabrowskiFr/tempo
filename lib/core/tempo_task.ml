@@ -37,8 +37,25 @@ let kills_alive kills =
 
 let empty_kill_context = KEmpty
 
-let push_kill_context (k : kill) (parent : kill_context) =
-  KNode { kill = k; parent; checked_epoch = -1; alive_cached = true }
+let watched_signals_of_ctx = function
+  | KEmpty -> []
+  | KNode node -> node.watched_signals
+
+let push_kill_context ?watch_signal_id (k : kill) (parent : kill_context) =
+  let parent_signals = watched_signals_of_ctx parent in
+  let watched_signals =
+    match watch_signal_id with
+    | None -> parent_signals
+    | Some sid ->
+        if List.mem sid parent_signals then parent_signals else sid :: parent_signals
+  in
+  KNode
+    { kill = k; parent; watched_signals; checked_epoch = -1; alive_cached = true }
+
+let kill_context_has_watch_signal (ctx : kill_context) sid =
+  match ctx with
+  | KEmpty -> false
+  | KNode node -> List.mem sid node.watched_signals
 
 let rec kill_context_alive (ctx : kill_context) =
   match ctx with
@@ -96,9 +113,11 @@ let enqueue_now st t =
   if not t.queued then (
     t.queued <- true;
     t.blocked <- false;
+    st.metrics.tasks_enqueued_now <- st.metrics.tasks_enqueued_now + 1;
     Queue.add t st.current)
 
 let enqueue_next st t =
+  st.metrics.tasks_enqueued_next <- st.metrics.tasks_enqueued_next + 1;
   st.next_instant <- t :: st.next_instant
 
 let ensure_signal_tracked : type e a m.
@@ -106,6 +125,7 @@ let ensure_signal_tracked : type e a m.
  fun st s ->
   if not s.tracked then begin
     s.tracked <- true;
+    st.metrics.signals_tracked <- st.metrics.signals_tracked + 1;
     st.signals <- Any s :: st.signals
   end
 
@@ -175,6 +195,8 @@ let register_missing_guards (st : scheduler_state) (t : task)
       if not (registered_missing_mem gm sid) then begin
         let Any s = signal in
         ensure_signal_tracked st s;
+        st.metrics.guard_waiter_registrations <-
+          st.metrics.guard_waiter_registrations + 1;
         s.guard_waiters <- t :: s.guard_waiters
       end)
     unique_missing;
@@ -208,29 +230,6 @@ let infer_guard_cache parent guards =
               | _ -> default ())
         | _ -> default ()
 
-let task_pool_limit = 0
-
-let noop_run () = ()
-
-let fresh_task () =
-  {
-    t_id = -1
-  ; guard_meta = None
-  ; kill_ctx = empty_kill_context
-  ; thread = -1
-  ; run = noop_run
-  ; queued = false
-  ; blocked = false
-  }
-
-let acquire_task_slot (st : scheduler_state) =
-  match st.free_tasks with
-  | t :: rest ->
-      st.free_tasks <- rest;
-      st.free_task_count <- st.free_task_count - 1;
-      t
-  | [] -> fresh_task ()
-
 let make_guard_meta ?parent guards =
   if guards = [] then None
   else
@@ -251,30 +250,19 @@ let create_task ?parent st thread guards kill_ctx run =
   let state = Tempo_thread.ensure st.threads thread in
   if state.completed && state.active = 0 then state.completed <- false;
   state.active <- state.active + 1;
+  st.metrics.tasks_created <- st.metrics.tasks_created + 1;
   let t_id = st.debug.task_counter in
   st.debug.task_counter <- st.debug.task_counter + 1;
   let guard_meta = make_guard_meta ?parent guards in
-  if task_pool_limit <= 0 then
-    {
-      t_id
-    ; guard_meta
-    ; kill_ctx
-    ; thread
-    ; run
-    ; queued = false
-    ; blocked = false
-    }
-  else
-    let t = acquire_task_slot st in
-    clear_registered_missing t;
-    t.t_id <- t_id;
-    t.guard_meta <- guard_meta;
-    t.kill_ctx <- kill_ctx;
-    t.thread <- thread;
-    t.run <- run;
-    t.queued <- false;
-    t.blocked <- false;
-    t
+  {
+    t_id
+  ; guard_meta
+  ; kill_ctx
+  ; thread
+  ; run
+  ; queued = false
+  ; blocked = false
+  }
 
 let spawn_now ?parent st thread guards kill_ctx run =
   let t = create_task ?parent st thread guards kill_ctx run in
@@ -286,22 +274,12 @@ let spawn_next ?parent st thread guards kill_ctx run =
   enqueue_next st t;
   t
 
-let recycle_task (st : scheduler_state) (t : task) =
-  if st.free_task_count < task_pool_limit then begin
-    clear_registered_missing t;
-    t.guard_meta <- None;
-    t.kill_ctx <- empty_kill_context;
-    t.thread <- -1;
-    t.run <- noop_run;
-    t.queued <- false;
-    t.blocked <- false;
-    st.free_tasks <- t :: st.free_tasks;
-    st.free_task_count <- st.free_task_count + 1
-  end
+let recycle_task (_st : scheduler_state) (_t : task) = ()
 
 let block_on_guards (st : scheduler_state) (t : task) =
   if not t.blocked then (
     t.blocked <- true;
+    st.metrics.tasks_blocked <- st.metrics.tasks_blocked + 1;
     st.blocked <- t :: st.blocked);
   match t.guard_meta with
   | None -> ()
@@ -314,6 +292,7 @@ let block_on_guards (st : scheduler_state) (t : task) =
 let block_on_guards_with_missing (st : scheduler_state) (t : task) miss =
   if not t.blocked then (
     t.blocked <- true;
+    st.metrics.tasks_blocked <- st.metrics.tasks_blocked + 1;
     st.blocked <- t :: st.blocked);
   match t.guard_meta with
   | None -> ()
@@ -350,9 +329,16 @@ let wake_guard_waiters st s =
               gm.registered_missing <- Missing_none;
               gm.guards_checked_epoch <- !guard_epoch;
               gm.guards_ok_cached <- true;
-              if task_kills_alive t then enqueue_now st t
+              if task_kills_alive t then begin
+                st.metrics.guard_waiter_wakeups <-
+                  st.metrics.guard_waiter_wakeups + 1;
+                enqueue_now st t
+              end
             end
-          end else if task_guards_ok t && task_kills_alive t then
-            enqueue_now st t)
+          end else if task_guards_ok t && task_kills_alive t then begin
+            st.metrics.guard_waiter_wakeups <-
+              st.metrics.guard_waiter_wakeups + 1;
+            enqueue_now st t
+          end)
     s.guard_waiters;
   s.guard_waiters <- []

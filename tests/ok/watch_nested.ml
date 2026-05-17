@@ -1,34 +1,52 @@
 open Tempo
 
-let rec workload label step limit () =
-  if step >= limit then
-    Format.printf "[%s] completed (%d steps)@.%!" label limit
-  else (
-    Format.printf "[%s] step %d@.%!" label step;
-    pause ();
-    workload label (step + 1) limit ())
-
 let scenario () =
   let stop = new_signal () in
   let override = new_signal () in
+  let outer_entered = ref false in
+  let inner_entered = ref false in
+  let inner_exited = ref false in
+  let outer_exited = ref false in
+  let override_emitted = ref false in
+  let stop_emitted = ref false in
+  let steps = ref 0 in
   let body () =
     watch stop (fun () ->
-        Format.printf "[body] outer watch entered@.%!";
+        outer_entered := true;
         watch override (fun () ->
-            Format.printf "[body] inner watch entered@.%!";
-            workload "body" 0 10 ());
-        Format.printf "[body] inner watch exited@.%!");
-    Format.printf "[body] outer watch exited@.%!"
+            inner_entered := true;
+            let rec loop step () =
+              if step >= 10 then ()
+              else (
+                incr steps;
+                pause ();
+                loop (step + 1) ())
+            in
+            loop 0 ());
+        inner_exited := true);
+    outer_exited := true
   and driver () =
-    Format.printf "[driver] override will fire first@.%!";
     pause ();
     emit override ();
-    Format.printf "[driver] override emitted@.%!";
+    override_emitted := true;
     pause ();
-    Format.printf "[driver] stop emitted@.%!";
     emit stop ();
-    Format.printf "[driver] done@.%!"
+    stop_emitted := true
   in
-  parallel [ body; driver ]
+  parallel [ body; driver ];
+  if not !outer_entered then failwith "outer watch did not start";
+  if not !inner_entered then failwith "inner watch did not start";
+  if not !inner_exited then failwith "inner watch did not exit";
+  if not !outer_exited then failwith "outer watch did not exit";
+  if not !override_emitted then failwith "override was not emitted";
+  if not !stop_emitted then failwith "stop was not emitted";
+  if !steps >= 10 then failwith "inner watch was not preempted";
+  Format.printf "outer_entered=%b@.%!" !outer_entered;
+  Format.printf "inner_entered=%b@.%!" !inner_entered;
+  Format.printf "inner_exited=%b@.%!" !inner_exited;
+  Format.printf "outer_exited=%b@.%!" !outer_exited;
+  Format.printf "override_emitted=%b@.%!" !override_emitted;
+  Format.printf "stop_emitted=%b@.%!" !stop_emitted;
+  Format.printf "inner_steps=%d@.%!" !steps
 
 let () = execute (fun _ _ -> scenario ())

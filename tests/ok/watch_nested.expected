@@ -1,10 +1,7 @@
-[driver] override will fire first
-[body] outer watch entered
-[body] inner watch entered
-[body] step 0
-[body] step 1
-[driver] override emitted
-[body] inner watch exited
-[driver] stop emitted
-[driver] done
-[body] outer watch exited
+outer_entered=true
+inner_entered=true
+inner_exited=true
+outer_exited=true
+override_emitted=true
+stop_emitted=true
+inner_steps=2

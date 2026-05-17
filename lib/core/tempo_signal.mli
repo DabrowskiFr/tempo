@@ -32,7 +32,8 @@ val register_awaiter :
   -> 'agg Tempo_types.awaiter
   -> unit
 val register_kill_watcher :
-     ('emit, 'agg, 'mode) Tempo_types.signal_core
+     Tempo_types.scheduler_state
+  -> ('emit, 'agg, 'mode) Tempo_types.signal_core
   -> Tempo_types.kill
   -> Tempo_types.kill_context
   -> unit

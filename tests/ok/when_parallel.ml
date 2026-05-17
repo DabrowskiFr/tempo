@@ -1,49 +1,53 @@
 open Tempo
 
-let log tag instant message =
-  Format.printf "[%s] instant %d: %s@.%!" tag instant message
-
-let observe_guard ~name ~guard ~events () =
+let observe_guard ~guard ~events ~hits () =
   let rec loop seen remaining =
-    if remaining = 0 then log name seen "done observing guard"
+    if remaining = 0 then ()
     else (
       when_ guard (fun () ->
-          log name seen "guard present, branch resumes in parallel");
+          incr hits);
       pause ();
       loop (seen + 1) (remaining - 1))
   in
   loop 0 events
 
-let combined_listener guard_a guard_b () =
+let combined_listener guard_a guard_b combo_hits combo_done () =
   when_ guard_a (fun () ->
       when_ guard_b (fun () ->
-          log "combo" 1 "guard_a et guard_b présents dans le même instant"));
+          incr combo_hits));
   pause ();
-  log "combo" 2 "combo branch done"
+  combo_done := true
 
 let driver guard_a guard_b () =
-  log "driver" 0 "emit guard_a to wake the first listener";
   emit guard_a ();
   pause ();
-  log "driver" 1 "emit guard_a and guard_b in the same instant";
   emit guard_a ();
   emit guard_b ();
   pause ();
-  log "driver" 2 "final emission of guard_a";
   emit guard_a ();
-  pause ();
-  log "driver" 3 "all signals emitted"
+  pause ()
 
 let scenario () =
   let guard_a = new_signal () in
   let guard_b = new_signal () in
+  let a_hits = ref 0 in
+  let b_hits = ref 0 in
+  let combo_hits = ref 0 in
+  let combo_done = ref false in
   parallel
     [
       driver guard_a guard_b
-    ; observe_guard ~name:"listener/A" ~guard:guard_a ~events:3
-    ; observe_guard ~name:"listener/B" ~guard:guard_b ~events:1
-    ; combined_listener guard_a guard_b
+    ; observe_guard ~guard:guard_a ~events:3 ~hits:a_hits
+    ; observe_guard ~guard:guard_b ~events:1 ~hits:b_hits
+    ; combined_listener guard_a guard_b combo_hits combo_done
     ];
-  Format.printf "[scenario] all parallel branches completed@.%!"
+  if !a_hits <> 3 then failwith "listener A did not observe 3 activations";
+  if !b_hits <> 1 then failwith "listener B did not observe 1 activation";
+  if !combo_hits <> 1 then failwith "combined listener did not trigger exactly once";
+  if not !combo_done then failwith "combined listener did not finish";
+  Format.printf "listener_a_hits=%d@.%!" !a_hits;
+  Format.printf "listener_b_hits=%d@.%!" !b_hits;
+  Format.printf "combo_hits=%d@.%!" !combo_hits;
+  Format.printf "combo_done=%b@.%!" !combo_done
 
 let () = execute (fun _ _ -> scenario ())

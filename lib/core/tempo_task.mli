@@ -20,8 +20,10 @@ open Tempo_types
 
 val kills_alive : kill list -> bool
 val empty_kill_context : kill_context
-val push_kill_context : kill -> kill_context -> kill_context
+val push_kill_context :
+  ?watch_signal_id:int -> kill -> kill_context -> kill_context
 val kill_context_alive : kill_context -> bool
+val kill_context_has_watch_signal : kill_context -> int -> bool
 val kill_effectively_alive : kill -> bool
 val task_guards : task -> any_signal list
 val task_kill_ctx : task -> kill_context
