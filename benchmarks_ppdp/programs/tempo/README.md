@@ -19,9 +19,11 @@ Output CSV schema:
 `instants` is normalized with the same benchmark-level convention as the
 ReactiveML harness:
 - `propagation_chains`: `1`
+- `propagation_chains_multi`: `effective_multi_rounds(n)` (`max(2, floor(log2 n))`)
 - `broadcast_expansion`: `2`
 - `fork_explosion`: `effective_fork_depth(n)`
 - `guarded_cascades`: `1`
+- `guarded_cascades_multi`: `effective_multi_rounds(n)` (`max(2, floor(log2 n))`)
 - `nested_preemption`: `2`
 
 ## Diagnostic mode

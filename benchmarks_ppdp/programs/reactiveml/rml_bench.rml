@@ -9,11 +9,16 @@ let effective_fork_depth n =
   max 1 (int_of_float (log (float_of_int n) /. log 2.))
 let effective_guard_depth n = max 1 n
 let effective_preemption_depth n = max 1 n
+let effective_multi_rounds n =
+  let n = max 2 n in
+  max 2 (int_of_float (log (float_of_int n) /. log 2.))
 
 let instants_for bench n =
   match bench with
+  | "propagation_chains_multi" -> effective_multi_rounds n
   | "broadcast_expansion" -> 2
   | "fork_explosion" -> effective_fork_depth n
+  | "guarded_cascades_multi" -> effective_multi_rounds n
   | "nested_preemption" -> 2
   | _ -> 1
 
@@ -46,6 +51,20 @@ let process bench_propagation n =
   await immediate end_sig
   ||
   emit start_sig
+
+let rec process repeat_propagation rounds n =
+  if rounds <= 0 then ()
+  else
+    (run (bench_propagation n);
+     if rounds <= 1 then
+       ()
+     else
+       (pause;
+        run (repeat_propagation (rounds - 1) n)))
+
+let process bench_propagation_multi n =
+  let rounds = effective_multi_rounds n in
+  run (repeat_propagation rounds n)
 
 let process observer trigger =
   await immediate trigger
@@ -96,6 +115,20 @@ let process bench_guarded n =
   ||
   await immediate done_sig
 
+let rec process repeat_guarded rounds n =
+  if rounds <= 0 then ()
+  else
+    (run (bench_guarded n);
+     if rounds <= 1 then
+       ()
+     else
+       (pause;
+        run (repeat_guarded (rounds - 1) n)))
+
+let process bench_guarded_multi n =
+  let rounds = effective_multi_rounds n in
+  run (repeat_guarded rounds n)
+
 let rec process spin_forever =
   pause;
   run spin_forever
@@ -130,9 +163,11 @@ let process bench_preemption n =
 let process selected =
   match !benchmark with
   | "propagation_chains" -> run (bench_propagation !size)
+  | "propagation_chains_multi" -> run (bench_propagation_multi !size)
   | "broadcast_expansion" -> run (bench_broadcast !size)
   | "fork_explosion" -> run (bench_fork !size)
   | "guarded_cascades" -> run (bench_guarded !size)
+  | "guarded_cascades_multi" -> run (bench_guarded_multi !size)
   | "nested_preemption" -> run (bench_preemption !size)
   | x -> invalid_arg ("unknown benchmark: " ^ x)
 

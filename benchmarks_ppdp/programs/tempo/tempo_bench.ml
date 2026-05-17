@@ -30,11 +30,16 @@ let effective_fork_depth n =
 
 let effective_guard_depth n = max 1 n
 let effective_preemption_depth n = max 1 n
+let effective_multi_rounds n =
+  let n = max 2 n in
+  max 2 (int_of_float (log (float_of_int n) /. log 2.))
 
 let instants_for bench n =
   match bench with
+  | "propagation_chains_multi" -> effective_multi_rounds n
   | "broadcast_expansion" -> 2
   | "fork_explosion" -> effective_fork_depth n
+  | "guarded_cascades_multi" -> effective_multi_rounds n
   | "nested_preemption" -> 2
   | _ -> 1
 
@@ -62,6 +67,42 @@ let bench_propagation_chains n =
   parallel [ chain n start_sig end_sig; sink; starter ];
   if not !reached_end then failwith "propagation chain did not reach end"
 
+let bench_propagation_chains_multi n =
+  let rounds = effective_multi_rounds n in
+  let n = effective_propagation n in
+  let link s_in s_out () =
+    ignore (await_immediate s_in);
+    emit s_out ()
+  in
+  let rec chain depth s_in s_out () =
+    if depth <= 0 then
+      emit s_out ()
+    else
+      let mid = new_signal () in
+      parallel [ link s_in mid; chain (depth - 1) mid s_out ]
+  in
+  let one_round () =
+    let start_sig = new_signal () in
+    let end_sig = new_signal () in
+    let reached_end = ref false in
+    let starter () = emit start_sig () in
+    let sink () =
+      ignore (await_immediate end_sig);
+      reached_end := true
+    in
+    parallel [ chain n start_sig end_sig; sink; starter ];
+    if not !reached_end then failwith "propagation chain did not reach end"
+  in
+  let rec loop i () =
+    if i <= 0 then ()
+    else (
+      one_round ();
+      if i > 1 then (
+        pause ();
+        loop (i - 1) ()))
+  in
+  loop rounds ()
+
 let bench_guarded_cascades n =
   let depth = effective_guard_depth n in
   let guards = Array.init depth (fun _ -> new_signal ()) in
@@ -78,6 +119,35 @@ let bench_guarded_cascades n =
   in
   parallel [ consumer; producer ];
   if not !reached then failwith "guarded cascade did not activate reaction"
+
+let bench_guarded_cascades_multi n =
+  let rounds = effective_multi_rounds n in
+  let depth = effective_guard_depth n in
+  let one_round () =
+    let guards = Array.init depth (fun _ -> new_signal ()) in
+    let reached = ref false in
+    let rec nested i k =
+      if i >= depth then k ()
+      else when_ guards.(i) (fun () -> nested (i + 1) k)
+    in
+    let consumer () = nested 0 (fun () -> reached := true) in
+    let producer () =
+      for i = 0 to depth - 1 do
+        emit guards.(i) ()
+      done
+    in
+    parallel [ consumer; producer ];
+    if not !reached then failwith "guarded cascade did not activate reaction"
+  in
+  let rec loop i () =
+    if i <= 0 then ()
+    else (
+      one_round ();
+      if i > 1 then (
+        pause ();
+        loop (i - 1) ()))
+  in
+  loop rounds ()
 
 let bench_broadcast_expansion n =
   let n = effective_broadcast n in
@@ -134,9 +204,11 @@ let bench_nested_preemption n =
 let run_selected bench n =
   match bench with
   | "propagation_chains" -> bench_propagation_chains n
+  | "propagation_chains_multi" -> bench_propagation_chains_multi n
   | "broadcast_expansion" -> bench_broadcast_expansion n
   | "fork_explosion" -> bench_fork_explosion n
   | "guarded_cascades" -> bench_guarded_cascades n
+  | "guarded_cascades_multi" -> bench_guarded_cascades_multi n
   | "nested_preemption" -> bench_nested_preemption n
   | x -> invalid_arg ("unknown benchmark: " ^ x)
 
