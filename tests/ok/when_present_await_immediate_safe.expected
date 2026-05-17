@@ -1,0 +1,3 @@
+body_entered=true
+payload=42
+worker_done=true

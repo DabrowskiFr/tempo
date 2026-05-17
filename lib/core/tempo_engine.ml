@@ -314,6 +314,13 @@ let handle_task : scheduler_state -> task -> unit =
           continue k child_thread;
       (* Guarded and preemptive control operators *)
       | effect (With_guard (s, body)), k ->
+          (* Safety invariant for [when_]:
+             - never execute [body] inline in this handler frame because [body]
+               can perform effects (await/pause/when_) that must be handled by
+               the scheduler task trampoline;
+             - always keep [s] in the spawned task guard set, even if [s] is
+               already present, so continuations after pause/await stay guarded
+               in later instants. *)
           let guard_task =
             spawn_now ~parent:t st parent_thread (Any s :: parent_guards) parent_kill_ctx
               (fun () ->
